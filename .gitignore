@@ -1,2 +1,12 @@
+.idea/
+#!.idea/
+#.idea/workspace.xml
+#.idea/usage.statistics.xml
+#.idea/tasks.xml
+#.idea/shelf
+*iml
+
+target/
+
 *.elf
 *.o
