@@ -5,3 +5,8 @@ authors = ["Haruyoshi Toyama <duane0728@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+
+[workspace]
+members = [
+    "shared",
+]
