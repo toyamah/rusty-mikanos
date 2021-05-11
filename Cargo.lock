@@ -141,8 +141,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "mikan_os"
+name = "mikan_os_kernel"
 version = "0.1.0"
+dependencies = [
+ "shared",
+]
 
 [[package]]
 name = "ppv-lite86"
