@@ -9,7 +9,7 @@
 #include  <Protocol/DiskIo2.h>
 #include  <Protocol/BlockIo.h>
 #include  <Guid/FileInfo.h>
-#include  "frame_buffer_config.hpp"
+#include  "shared_header.h"
 #include  "elf.hpp"
 
 struct MemoryMap {
@@ -357,10 +357,10 @@ EFI_STATUS EFIAPI UefiMain(
   };
   switch (gop->Mode->Info->PixelFormat) {
     case PixelRedGreenBlueReserved8BitPerColor:
-      config.pixel_format = kPixelRGBResv8BitPerColor;
+      config.pixel_format = KPixelRGBResv8BitPerColor;
       break;
     case PixelBlueGreenRedReserved8BitPerColor:
-      config.pixel_format = kPixelBGRResv8BitPerColor;
+      config.pixel_format = KPixelBGRResv8BitPerColor;
       break;
     default:
       Print(L"Unimplemented pixel format: %d\n", gop->Mode->Info->PixelFormat);
