@@ -3,7 +3,7 @@
 #[derive(Eq, PartialEq)]
 #[repr(C)]
 pub enum PixelFormat {
-    KPixelRGBResv8bitPerColor,
+    KPixelRGBResv8BitPerColor,
     KPixelBGRResv8BitPerColor,
 }
 
