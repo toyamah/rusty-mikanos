@@ -42,8 +42,9 @@ fn write<T: PixelWriter>(writer: &T, config: &FrameBufferConfig) {
     write_pixel(writer, config);
 
     let black = PixelColor::new(0, 0, 0);
-    write_ascii(writer, 50, 50, 'A', &black);
-    write_ascii(writer, 58, 50, 'A', &black);
+    for (i, char) in ('!'..='~').enumerate() {
+        write_ascii(writer, (8 * i) as u32, 50, char, &black);
+    }
 }
 
 fn write_pixel<T: PixelWriter>(writer: &T, config: &FrameBufferConfig) {
