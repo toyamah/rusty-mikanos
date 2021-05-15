@@ -1,54 +1,5 @@
 use shared::FrameBufferConfig;
 
-const K_FONT_A: [u8; 16] = [
-    0b00000000, //
-    0b00011000, //    **
-    0b00011000, //    **
-    0b00011000, //    **
-    0b00011000, //    **
-    0b00100100, //   *  *
-    0b00100100, //   *  *
-    0b00100100, //   *  *
-    0b00100100, //   *  *
-    0b01111110, //  ******
-    0b01000010, //  *    *
-    0b01000010, //  *    *
-    0b01000010, //  *    *
-    0b11100111, // ***  ***
-    0b00000000, //
-    0b00000000, //
-];
-
-pub fn write_pixel<T: PixelWriter>(writer: &T, config: &FrameBufferConfig) {
-    let black = PixelColor::new(255, 255, 255);
-    for x in 0..config.horizontal_resolution {
-        for y in 0..config.vertical_resolution {
-            writer.write(x, y, &black);
-        }
-    }
-
-    let green = PixelColor::new(0, 255, 0);
-    for x in 0..200 {
-        for y in 0..100 {
-            writer.write(x, y, &green);
-        }
-    }
-}
-
-pub fn write_ascii<T: PixelWriter>(writer: &T, x: u32, y: u32, c: char, color: &PixelColor) {
-    if c != 'A' {
-        return;
-    }
-
-    for dy in 0..16 {
-        for dx in 0..8 {
-            if (K_FONT_A[dy] << dx) & 0x80 != 0 {
-                writer.write(x + dx, y + dy as u32, color);
-            }
-        }
-    }
-}
-
 pub struct PixelColor {
     r: u8,
     g: u8,

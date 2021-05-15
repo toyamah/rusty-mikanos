@@ -3,9 +3,13 @@
 #![no_std]
 #![no_main]
 
-mod pixel_writer;
+mod font;
+mod graphics;
 
-use crate::pixel_writer::{write_pixel, BGRResv8BitPerColorPixelWriter, RGBResv8BitPerColorPixelWriter, write_ascii, PixelColor};
+use crate::font::write_ascii;
+use crate::graphics::{
+    BGRResv8BitPerColorPixelWriter, PixelColor, PixelWriter, RGBResv8BitPerColorPixelWriter,
+};
 use core::panic::PanicInfo;
 use shared::{FrameBufferConfig, PixelFormat};
 
@@ -14,17 +18,11 @@ pub extern "C" fn KernelMain(frame_buffer_config: &FrameBufferConfig) -> ! {
     match frame_buffer_config.pixel_format {
         PixelFormat::KPixelRGBResv8BitPerColor => {
             let writer = RGBResv8BitPerColorPixelWriter::new(frame_buffer_config);
-            write_pixel(&writer, frame_buffer_config);
-            let black = PixelColor::new(0, 0, 0);
-            write_ascii(&writer, 50, 50, 'A', &black);
-            write_ascii(&writer, 58, 50, 'A', &black);
+            write(&writer, frame_buffer_config);
         }
         PixelFormat::KPixelBGRResv8BitPerColor => {
             let writer = BGRResv8BitPerColorPixelWriter::new(frame_buffer_config);
-            write_pixel(&writer, frame_buffer_config);
-            let black = PixelColor::new(0, 0, 0);
-            write_ascii(&writer, 50, 50, 'A', &black);
-            write_ascii(&writer, 58, 50, 'A', &black);
+            write(&writer, frame_buffer_config);
         }
     };
 
@@ -37,5 +35,29 @@ pub extern "C" fn KernelMain(frame_buffer_config: &FrameBufferConfig) -> ! {
 fn panic(_info: &PanicInfo) -> ! {
     loop {
         unsafe { asm!("hlt") }
+    }
+}
+
+fn write<T: PixelWriter>(writer: &T, config: &FrameBufferConfig) {
+    write_pixel(writer, config);
+
+    let black = PixelColor::new(0, 0, 0);
+    write_ascii(writer, 50, 50, 'A', &black);
+    write_ascii(writer, 58, 50, 'A', &black);
+}
+
+fn write_pixel<T: PixelWriter>(writer: &T, config: &FrameBufferConfig) {
+    let black = PixelColor::new(255, 255, 255);
+    for x in 0..config.horizontal_resolution {
+        for y in 0..config.vertical_resolution {
+            writer.write(x, y, &black);
+        }
+    }
+
+    let green = PixelColor::new(0, 255, 0);
+    for x in 0..200 {
+        for y in 0..100 {
+            writer.write(x, y, &green);
+        }
     }
 }
