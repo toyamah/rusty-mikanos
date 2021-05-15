@@ -1,35 +1,36 @@
-use crate::graphics::{PixelWriter, PixelColor};
-
-const K_FONT_A: [u8; 16] = [
-    0b00000000, //
-    0b00011000, //    **
-    0b00011000, //    **
-    0b00011000, //    **
-    0b00011000, //    **
-    0b00100100, //   *  *
-    0b00100100, //   *  *
-    0b00100100, //   *  *
-    0b00100100, //   *  *
-    0b01111110, //  ******
-    0b01000010, //  *    *
-    0b01000010, //  *    *
-    0b01000010, //  *    *
-    0b11100111, // ***  ***
-    0b00000000, //
-    0b00000000, //
-];
+use crate::graphics::{PixelColor, PixelWriter};
 
 pub fn write_ascii<T: PixelWriter>(writer: &T, x: u32, y: u32, c: char, color: &PixelColor) {
-    if c != 'A' {
-        return;
-    }
+    let font = unsafe { get_font(c) };
+    let font = match font {
+        None => return,
+        Some(f) => f,
+    };
 
     for dy in 0..16 {
         for dx in 0..8 {
-            if (K_FONT_A[dy] << dx) & 0x80 != 0 {
+            let bits = unsafe { *font.offset(dy) };
+            if (bits << dx) & 0x80 != 0 {
                 writer.write(x + dx, y + dy as u32, color);
             }
         }
     }
 }
 
+extern "C" {
+    static _binary_hankaku_bin_start: u8;
+    static _binary_hankaku_bin_end: u8;
+    static _binary_hankaku_bin_size: u8;
+}
+
+unsafe fn get_font(c: char) -> Option<*mut u8> {
+    let index = 16 * c as usize;
+    let size = (&_binary_hankaku_bin_size as *const u8) as usize;
+
+    if index < size {
+        let start = (&_binary_hankaku_bin_start as *const u8) as *mut u8;
+        Some(start.offset(index as isize))
+    } else {
+        None
+    }
+}
