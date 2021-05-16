@@ -19,6 +19,7 @@ pub extern "C" fn KernelMain(frame_buffer_config: &FrameBufferConfig) -> ! {
     for (i, char) in ('!'..='~').enumerate() {
         writer.write_ascii((8 * i) as u32, 50, char, &black);
     }
+    writer.write_string(0, 66, "Hello, World!", &PixelColor::new(0, 0, 255));
 
     loop {
         unsafe { asm!("hlt") }

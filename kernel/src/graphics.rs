@@ -29,6 +29,10 @@ impl<'a> PixelWriter<'a> {
         }
     }
 
+    pub fn write_string(&self, x: u32, y: u32, str: &str, color: &PixelColor) {
+       font::write_string(self, x, y, str, color);
+    }
+
     pub fn write_ascii(&self, x: u32, y: u32, char: char, color: &PixelColor) {
         font::write_ascii(self, x, y, char, color);
     }
