@@ -1,4 +1,5 @@
 use shared::{FrameBufferConfig, PixelFormat};
+use crate::font;
 
 pub struct PixelColor {
     r: u8,
@@ -26,6 +27,10 @@ impl<'a> PixelWriter<'a> {
                 PixelFormat::KPixelBGRResv8BitPerColor => Self::write_bgr,
             },
         }
+    }
+
+    pub fn write_ascii(&self, x: u32, y: u32, char: char, color: &PixelColor) {
+        font::write_ascii(self, x, y, char, color);
     }
 
     pub fn write(&self, x: u32, y: u32, color: &PixelColor) {

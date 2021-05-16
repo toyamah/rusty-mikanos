@@ -6,7 +6,6 @@
 mod font;
 mod graphics;
 
-use crate::font::write_ascii;
 use crate::graphics::{PixelColor, PixelWriter};
 use core::panic::PanicInfo;
 use shared::FrameBufferConfig;
@@ -18,7 +17,7 @@ pub extern "C" fn KernelMain(frame_buffer_config: &FrameBufferConfig) -> ! {
 
     let black = PixelColor::new(0, 0, 0);
     for (i, char) in ('!'..='~').enumerate() {
-        write_ascii(&writer, (8 * i) as u32, 50, char, &black);
+        writer.write_ascii((8 * i) as u32, 50, char, &black);
     }
 
     loop {
