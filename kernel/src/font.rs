@@ -1,6 +1,6 @@
 use crate::graphics::{PixelColor, PixelWriter};
 
-pub fn write_ascii<T: PixelWriter>(writer: &T, x: u32, y: u32, c: char, color: &PixelColor) {
+pub fn write_ascii(writer: &PixelWriter, x: u32, y: u32, c: char, color: &PixelColor) {
     let font = unsafe { get_font(c) };
     let font = match font {
         None => return,
