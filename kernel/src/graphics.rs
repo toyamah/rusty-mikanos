@@ -1,4 +1,4 @@
-use shared::FrameBufferConfig;
+use shared::{FrameBufferConfig, PixelFormat};
 
 pub struct PixelColor {
     r: u8,
@@ -12,54 +12,47 @@ impl PixelColor {
     }
 }
 
-pub trait PixelWriter {
-    fn write(self: &Self, x: u32, y: u32, color: &PixelColor);
-}
-
-pub struct RGBResv8BitPerColorPixelWriter<'a> {
+pub struct PixelWriter<'a> {
     config: &'a FrameBufferConfig,
+    write_fn: fn(&Self, x: u32, y: u32, &PixelColor) -> (),
 }
 
-impl<'a> RGBResv8BitPerColorPixelWriter<'a> {
-    pub fn new(config: &'a FrameBufferConfig) -> RGBResv8BitPerColorPixelWriter {
-        Self { config }
+impl<'a> PixelWriter<'a> {
+    pub fn new(config: &'a FrameBufferConfig) -> Self {
+        Self {
+            config,
+            write_fn: match config.pixel_format {
+                PixelFormat::KPixelRGBResv8BitPerColor => Self::write_rgb,
+                PixelFormat::KPixelBGRResv8BitPerColor => Self::write_bgr,
+            },
+        }
     }
-}
 
-impl<'a> PixelWriter for RGBResv8BitPerColorPixelWriter<'a> {
-    fn write(self: &Self, x: u32, y: u32, color: &PixelColor) {
-        let p = pixel_at(x, y, self.config);
+    pub fn write(&self, x: u32, y: u32, color: &PixelColor) {
+        (self.write_fn)(self, x, y, color);
+    }
+
+    fn write_rgb(self: &Self, x: u32, y: u32, color: &PixelColor) {
+        let p = self.pixel_at(x, y);
         unsafe {
             *p.offset(0) = color.r;
             *p.offset(1) = color.g;
             *p.offset(2) = color.b;
         }
     }
-}
 
-pub struct BGRResv8BitPerColorPixelWriter<'a> {
-    config: &'a FrameBufferConfig,
-}
-
-impl<'a> BGRResv8BitPerColorPixelWriter<'a> {
-    pub fn new(config: &'a FrameBufferConfig) -> BGRResv8BitPerColorPixelWriter<'a> {
-        Self { config }
-    }
-}
-
-impl<'a> PixelWriter for BGRResv8BitPerColorPixelWriter<'a> {
-    fn write(self: &Self, x: u32, y: u32, color: &PixelColor) {
-        let p = pixel_at(x, y, self.config);
+    fn write_bgr(self: &Self, x: u32, y: u32, color: &PixelColor) {
+        let p = self.pixel_at(x, y);
         unsafe {
             *p.offset(0) = color.b;
             *p.offset(1) = color.g;
             *p.offset(2) = color.r;
         }
     }
-}
 
-fn pixel_at(x: u32, y: u32, config: &FrameBufferConfig) -> *mut u8 {
-    let pixel_position = config.pixels_per_scan_line * y + x;
-    let base = (4 * pixel_position) as isize;
-    unsafe { config.frame_buffer.offset(base) }
+    fn pixel_at(&self, x: u32, y: u32) -> *mut u8 {
+        let pixel_position = self.config.pixels_per_scan_line * y + x;
+        let base = (4 * pixel_position) as isize;
+        unsafe { self.config.frame_buffer.offset(base) }
+    }
 }
