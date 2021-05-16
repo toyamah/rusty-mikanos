@@ -13,7 +13,7 @@ fn main() {
         .join("makefont.py");
     Command::new(make_font)
         .arg("-o")
-        .arg(format!("{}/hankaku.bin", out_dir))
+        .arg(Path::new(&out_dir).join("hankaku.bin"))
         .arg("hankaku.txt")
         .current_dir(&current_dir)
         .status()
