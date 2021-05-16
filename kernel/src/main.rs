@@ -17,15 +17,19 @@ pub extern "C" fn KernelMain(frame_buffer_config: &FrameBufferConfig) -> ! {
     let writer = PixelWriter::new(frame_buffer_config);
     write_pixel(&writer, frame_buffer_config);
 
-    let black = PixelColor::new(0, 0, 0);
-    for (i, char) in ('!'..='~').enumerate() {
-        writer.write_ascii((8 * i) as u32, 50, char, &black);
-    }
-    writer.write_string(0, 66, "Hello, World!", &PixelColor::new(0, 0, 255));
-
     let white = PixelColor::new(255, 255, 255);
+    let black = PixelColor::new(0, 0, 0);
     let mut console = Console::new(&writer, white, black);
-    console.put_string("test");
+
+    for i in 0..5 {
+        console.put_string("line0\n");
+        console.put_string("line1\n");
+        console.put_string("line2\n");
+        console.put_string("line3\n");
+        console.put_string("line4\n");
+    }
+    console.put_string("line0\n");
+    console.put_string("line1\n");
 
     loop {
         unsafe { asm!("hlt") }
@@ -40,17 +44,10 @@ fn panic(_info: &PanicInfo) -> ! {
 }
 
 fn write_pixel(writer: &PixelWriter, config: &FrameBufferConfig) {
-    let black = PixelColor::new(255, 255, 255);
+    let black = PixelColor::new(0, 0, 0);
     for x in 0..config.horizontal_resolution {
         for y in 0..config.vertical_resolution {
             writer.write(x, y, &black);
-        }
-    }
-
-    let green = PixelColor::new(0, 255, 0);
-    for x in 0..200 {
-        for y in 0..100 {
-            writer.write(x, y, &green);
         }
     }
 }
