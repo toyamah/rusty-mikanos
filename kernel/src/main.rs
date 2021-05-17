@@ -28,16 +28,9 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
 
     write_pixel(pixel_writer(), frame_buffer_config);
 
-    let console = console();
-    for i in 0..5 {
-        console.put_string("line0\n");
-        console.put_string("line1\n");
-        console.put_string("line2\n");
-        console.put_string("line3\n");
-        console.put_string("line4\n");
+    for i in 0..27 {
+        printk!("line {}\n", i);
     }
-    console.put_string("line0\n");
-    console.put_string("line1\n");
 
     loop {
         unsafe { asm!("hlt") }

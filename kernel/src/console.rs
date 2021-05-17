@@ -1,4 +1,6 @@
 use crate::graphics::{PixelColor, PixelWriter};
+use core::fmt;
+use core::fmt::Write;
 
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;
@@ -68,4 +70,20 @@ impl<'a> Console<'a> {
 
         self.buffer[ROWS - 1].fill(char::from(0));
     }
+}
+
+impl<'a> fmt::Write for Console<'a> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.put_string(s);
+        Ok(())
+    }
+}
+
+pub fn _printk(args: fmt::Arguments) {
+    crate::console().write_fmt(args).unwrap();
+}
+
+#[macro_export]
+macro_rules! printk {
+    ($($arg:tt)*) => ($crate::console::_printk(format_args!($($arg)*)));
 }
