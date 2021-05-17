@@ -6,6 +6,12 @@ pub fn write_string(writer: &PixelWriter, x: u32, y: u32, str: &str, color: &Pix
     }
 }
 
+pub fn write_chars(writer: &PixelWriter, x: u32, y: u32, chars: &[char], color: &PixelColor) {
+    for (i, char) in chars.iter().enumerate() {
+        write_ascii(writer, x + 8 * i as u32, y , *char, color);
+    }
+}
+
 pub fn write_ascii(writer: &PixelWriter, x: u32, y: u32, c: char, color: &PixelColor) {
     let font = unsafe { get_font(c) };
     let font = match font {
