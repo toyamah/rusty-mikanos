@@ -8,16 +8,20 @@ mod font;
 mod graphics;
 
 use crate::console::Console;
-use crate::graphics::{PixelColor, PixelWriter};
+use crate::graphics::{
+    PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+};
 use core::panic::PanicInfo;
 use shared::FrameBufferConfig;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
+
 fn pixel_writer() -> &'static mut PixelWriter<'static> {
     unsafe { PIXEL_WRITER.as_mut().unwrap() }
 }
 
 static mut CONSOLE: Option<Console> = None;
+
 fn console() -> &'static mut Console<'static> {
     unsafe { CONSOLE.as_mut().unwrap() }
 }
@@ -26,11 +30,33 @@ fn console() -> &'static mut Console<'static> {
 pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) -> ! {
     initialize_global_vars(frame_buffer_config);
 
-    write_pixel(pixel_writer(), frame_buffer_config);
+    write_cursor();
 
-    for i in 0..27 {
-        printk!("line {}\n", i);
-    }
+    let frame_width = frame_buffer_config.horizontal_resolution;
+    let frame_height = frame_buffer_config.vertical_resolution;
+    let writer = pixel_writer();
+    writer.fill_rectangle(
+        &Vector2D::new(0, 0),
+        &Vector2D::new(frame_width, frame_height),
+        &DESKTOP_BG_COLOR,
+    );
+    writer.fill_rectangle(
+        &Vector2D::new(0, frame_height - 50),
+        &Vector2D::new(frame_width, 50),
+        &PixelColor::new(1, 8, 17),
+    );
+    writer.fill_rectangle(
+        &Vector2D::new(0, frame_height - 50),
+        &Vector2D::new(frame_width / 5, 50),
+        &PixelColor::new(80, 80, 80),
+    );
+    writer.draw_rectange(
+        &Vector2D::new(10, frame_height - 40),
+        &Vector2D::new(30, 30),
+        &PixelColor::new(160, 160, 160),
+    );
+
+    printk!("Welcome to MikanOS!\n");
 
     loop {
         unsafe { asm!("hlt") }
@@ -49,18 +75,51 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
         PIXEL_WRITER = Some(PixelWriter::new(frame_buffer_config));
     }
 
-    let white = PixelColor::new(255, 255, 255);
-    let black = PixelColor::new(0, 0, 0);
     unsafe {
-        CONSOLE = Some(Console::new(pixel_writer(), white, black));
+        CONSOLE = Some(Console::new(
+            pixel_writer(),
+            DESKTOP_FG_COLOR,
+            DESKTOP_BG_COLOR,
+        ));
     }
 }
 
-fn write_pixel(writer: &PixelWriter, config: &FrameBufferConfig) {
-    let black = PixelColor::new(0, 0, 0);
-    for x in 0..config.horizontal_resolution {
-        for y in 0..config.vertical_resolution {
-            writer.write(x, y, &black);
+fn write_cursor() {
+    let writer = pixel_writer();
+    for (dy, str) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
+        for (dx, char) in str.chars().enumerate() {
+            if char == '@' {
+                writer.write((200 + dx) as u32, (100 + dy) as u32, &COLOR_WHITE);
+            } else if char == '.' {
+                writer.write((200 + dx) as u32, (100 + dy) as u32, &COLOR_BLACK);
+            };
         }
     }
 }
+
+const MOUSE_CURSOR_SHAPE: [&str; 24] = [
+    "@              ",
+    "@@             ",
+    "@.@            ",
+    "@..@           ",
+    "@...@          ",
+    "@....@         ",
+    "@.....@        ",
+    "@......@       ",
+    "@.......@      ",
+    "@........@     ",
+    "@.........@    ",
+    "@..........@   ",
+    "@...........@  ",
+    "@............@ ",
+    "@......@@@@@@@@",
+    "@......@       ",
+    "@....@@.@      ",
+    "@...@ @.@      ",
+    "@..@   @.@     ",
+    "@.@    @.@     ",
+    "@@      @.@    ",
+    "@       @.@    ",
+    "         @.@   ",
+    "         @@@   ",
+];
