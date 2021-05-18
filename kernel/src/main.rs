@@ -8,16 +8,18 @@ mod font;
 mod graphics;
 
 use crate::console::Console;
-use crate::graphics::{PixelColor, PixelWriter};
+use crate::graphics::{PixelColor, PixelWriter, COLOR_BLACK, COLOR_WHITE};
 use core::panic::PanicInfo;
 use shared::FrameBufferConfig;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
+
 fn pixel_writer() -> &'static mut PixelWriter<'static> {
     unsafe { PIXEL_WRITER.as_mut().unwrap() }
 }
 
 static mut CONSOLE: Option<Console> = None;
+
 fn console() -> &'static mut Console<'static> {
     unsafe { CONSOLE.as_mut().unwrap() }
 }
@@ -27,10 +29,11 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     initialize_global_vars(frame_buffer_config);
 
     write_pixel(pixel_writer(), frame_buffer_config);
+    write_cursor();
 
-    for i in 0..27 {
-        printk!("line {}\n", i);
-    }
+    // for i in 0..27 {
+    //     printk!("line {}\n", i);
+    // }
 
     loop {
         unsafe { asm!("hlt") }
@@ -64,3 +67,43 @@ fn write_pixel(writer: &PixelWriter, config: &FrameBufferConfig) {
         }
     }
 }
+
+fn write_cursor() {
+    let writer = pixel_writer();
+    for (dy, str) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
+        for (dx, char) in str.chars().enumerate() {
+            if char == '@' {
+                writer.write((200 + dx) as u32, (100 + dy) as u32, &COLOR_WHITE);
+            } else if char == '.' {
+                writer.write((200 + dx) as u32, (100 + dy) as u32, &COLOR_BLACK);
+            };
+        }
+    }
+}
+
+const MOUSE_CURSOR_SHAPE: [&str; 24] = [
+    "@              ",
+    "@@             ",
+    "@.@            ",
+    "@..@           ",
+    "@...@          ",
+    "@....@         ",
+    "@.....@        ",
+    "@......@       ",
+    "@.......@      ",
+    "@........@     ",
+    "@.........@    ",
+    "@..........@   ",
+    "@...........@  ",
+    "@............@ ",
+    "@......@@@@@@@@",
+    "@......@       ",
+    "@....@@.@      ",
+    "@...@ @.@      ",
+    "@..@   @.@     ",
+    "@.@    @.@     ",
+    "@@      @.@    ",
+    "@       @.@    ",
+    "         @.@   ",
+    "         @@@   ",
+];

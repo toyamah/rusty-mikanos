@@ -1,6 +1,13 @@
 use crate::font;
 use shared::{FrameBufferConfig, PixelFormat};
 
+pub const COLOR_BLACK: PixelColor = PixelColor {
+    r: 255,
+    g: 255,
+    b: 255,
+};
+pub const COLOR_WHITE: PixelColor = PixelColor { r: 0, g: 0, b: 0 };
+
 pub struct PixelColor {
     r: u8,
     g: u8,
