@@ -8,7 +8,9 @@ mod font;
 mod graphics;
 
 use crate::console::Console;
-use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
+use crate::graphics::{
+    PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+};
 use core::panic::PanicInfo;
 use shared::FrameBufferConfig;
 
@@ -74,7 +76,11 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     }
 
     unsafe {
-        CONSOLE = Some(Console::new(pixel_writer(), DESKTOP_FG_COLOR, DESKTOP_BG_COLOR));
+        CONSOLE = Some(Console::new(
+            pixel_writer(),
+            DESKTOP_FG_COLOR,
+            DESKTOP_BG_COLOR,
+        ));
     }
 }
 
