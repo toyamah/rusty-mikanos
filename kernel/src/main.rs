@@ -8,7 +8,7 @@ mod font;
 mod graphics;
 
 use crate::console::Console;
-use crate::graphics::{PixelColor, PixelWriter, COLOR_BLACK, COLOR_WHITE};
+use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
 use core::panic::PanicInfo;
 use shared::FrameBufferConfig;
 
@@ -28,12 +28,33 @@ fn console() -> &'static mut Console<'static> {
 pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) -> ! {
     initialize_global_vars(frame_buffer_config);
 
-    write_pixel(pixel_writer(), frame_buffer_config);
     write_cursor();
 
-    // for i in 0..27 {
-    //     printk!("line {}\n", i);
-    // }
+    let frame_width = frame_buffer_config.horizontal_resolution;
+    let frame_height = frame_buffer_config.vertical_resolution;
+    let writer = pixel_writer();
+    writer.fill_rectangle(
+        &Vector2D::new(0, 0),
+        &Vector2D::new(frame_width, frame_height),
+        &DESKTOP_BG_COLOR,
+    );
+    writer.fill_rectangle(
+        &Vector2D::new(0, frame_height - 50),
+        &Vector2D::new(frame_width, 50),
+        &PixelColor::new(1, 8, 17),
+    );
+    writer.fill_rectangle(
+        &Vector2D::new(0, frame_height - 50),
+        &Vector2D::new(frame_width / 5, 50),
+        &PixelColor::new(80, 80, 80),
+    );
+    writer.draw_rectange(
+        &Vector2D::new(10, frame_height - 40),
+        &Vector2D::new(30, 30),
+        &PixelColor::new(160, 160, 160),
+    );
+
+    printk!("Welcome to MikanOS!\n");
 
     loop {
         unsafe { asm!("hlt") }
@@ -53,16 +74,7 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     }
 
     unsafe {
-        CONSOLE = Some(Console::new(pixel_writer(), COLOR_WHITE, COLOR_BLACK));
-    }
-}
-
-fn write_pixel(writer: &PixelWriter, config: &FrameBufferConfig) {
-    let black = PixelColor::new(0, 0, 0);
-    for x in 0..config.horizontal_resolution {
-        for y in 0..config.vertical_resolution {
-            writer.write(x, y, &black);
-        }
+        CONSOLE = Some(Console::new(pixel_writer(), DESKTOP_FG_COLOR, DESKTOP_BG_COLOR));
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::font;
+use core::ops::{Add, AddAssign};
 use shared::{FrameBufferConfig, PixelFormat};
 
 pub const COLOR_BLACK: PixelColor = PixelColor {
@@ -8,11 +9,54 @@ pub const COLOR_BLACK: PixelColor = PixelColor {
 };
 pub const COLOR_WHITE: PixelColor = PixelColor { r: 0, g: 0, b: 0 };
 
-#[derive(Copy, Clone)]
+pub const DESKTOP_BG_COLOR: PixelColor = PixelColor {
+    r: 45,
+    g: 118,
+    b:237
+};
+pub const DESKTOP_FG_COLOR: PixelColor = COLOR_BLACK;
+
+#[derive(Copy, Clone, Debug)]
 pub struct PixelColor {
     r: u8,
     g: u8,
     b: u8,
+}
+
+#[derive(Debug)]
+pub struct Vector2D<T> {
+    x: T,
+    y: T,
+}
+
+impl<T> Vector2D<T> {
+    pub fn new(x: T, y: T) -> Vector2D<T> {
+        Self { x, y }
+    }
+}
+
+impl<T> Add for Vector2D<T>
+where
+    T: Add<Output = T> + Copy + Clone,
+{
+    type Output = Vector2D<T>;
+
+    fn add(self, other: Self) -> Self::Output {
+        Vector2D::<T> {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
+impl<T> AddAssign for Vector2D<T>
+where
+    T: AddAssign + Copy + Clone,
+{
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
 }
 
 impl PixelColor {
@@ -51,6 +95,25 @@ impl<'a> PixelWriter<'a> {
 
     pub fn write(&self, x: u32, y: u32, color: &PixelColor) {
         (self.write_fn)(self, x, y, color);
+    }
+
+    pub fn draw_rectange(&self, pos: &Vector2D<u32>, size: &Vector2D<u32>, c: &PixelColor) {
+        for dx in 0..size.x {
+            self.write(pos.x + dx, pos.y, c);
+            self.write(pos.x + dx, pos.y + size.y - 1, c);
+        }
+        for dy in 0..size.y {
+            self.write(pos.x, pos.y + dy, c);
+            self.write(pos.x + size.x - 1, pos.y + dy, c);
+        }
+    }
+
+    pub fn fill_rectangle(&self, pos: &Vector2D<u32>, size: &Vector2D<u32>, c: &PixelColor) {
+        for dy in 0..size.y {
+            for dx in 0..size.x {
+                self.write(pos.x + dx, pos.y + dy, c);
+            }
+        }
     }
 
     fn write_rgb(self: &Self, x: u32, y: u32, color: &PixelColor) {
