@@ -8,6 +8,7 @@ pub const COLOR_BLACK: PixelColor = PixelColor {
 };
 pub const COLOR_WHITE: PixelColor = PixelColor { r: 0, g: 0, b: 0 };
 
+#[derive(Copy, Clone)]
 pub struct PixelColor {
     r: u8,
     g: u8,

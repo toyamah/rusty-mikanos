@@ -52,10 +52,8 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
         PIXEL_WRITER = Some(PixelWriter::new(frame_buffer_config));
     }
 
-    let white = PixelColor::new(255, 255, 255);
-    let black = PixelColor::new(0, 0, 0);
     unsafe {
-        CONSOLE = Some(Console::new(pixel_writer(), white, black));
+        CONSOLE = Some(Console::new(pixel_writer(), COLOR_WHITE, COLOR_BLACK));
     }
 }
 
