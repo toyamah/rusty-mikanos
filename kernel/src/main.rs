@@ -6,6 +6,7 @@
 mod console;
 mod font;
 mod graphics;
+mod pci;
 
 use crate::console::Console;
 use crate::graphics::{
