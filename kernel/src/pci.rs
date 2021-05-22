@@ -8,10 +8,13 @@ extern "C" {
 }
 
 /// make a 32-bit unsigned integer for CONFIG_ADDRESS
+///
+/// ref: https://wiki.osdev.org/PCI#Configuration_Space_Access_Mechanism_.231
 fn make_address(bus: u8, device: u8, function: u8, reg_addr: u8) -> u32 {
     fn shl(x: u8, bits: usize) -> u32 {
         (x << bits) as u32
     }
+    // this bit enables to read/write data at the made address
     let enabled_bit: u32 = (1 as u32) << 32;
     enabled_bit | shl(bus, 16) | shl(device, 11) | shl(function, 8) | (reg_addr & 0xfc) as u32
 }
