@@ -1,8 +1,11 @@
-use core::ops::Shl;
-
 const CONFIG_ADDRESS: u16 = 0x0cf8;
 
 const CONFIG_DATA: u16 = 0x0cfc;
+
+extern "C" {
+    fn IoOut32(addr: u16, data: u32);
+    fn IoIn32(addr: u16) -> u32;
+}
 
 /// make a 32-bit unsigned integer for CONFIG_ADDRESS
 fn make_address(bus: u8, device: u8, function: u8, reg_addr: u8) -> u32 {
