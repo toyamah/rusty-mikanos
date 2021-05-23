@@ -4,6 +4,7 @@
 #![no_main]
 
 mod console;
+mod error;
 mod font;
 mod graphics;
 mod pci;
