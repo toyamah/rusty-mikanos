@@ -58,7 +58,14 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
         &PixelColor::new(160, 160, 160),
     );
 
-    printk!("Welcome to MikanOS!\n");
+    match pci::scan_all_bus() {
+        Ok(_) => printk!("ScanAllBus: Success\n"),
+        Err(error) => printk!("ScannAllBus: {}\n", error.name()),
+    };
+
+    for device in pci::devices() {
+        printk!("{}\n", device);
+    }
 
     loop {
         unsafe { asm!("hlt") }
