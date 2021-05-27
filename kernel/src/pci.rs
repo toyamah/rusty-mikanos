@@ -56,7 +56,7 @@ impl Display for Device {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}.{}.{}: vend {:<04}, class {:<08}, head {:02}",
+            "{}.{}.{}: vend {:04x}, class {:08x}, head {:02x}",
             self.bus,
             self.device,
             self.function,
