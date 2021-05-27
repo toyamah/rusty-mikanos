@@ -101,7 +101,7 @@ fn read_data() -> u32 {
 
 fn read_vendor_id(bus: u8, device: u8, function: u8) -> u16 {
     write_address(make_address(bus, device, function, 0x00));
-    (read_data() & 0xffff) as u16
+    read_data() as u16
 }
 
 fn read_device_id(bus: u8, device: u8, function: u8) -> u16 {
@@ -111,7 +111,7 @@ fn read_device_id(bus: u8, device: u8, function: u8) -> u16 {
 
 fn read_header_type(bus: u8, device: u8, function: u8) -> u8 {
     write_address(make_address(bus, device, function, 0x0c));
-    (read_data() >> 16 & 0xff) as u8
+    (read_data() >> 16) as u8
 }
 
 fn read_class_code(bus: u8, device: u8, function: u8) -> u32 {
