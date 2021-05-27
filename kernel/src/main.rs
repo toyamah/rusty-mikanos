@@ -58,10 +58,11 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
         &PixelColor::new(160, 160, 160),
     );
 
-    match pci::scan_all_bus() {
-        Ok(_) => printk!("ScanAllBus: Success\n"),
-        Err(error) => printk!("ScannAllBus: {}\n", error.name()),
+    let result = match pci::scan_all_bus() {
+        Ok(_) => "Success",
+        Err(error) => error.name(),
     };
+    printk!("ScannAllBus: {}\n", result);
 
     for device in pci::devices() {
         printk!("{}\n", device);

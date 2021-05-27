@@ -5,7 +5,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &'static str {
         match self {
             Error::Full => "Full",
             Error::Empty => "Empty",
