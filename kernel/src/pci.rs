@@ -43,11 +43,11 @@ impl Device {
         }
     }
 
-    pub fn vendor_id(&self) -> u16 {
+    fn vendor_id(&self) -> u16 {
         read_vendor_id(self.bus, self.device, self.function)
     }
 
-    pub fn class_code(&self) -> u32 {
+    fn class_code(&self) -> u32 {
         read_class_code(self.bus, self.device, self.function)
     }
 }
