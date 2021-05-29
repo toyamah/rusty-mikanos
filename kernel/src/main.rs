@@ -32,8 +32,6 @@ fn console() -> &'static mut Console<'static> {
 pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) -> ! {
     initialize_global_vars(frame_buffer_config);
 
-    write_cursor();
-
     let frame_width = frame_buffer_config.horizontal_resolution;
     let frame_height = frame_buffer_config.vertical_resolution;
     let writer = pixel_writer();
@@ -57,6 +55,9 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
         &Vector2D::new(30, 30),
         &PixelColor::new(160, 160, 160),
     );
+
+    printk!("Welcome to MikanOS!\n");
+    write_cursor();
 
     let result = match pci::scan_all_bus() {
         Ok(_) => "Success",
