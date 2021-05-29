@@ -4,8 +4,10 @@
 #![no_main]
 
 mod console;
+mod error;
 mod font;
 mod graphics;
+mod pci;
 
 use crate::console::Console;
 use crate::graphics::{
@@ -29,8 +31,6 @@ fn console() -> &'static mut Console<'static> {
 #[no_mangle] // disable name mangling
 pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) -> ! {
     initialize_global_vars(frame_buffer_config);
-
-    write_cursor();
 
     let frame_width = frame_buffer_config.horizontal_resolution;
     let frame_height = frame_buffer_config.vertical_resolution;
@@ -57,6 +57,17 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     );
 
     printk!("Welcome to MikanOS!\n");
+    write_cursor();
+
+    let result = match pci::scan_all_bus() {
+        Ok(_) => "Success",
+        Err(error) => error.name(),
+    };
+    printk!("ScannAllBus: {}\n", result);
+
+    for device in pci::devices() {
+        printk!("{}\n", device);
+    }
 
     loop {
         unsafe { asm!("hlt") }
