@@ -124,6 +124,7 @@ fn read_bus_number(bus: u8, device: u8, function: u8) -> u32 {
     read_data()
 }
 
+/// ref: https://wiki.osdev.org/PCI#Recursive_Scan
 pub fn scan_all_bus() -> Result<(), Error> {
     unsafe {
         NUM_DEVICE = 0;
