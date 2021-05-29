@@ -131,19 +131,25 @@ pub fn scan_all_bus() -> Result<(), Error> {
     }
     let header_type = read_header_type(0, 0, 0);
     if is_single_function_device(header_type) {
+        // Single PCI host controller
         return scan_bus(0);
     }
 
+    // Multiple PCI host controllers
     for function in 1..8 as u8 {
         if read_vendor_id(0, 0, function) == NON_EXISTENT_DEVICE {
             continue;
         }
-        scan_bus(function)?;
+        // If it is a multifunction device,
+        // then function 0 will be the PCI host controller responsible for bus 0
+        let bus = function;
+        scan_bus(bus)?;
     }
 
     Ok(())
 }
 
+/// ref: https://wiki.osdev.org/PCI#Recursive_Scan
 fn scan_bus(bus: u8) -> Result<(), Error> {
     for device in 0..32 as u8 {
         if read_vendor_id(bus, device, 0) == NON_EXISTENT_DEVICE {
@@ -155,6 +161,7 @@ fn scan_bus(bus: u8) -> Result<(), Error> {
     Ok(())
 }
 
+/// ref: https://wiki.osdev.org/PCI#Recursive_Scan
 fn scan_device(bus: u8, device: u8) -> Result<(), Error> {
     scan_function(bus, device, 0)?;
 
@@ -162,6 +169,7 @@ fn scan_device(bus: u8, device: u8) -> Result<(), Error> {
         return Ok(());
     }
 
+    // It is a multi-function device, so check remaining functions
     for function in 1..8 as u8 {
         if read_vendor_id(bus, device, function) == NON_EXISTENT_DEVICE {
             continue;
@@ -172,6 +180,7 @@ fn scan_device(bus: u8, device: u8) -> Result<(), Error> {
     Ok(())
 }
 
+/// ref: https://wiki.osdev.org/PCI#Recursive_Scan
 fn scan_function(bus: u8, device: u8, function: u8) -> Result<(), Error> {
     let header_type = read_header_type(bus, device, function);
     add_device(bus, device, function, header_type)?;
@@ -179,7 +188,10 @@ fn scan_function(bus: u8, device: u8, function: u8) -> Result<(), Error> {
     let class_code = read_class_code(bus, device, function);
     let base = (class_code >> 24) & 0xff;
     let sub = (class_code >> 16) & 0xff;
+
+    // if the device is a PCI to PCI bridge
     if base == 0x06 && sub == 0x04 {
+        // scan pci devices which are connected with the secondary_bus
         let bus_numbers = read_bus_number(bus, device, function);
         let secondary_bus = (bus_numbers >> 8) & 0xff;
         return scan_bus(secondary_bus as u8);
