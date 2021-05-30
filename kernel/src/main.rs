@@ -19,6 +19,7 @@ use crate::pci::Device;
 use core::panic::PanicInfo;
 use log::{debug, error, info, trace};
 use shared::FrameBufferConfig;
+use crate::error::Code;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -63,11 +64,7 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     printk!("Welcome to MikanOS!\n");
     write_cursor();
 
-    let result = match pci::scan_all_bus() {
-        Ok(_) => "Success",
-        Err(error) => error.name(),
-    };
-    printk!("ScanAllBus: {}\n", result);
+    pci::scan_all_bus().unwrap();
 
     for device in pci::devices() {
         printk!("{}\n", device);

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use crate::error::Error;
+use crate::error::{Code, Error};
+use crate::make_error;
 use crate::printk;
 use core::fmt;
 use core::fmt::{Display, Formatter};
@@ -266,7 +267,7 @@ fn add_device(
 ) -> Result<(), Error> {
     unsafe {
         if NUM_DEVICE == DEVICES.len() {
-            return Err(Error::Full);
+            return Err(make_error!(Code::Full));
         }
         DEVICES[NUM_DEVICE] = Device::new(bus, device, function, header_type, class_code);
         NUM_DEVICE += 1;
