@@ -7,6 +7,7 @@ mod console;
 mod error;
 mod font;
 mod graphics;
+mod logger;
 mod pci;
 
 use crate::console::Console;
@@ -14,6 +15,7 @@ use crate::graphics::{
     PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
 use core::panic::PanicInfo;
+use log::{debug, info, trace};
 use shared::FrameBufferConfig;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
@@ -93,6 +95,8 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
             DESKTOP_BG_COLOR,
         ));
     }
+
+    logger::init(log::LevelFilter::Trace).unwrap();
 }
 
 fn write_cursor() {
