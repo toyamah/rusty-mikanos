@@ -4,6 +4,7 @@ use crate::error::Error;
 use crate::printk;
 use core::fmt;
 use core::fmt::{Display, Formatter};
+use log::{debug};
 
 const CONFIG_ADDRESS: u16 = 0x0cf8;
 
@@ -17,6 +18,11 @@ static mut DEVICES: [Device; 32] = [Device {
     device: 0,
     function: 0,
     header_type: 0,
+    class_code: ClassCode {
+        base: 0,
+        sub: 0,
+        interface: 0,
+    },
 }; 32];
 
 pub fn devices() -> &'static [Device] {
@@ -31,24 +37,22 @@ pub struct Device {
     device: u8,
     function: u8,
     header_type: u8,
+    class_code: ClassCode,
 }
 
 impl Device {
-    fn new(bus: u8, device: u8, function: u8, header_type: u8) -> Device {
+    fn new(bus: u8, device: u8, function: u8, header_type: u8, class_code: ClassCode) -> Device {
         Self {
             bus,
             device,
             function,
             header_type,
+            class_code,
         }
     }
 
     fn vendor_id(&self) -> u16 {
         read_vendor_id(self.bus, self.device, self.function)
-    }
-
-    fn class_code(&self) -> u32 {
-        read_class_code(self.bus, self.device, self.function)
     }
 }
 
@@ -56,14 +60,59 @@ impl Display for Device {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}.{}.{}: vend {:04x}, class {:08x}, head {:02x}",
+            "{}.{}.{}: vend {:04x}, class {}, head {:02x}",
             self.bus,
             self.device,
             self.function,
             self.vendor_id(),
-            self.class_code(),
+            self.class_code,
             self.header_type
         )
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct ClassCode {
+    base: u8,
+    sub: u8,
+    interface: u8,
+}
+
+impl ClassCode {
+    fn new(base: u8, sub: u8, interface: u8) -> Self {
+        Self {
+            base,
+            sub,
+            interface,
+        }
+    }
+
+    fn is_match_base(&self, base: u8) -> bool {
+        base == self.base
+    }
+
+    fn is_match_base_sub(&self, base: u8, sub: u8) -> bool {
+        self.is_match_base(base) && sub == self.sub
+    }
+
+    pub fn is_match_all(&self, base: u8, sub: u8, interface: u8) -> bool {
+        self.is_match_base_sub(base, sub) && interface == self.interface
+    }
+}
+
+impl From<u32> for ClassCode {
+    fn from(reg: u32) -> Self {
+        let base = (reg >> 24) as u8;
+        let sub = (reg >> 16) as u8;
+        let interface = (reg >> 8) as u8;
+        ClassCode::new(base, sub, interface)
+    }
+}
+
+impl Display for ClassCode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let value = (self.base as u32) << 24 | (self.sub as u32) << 16 | (self.interface as u32) << 8;
+        write!(f, "{:08x}", value)
     }
 }
 
@@ -114,9 +163,10 @@ fn read_header_type(bus: u8, device: u8, function: u8) -> u8 {
     (read_data() >> 16) as u8
 }
 
-fn read_class_code(bus: u8, device: u8, function: u8) -> u32 {
+fn read_class_code(bus: u8, device: u8, function: u8) -> ClassCode {
     write_address(make_address(bus, device, function, 0x08));
-    read_data()
+    let reg = read_data();
+    ClassCode::from(reg)
 }
 
 fn read_bus_number(bus: u8, device: u8, function: u8) -> u32 {
@@ -182,15 +232,12 @@ fn scan_device(bus: u8, device: u8) -> Result<(), Error> {
 
 /// ref: https://wiki.osdev.org/PCI#Recursive_Scan
 fn scan_function(bus: u8, device: u8, function: u8) -> Result<(), Error> {
-    let header_type = read_header_type(bus, device, function);
-    add_device(bus, device, function, header_type)?;
-
     let class_code = read_class_code(bus, device, function);
-    let base = (class_code >> 24) & 0xff;
-    let sub = (class_code >> 16) & 0xff;
+    let header_type = read_header_type(bus, device, function);
+    add_device(bus, device, function, header_type, class_code)?;
 
     // if the device is a PCI to PCI bridge
-    if base == 0x06 && sub == 0x04 {
+    if class_code.is_match_base_sub(0x06, 0x04) {
         // scan pci devices which are connected with the secondary_bus
         let bus_numbers = read_bus_number(bus, device, function);
         let secondary_bus = (bus_numbers >> 8) & 0xff;
@@ -200,12 +247,18 @@ fn scan_function(bus: u8, device: u8, function: u8) -> Result<(), Error> {
     Ok(())
 }
 
-fn add_device(bus: u8, device: u8, function: u8, header_type: u8) -> Result<(), Error> {
+fn add_device(
+    bus: u8,
+    device: u8,
+    function: u8,
+    header_type: u8,
+    class_code: ClassCode,
+) -> Result<(), Error> {
     unsafe {
         if NUM_DEVICE == DEVICES.len() {
             return Err(Error::Full);
         }
-        DEVICES[NUM_DEVICE] = Device::new(bus, device, function, header_type);
+        DEVICES[NUM_DEVICE] = Device::new(bus, device, function, header_type, class_code);
         NUM_DEVICE += 1;
     }
     Ok(())
