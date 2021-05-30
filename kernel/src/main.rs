@@ -67,7 +67,7 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
         Ok(_) => "Success",
         Err(error) => error.name(),
     };
-    printk!("ScannAllBus: {}\n", result);
+    printk!("ScanAllBus: {}\n", result);
 
     for device in pci::devices() {
         printk!("{}\n", device);
