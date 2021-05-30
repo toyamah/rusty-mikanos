@@ -1,13 +1,14 @@
+#![allow(dead_code)]
 use core::fmt;
+
 use log::{Level, Metadata, Record};
 
-use log::{SetLoggerError, LevelFilter};
+use log::{LevelFilter, SetLoggerError};
 
 const LOGGER: Logger = Logger;
 
 pub fn init(max_level: LevelFilter) -> Result<(), SetLoggerError> {
-    log::set_logger(&LOGGER)
-        .map(|()| log::set_max_level(max_level))
+    log::set_logger(&LOGGER).map(|()| log::set_max_level(max_level))
 }
 
 struct Logger;
