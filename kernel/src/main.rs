@@ -16,7 +16,7 @@ use crate::graphics::{
 };
 use crate::pci::Device;
 use core::panic::PanicInfo;
-use log::{debug, info, trace};
+use log::{debug, error, info, trace};
 use shared::FrameBufferConfig;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
@@ -88,6 +88,7 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
+    error!("{}", _info);
     loop_and_hlt()
 }
 
