@@ -14,6 +14,7 @@ use crate::console::Console;
 use crate::graphics::{
     PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
+use crate::pci::Device;
 use core::panic::PanicInfo;
 use log::{debug, info, trace};
 use shared::FrameBufferConfig;
@@ -71,16 +72,23 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
         printk!("{}\n", device);
     }
 
-    loop {
-        unsafe { asm!("hlt") }
-    }
+    let device = pci::devices()
+        .iter()
+        .find(|d| d.is_xhc() && d.is_intel_device())
+        .or_else(|| pci::devices().iter().find(|d| d.is_xhc()))
+        .unwrap_or_else(|| {
+            info!("no xHC has been found");
+            loop_and_hlt()
+        });
+
+    info!("xHC has been found: {}", device);
+
+    loop_and_hlt()
 }
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {
-        unsafe { asm!("hlt") }
-    }
+    loop_and_hlt()
 }
 
 fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
@@ -109,6 +117,12 @@ fn write_cursor() {
                 writer.write((200 + dx) as u32, (100 + dy) as u32, &COLOR_BLACK);
             };
         }
+    }
+}
+
+fn loop_and_hlt() -> ! {
+    loop {
+        unsafe { asm!("hlt") }
     }
 }
 

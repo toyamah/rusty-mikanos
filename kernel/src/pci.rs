@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::printk;
 use core::fmt;
 use core::fmt::{Display, Formatter};
-use log::{debug};
+use log::debug;
 
 const CONFIG_ADDRESS: u16 = 0x0cf8;
 
@@ -54,6 +54,15 @@ impl Device {
     fn vendor_id(&self) -> u16 {
         read_vendor_id(self.bus, self.device, self.function)
     }
+
+    pub fn is_xhc(&self) -> bool {
+        self.class_code.is_match_all(0x0c, 0x03, 0x30)
+    }
+
+    /// ref: https://devicehunt.com/view/type/pci/vendor/8086
+    pub fn is_intel_device(&self) -> bool {
+        self.vendor_id() == 0x8086
+    }
 }
 
 impl Display for Device {
@@ -95,7 +104,7 @@ impl ClassCode {
         self.is_match_base(base) && sub == self.sub
     }
 
-    pub fn is_match_all(&self, base: u8, sub: u8, interface: u8) -> bool {
+    fn is_match_all(&self, base: u8, sub: u8, interface: u8) -> bool {
         self.is_match_base_sub(base, sub) && interface == self.interface
     }
 }
@@ -111,7 +120,8 @@ impl From<u32> for ClassCode {
 
 impl Display for ClassCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let value = (self.base as u32) << 24 | (self.sub as u32) << 16 | (self.interface as u32) << 8;
+        let value =
+            (self.base as u32) << 24 | (self.sub as u32) << 16 | (self.interface as u32) << 8;
         write!(f, "{:08x}", value)
     }
 }
