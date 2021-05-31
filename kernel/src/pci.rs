@@ -2,7 +2,6 @@
 
 use crate::error::{Code, Error};
 use crate::make_error;
-use crate::printk;
 use core::fmt;
 use core::fmt::{Display, Formatter};
 use log::debug;
@@ -28,6 +27,13 @@ static mut DEVICES: [Device; 32] = [Device {
 
 pub fn devices() -> &'static [Device] {
     unsafe { &DEVICES[..NUM_DEVICE] }
+}
+
+pub fn find_xhc_device<'a>() -> Option<&'a Device> {
+    devices()
+        .iter()
+        .find(|d| d.is_xhc() && d.is_intel_device())
+        .or_else(|| devices().iter().find(|d| d.is_xhc()))
 }
 
 static mut NUM_DEVICE: usize = 0;
@@ -185,6 +191,18 @@ fn read_bus_number(bus: u8, device: u8, function: u8) -> u32 {
     read_data()
 }
 
+fn read_conf_reg(device: &Device, reg_addr: u8) -> u32 {
+    let address = make_address(device.bus, device.device, device.function, reg_addr);
+    write_address(address);
+    read_data()
+}
+
+fn write_conf_reg(device: &Device, reg_addr: u8, value: u32) {
+    let address = make_address(device.bus, device.device, device.function, reg_addr);
+    write_address(address);
+    write_data(value);
+}
+
 /// ref: https://wiki.osdev.org/PCI#Recursive_Scan
 pub fn scan_all_bus() -> Result<(), Error> {
     unsafe {
@@ -278,4 +296,30 @@ fn add_device(
 /// ref: https://wiki.osdev.org/PCI#Multifunction_Devices
 fn is_single_function_device(header_type: u8) -> bool {
     header_type & 0x80 == 0
+}
+
+pub fn read_bar(device: &Device, bar_index: usize) -> Result<u64, Error> {
+    if bar_index >= 6 {
+        return Err(make_error!(Code::IndexOutOfRange));
+    }
+
+    let addr = calc_bar_address(bar_index);
+    let bar = read_conf_reg(device, addr) as u64;
+
+    // 32 bit address
+    if bar & 4 == 0 {
+        return Ok(bar);
+    }
+
+    // 64 bit address
+    if bar_index >= 5 {
+        return Err(make_error!(Code::IndexOutOfRange));
+    }
+
+    let bar_upper = read_conf_reg(device, addr + 4) as u64;
+    return Ok(bar | bar_upper << 32);
+}
+
+fn calc_bar_address(bar_index: usize) -> u8 {
+    (0x10 + 4 * bar_index) as u8
 }

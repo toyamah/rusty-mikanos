@@ -15,11 +15,9 @@ use crate::console::Console;
 use crate::graphics::{
     PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
-use crate::pci::Device;
 use core::panic::PanicInfo;
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 use shared::FrameBufferConfig;
-use crate::error::Code;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -70,16 +68,18 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
         printk!("{}\n", device);
     }
 
-    let device = pci::devices()
-        .iter()
-        .find(|d| d.is_xhc() && d.is_intel_device())
-        .or_else(|| pci::devices().iter().find(|d| d.is_xhc()))
-        .unwrap_or_else(|| {
-            info!("no xHC has been found");
-            loop_and_hlt()
-        });
+    let xhc_device = pci::find_xhc_device().unwrap_or_else(|| {
+        info!("no xHC has been found");
+        loop_and_hlt()
+    });
+    info!("xHC has been found: {}", xhc_device);
 
-    info!("xHC has been found: {}", device);
+    let xhc_bar = pci::read_bar(xhc_device, 0).unwrap_or_else(|e| {
+        info!("cannot read base address#0: {}", e);
+        loop_and_hlt()
+    });
+    let xhc_mmio_base = xhc_bar & !(0x0f as u64);
+    debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
     loop_and_hlt()
 }
