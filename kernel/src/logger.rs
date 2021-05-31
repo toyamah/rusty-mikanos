@@ -1,7 +1,6 @@
 #![allow(dead_code)]
-use core::fmt;
 
-use log::{Level, Metadata, Record};
+use log::{Metadata, Record};
 
 use log::{LevelFilter, SetLoggerError};
 
