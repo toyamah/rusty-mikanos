@@ -1,0 +1,3 @@
+[submodule "official/mikanos"]
+	path = official/mikanos
+	url = https://github.com/uchan-nos/mikanos.git
