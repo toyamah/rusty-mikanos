@@ -70,11 +70,8 @@ fn build_asm(out_dir: &str, current_dir: &PathBuf) {
 
 fn build_usb(out_dir: &str, current_dir: &PathBuf) {
     let usb_dir = Path::new(current_dir).join("usb");
-    eprintln!("------------ usb_dir {:?}", usb_dir);
 
-    Command::new(Path::new(&usb_dir).join("build.sh"))
-        .status()
-        .unwrap();
+    Command::new("make").current_dir(&usb_dir).status().unwrap();
 
     fs::copy(
         PathBuf::from(&usb_dir).join("libusb.a"),
@@ -83,5 +80,4 @@ fn build_usb(out_dir: &str, current_dir: &PathBuf) {
     .unwrap();
 
     println!("cargo:rustc-link-lib=static=usb");
-    // println!("cargo:rerun-if-changed=asmfunc.asm");
 }

@@ -1,5 +1,5 @@
 TARGET = libusb.a
-OBJS = \
+OBJS = lib.o \
        logger.o \
        libcxx_support.o \
        newlib_support.o \
@@ -30,6 +30,7 @@ all: $(TARGET)
 clean:
 	find . -name "*.o" | xargs rm
 	find . -name "*.d" | xargs rm -rf
+	rm libusb.a
 
 libusb.a: $(OBJS) Makefile
 	ar rcs $@ $(OBJS)

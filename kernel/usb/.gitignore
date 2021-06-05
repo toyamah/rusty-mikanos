@@ -5,4 +5,6 @@
 *.o
 *.a
 
+!lib.cpp
+!logger.cpp
 !usb
