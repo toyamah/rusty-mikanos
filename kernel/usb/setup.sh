@@ -3,7 +3,7 @@
 set -eu
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
-cd "$script_dir"/../../official/mikanos/kernel
+cd "$script_dir"/../../official/kernel
 files=$(\find . -maxdepth 3 -name "*.cpp" -o -name "*.hpp" -o -name "*.c"  | sed -e 's/\.\///g')
 
 parse_params() {
@@ -40,7 +40,7 @@ make_links() {
       path="$path../"
     done
 
-    ln -s ../.."$path"official/mikanos/kernel/"$file" "$file"
+    ln -s ../.."$path"official/kernel/"$file" "$file"
   done
 }
 
