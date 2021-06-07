@@ -84,8 +84,8 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
     let controller = XhciController::new(xhc_mmio_base);
-    controller.initialize();
-    controller.run();
+    controller.initialize().unwrap();
+    controller.run().unwrap();
 
     loop_and_hlt()
 }
