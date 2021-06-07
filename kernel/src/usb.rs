@@ -1,7 +1,7 @@
 use crate::error::Code::*;
 use crate::error::{Code, Error};
 use crate::make_error;
-use log::{debug, error, info};
+use log::{trace, error};
 
 extern "C" {
     fn UsbXhciController(xhc_mmio_base: u64) -> *mut XhciControllerImpl;
@@ -27,6 +27,7 @@ impl XhciController {
 
     pub fn initialize(&self) -> Result<(), Error> {
         let error = unsafe { UsbXhciController_initialize(self.c_impl) };
+        trace!("XhciController.initialize finished");
         match convert_to_code(error) {
             None => Ok(()),
             Some(code) => Err(make_error!(code)),
@@ -35,6 +36,7 @@ impl XhciController {
 
     pub fn run(&self) -> Result<(), Error> {
         let error = unsafe { UsbXhciController_run(self.c_impl) };
+        trace!("XhciController.run finished");
         match convert_to_code(error) {
             None => Ok(()),
             Some(code) => Err(make_error!(code)),
