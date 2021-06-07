@@ -70,6 +70,30 @@ impl Device {
     pub fn is_intel_device(&self) -> bool {
         self.vendor_id() == 0x8086
     }
+
+    pub fn switch_ehci_to_xhci(&self) {
+        let intel_ehc_exist = devices()
+            .iter()
+            .find(|device| device.is_intel_ehc())
+            .is_some();
+
+        if !intel_ehc_exist {
+            return;
+        }
+
+        let superspeed_ports = read_conf_reg(self, 0xdc); // USB3PRM
+        write_conf_reg(self, 0xd8, superspeed_ports); // USB3_PSSEN
+        let ehci_to_xhci_ports = read_conf_reg(self, 0xd4); // XUSB2PRM
+        write_conf_reg(self, 0xd0, ehci_to_xhci_ports); // XUSB2PR
+        debug!(
+            "switch_ehci_to_xhci: SS = {:02}, xHCI = {:02x}\n",
+            superspeed_ports, ehci_to_xhci_ports
+        );
+    }
+
+    fn is_intel_ehc(&self) -> bool {
+        self.class_code.is_match_all(0x0c, 0x03, 0x20) && self.is_intel_device()
+    }
 }
 
 impl Display for Device {
