@@ -26,6 +26,22 @@ extern "C" {
         auto error = xhc->Run();
         return error.Cause();
     }
+
+    void UsbXhciController_configurePort(XhciController* impl) {
+        // TODO: use the passed impl variable
+        for (int i = 1; i <= xhc->MaxPorts(); ++i) {
+            auto port = xhc->PortAt(i);
+            Log(kDebug, "Port %d: IsConnected=%d\n", i, port.IsConnected());
+
+            if (port.IsConnected()) {
+                if (auto err = ConfigurePort(*xhc, port)) {
+                    Log(kError, "failed to configure port: %s at %s:%d\n",
+                    err.Name(), err.File(), err.Line());
+                    continue;
+                }
+            }
+        }
+    }
 }
 
 // Define to solve the following

@@ -1,13 +1,13 @@
 use crate::error::Code::*;
 use crate::error::{Code, Error};
 use crate::make_error;
-use log::{trace, error};
+use log::{error, trace};
 
 extern "C" {
     fn UsbXhciController(xhc_mmio_base: u64) -> *mut XhciControllerImpl;
     fn UsbXhciController_initialize(c_impl: *mut XhciControllerImpl) -> i32;
     fn UsbXhciController_run(c_impl: *mut XhciControllerImpl) -> i32;
-
+    fn UsbXhciController_configurePort(c_impl: *mut XhciControllerImpl);
 }
 
 enum XhciControllerImpl {}
@@ -41,6 +41,11 @@ impl XhciController {
             None => Ok(()),
             Some(code) => Err(make_error!(code)),
         }
+    }
+
+    pub fn configure_port(&self) {
+        unsafe { UsbXhciController_configurePort(self.c_impl) };
+        trace!("XchiController.configure_port finished");
     }
 }
 

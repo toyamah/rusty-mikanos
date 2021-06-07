@@ -89,6 +89,8 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     }
     controller.initialize().unwrap();
     controller.run().unwrap();
+    controller.configure_port();
+    debug!("ok");
 
     loop_and_hlt()
 }
