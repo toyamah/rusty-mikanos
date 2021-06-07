@@ -79,5 +79,6 @@ fn build_usb(out_dir: &str, current_dir: &PathBuf) {
     )
     .unwrap();
 
+    println!("cargo:rerun-if-changed=usb");
     println!("cargo:rustc-link-lib=static=usb");
 }

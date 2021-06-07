@@ -16,10 +16,10 @@ use crate::console::Console;
 use crate::graphics::{
     PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
+use crate::usb::XhciController;
 use core::panic::PanicInfo;
 use log::{debug, error, info};
 use shared::FrameBufferConfig;
-use crate::usb::XhciController;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -84,7 +84,8 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
     let controller = XhciController::new(xhc_mmio_base);
-    debug!("controller = {:?}", controller);
+    controller.initialize();
+    controller.run();
 
     loop_and_hlt()
 }
