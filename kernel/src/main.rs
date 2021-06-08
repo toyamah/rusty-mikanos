@@ -9,13 +9,13 @@ mod error;
 mod font;
 mod graphics;
 mod logger;
+mod mouse;
 mod pci;
 mod usb;
 
 use crate::console::Console;
-use crate::graphics::{
-    PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
-};
+use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
+use crate::mouse::MouseCursor;
 use crate::usb::XhciController;
 use core::panic::PanicInfo;
 use log::{debug, error, info};
@@ -31,6 +31,12 @@ static mut CONSOLE: Option<Console> = None;
 
 fn console() -> &'static mut Console<'static> {
     unsafe { CONSOLE.as_mut().unwrap() }
+}
+
+static mut MOUSE_CURSOR: Option<MouseCursor> = None;
+
+fn mouse_cursor() -> &'static mut MouseCursor<'static> {
+    unsafe { MOUSE_CURSOR.as_mut().unwrap() }
 }
 
 #[no_mangle] // disable name mangling
@@ -62,7 +68,8 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     );
 
     printk!("Welcome to MikanOS!\n");
-    write_cursor();
+    mouse_cursor().draw();
+    mouse_cursor().move_relative(&Vector2D::new(100, 100));
 
     pci::scan_all_bus().unwrap();
 
@@ -104,30 +111,21 @@ fn panic(_info: &PanicInfo) -> ! {
 fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     unsafe {
         PIXEL_WRITER = Some(PixelWriter::new(frame_buffer_config));
-    }
 
-    unsafe {
         CONSOLE = Some(Console::new(
             pixel_writer(),
             DESKTOP_FG_COLOR,
             DESKTOP_BG_COLOR,
         ));
+
+        MOUSE_CURSOR = Some(MouseCursor::new(
+            pixel_writer(),
+            &DESKTOP_BG_COLOR,
+            Vector2D::new(300, 200),
+        ))
     }
 
     logger::init(log::LevelFilter::Trace).unwrap();
-}
-
-fn write_cursor() {
-    let writer = pixel_writer();
-    for (dy, str) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
-        for (dx, char) in str.chars().enumerate() {
-            if char == '@' {
-                writer.write((200 + dx) as u32, (100 + dy) as u32, &COLOR_WHITE);
-            } else if char == '.' {
-                writer.write((200 + dx) as u32, (100 + dy) as u32, &COLOR_BLACK);
-            };
-        }
-    }
 }
 
 fn loop_and_hlt() -> ! {
@@ -135,30 +133,3 @@ fn loop_and_hlt() -> ! {
         unsafe { asm!("hlt") }
     }
 }
-
-const MOUSE_CURSOR_SHAPE: [&str; 24] = [
-    "@              ",
-    "@@             ",
-    "@.@            ",
-    "@..@           ",
-    "@...@          ",
-    "@....@         ",
-    "@.....@        ",
-    "@......@       ",
-    "@.......@      ",
-    "@........@     ",
-    "@.........@    ",
-    "@..........@   ",
-    "@...........@  ",
-    "@............@ ",
-    "@......@@@@@@@@",
-    "@......@       ",
-    "@....@@.@      ",
-    "@...@ @.@      ",
-    "@..@   @.@     ",
-    "@.@    @.@     ",
-    "@@      @.@    ",
-    "@       @.@    ",
-    "         @.@   ",
-    "         @@@   ",
-];
