@@ -72,10 +72,6 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
 
     pci::scan_all_bus().unwrap();
 
-    // for device in pci::devices() {
-    //     printk!("{}\n", device);
-    // }
-
     let xhc_device = pci::find_xhc_device().unwrap_or_else(|| {
         info!("no xHC has been found");
         loop_and_hlt()
