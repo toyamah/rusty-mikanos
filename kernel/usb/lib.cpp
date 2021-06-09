@@ -6,6 +6,7 @@
 char xhc_buf[sizeof(usb::xhci::Controller)];
 usb::xhci::Controller* xhc;
 
+// ref: https://doc.rust-lang.org/nomicon/ffi.html#targeting-callbacks-to-rust-objects
 typedef void (*mouse_observer)(int8_t, int8_t);
 
 extern "C" {

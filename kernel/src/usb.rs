@@ -10,6 +10,7 @@ extern "C" {
     fn UsbXhciController_configurePort(c_impl: *mut XhciControllerImpl);
     fn UsbXhciController_ProcessXhcEvent(c_impl: *mut XhciControllerImpl) -> i32;
 
+    /// ref: https://doc.rust-lang.org/nomicon/ffi.html#targeting-callbacks-to-rust-objects
     fn RegisterMouseObserver(cb: extern "C" fn(displacement_x: i8, displacement_y: i8));
 }
 
