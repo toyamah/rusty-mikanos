@@ -7,6 +7,9 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
 cd "$script_dir"
 source ~/osbook/devenv/buildenv.sh
+
+# this allows rustc find -lc and -lc++ libraries which are defined in x86~~-elf.json file
+# see https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags
 export RUSTFLAGS="-C link-arg=$LDFLAGS"
 cargo build
 
