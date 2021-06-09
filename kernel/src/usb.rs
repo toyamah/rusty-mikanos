@@ -8,6 +8,13 @@ extern "C" {
     fn UsbXhciController_initialize(c_impl: *mut XhciControllerImpl) -> i32;
     fn UsbXhciController_run(c_impl: *mut XhciControllerImpl) -> i32;
     fn UsbXhciController_configurePort(c_impl: *mut XhciControllerImpl);
+    fn UsbXhciController_ProcessXhcEvent(c_impl: *mut XhciControllerImpl) -> i32;
+
+    fn RegisterMouseObserver(cb: extern "C" fn(displacement_x: i8, displacement_y: i8));
+}
+
+pub fn register_mouse_observer(cb: extern "C" fn(displacement_x: i8, displacement_y: i8)) {
+    unsafe { RegisterMouseObserver(cb) };
 }
 
 enum XhciControllerImpl {}
@@ -46,6 +53,15 @@ impl XhciController {
     pub fn configure_port(&self) {
         unsafe { UsbXhciController_configurePort(self.c_impl) };
         trace!("XchiController.configure_port finished");
+    }
+
+    pub fn process_event(&self) -> Result<(), Error> {
+        let error = unsafe { UsbXhciController_ProcessXhcEvent(self.c_impl) };
+        // trace!("XchiController.process_event finished. code = {}", error);
+        match convert_to_code(error) {
+            None => Ok(()),
+            Some(code) => Err(make_error!(code)),
+        }
     }
 }
 

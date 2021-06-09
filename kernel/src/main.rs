@@ -69,13 +69,12 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
 
     printk!("Welcome to MikanOS!\n");
     mouse_cursor().draw();
-    mouse_cursor().move_relative(&Vector2D::new(100, 100));
 
     pci::scan_all_bus().unwrap();
 
-    for device in pci::devices() {
-        printk!("{}\n", device);
-    }
+    // for device in pci::devices() {
+    //     printk!("{}\n", device);
+    // }
 
     let xhc_device = pci::find_xhc_device().unwrap_or_else(|| {
         info!("no xHC has been found");
@@ -88,7 +87,7 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
         loop_and_hlt()
     });
     let xhc_mmio_base = xhc_bar & !(0x0f as u64);
-    debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
+    // debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
     let controller = XhciController::new(xhc_mmio_base);
     if xhc_device.is_intel_device() {
@@ -97,7 +96,10 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     controller.initialize().unwrap();
     controller.run().unwrap();
     controller.configure_port();
-    debug!("ok");
+
+    loop {
+        controller.process_event().unwrap();
+    }
 
     loop_and_hlt()
 }
@@ -125,7 +127,13 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
         ))
     }
 
+    usb::register_mouse_observer(mouse_observer);
+
     logger::init(log::LevelFilter::Trace).unwrap();
+}
+
+extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
+    mouse_cursor().move_relative(&Vector2D::new(displacement_x as i32, displacement_y as i32));
 }
 
 fn loop_and_hlt() -> ! {

@@ -1,9 +1,12 @@
 #include "usb/xhci/xhci.hpp"
+#include "usb/classdriver/mouse.hpp"
 #include "error.hpp"
 #include "logger.hpp"
 
 char xhc_buf[sizeof(usb::xhci::Controller)];
 usb::xhci::Controller* xhc;
+
+typedef void (*mouse_observer)(int8_t, int8_t);
 
 extern "C" {
     typedef struct {
@@ -41,6 +44,16 @@ extern "C" {
                 }
             }
         }
+    }
+
+    int UsbXhciController_ProcessXhcEvent(XhciController* impl) {
+        // TODO: use the passed impl variable
+        auto error = ProcessEvent(*xhc);
+        return error.Cause();
+    }
+
+    void RegisterMouseObserver(mouse_observer mouse_observer) {
+        usb::HIDMouseDriver::default_observer = mouse_observer;
     }
 }
 
