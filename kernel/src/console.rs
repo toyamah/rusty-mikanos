@@ -37,8 +37,8 @@ impl<'a> Console<'a> {
                 self.new_line();
             } else if self.cursor_column < COLUMNS - 1 {
                 self.writer.write_ascii(
-                    (8 * self.cursor_column) as u32,
-                    (16 * self.cursor_row) as u32,
+                    (8 * self.cursor_column) as i32,
+                    (16 * self.cursor_row) as i32,
                     char,
                     &self.fg_color,
                 );
@@ -57,7 +57,7 @@ impl<'a> Console<'a> {
 
         for y in 0..16 * ROWS {
             for x in 0..8 * COLUMNS {
-                self.writer.write(x as u32, y as u32, &self.bg_color);
+                self.writer.write(x as i32, y as i32, &self.bg_color);
             }
         }
 
@@ -65,7 +65,7 @@ impl<'a> Console<'a> {
             let next = row + 1;
             self.buffer.copy_within(next..=next, row);
             self.writer
-                .write_chars(0, (16 * row) as u32, &self.buffer[row], &self.fg_color);
+                .write_chars(0, (16 * row) as i32, &self.buffer[row], &self.fg_color);
         }
 
         self.buffer[ROWS - 1].fill(char::from(0));

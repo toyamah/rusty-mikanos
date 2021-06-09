@@ -1,6 +1,6 @@
-use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{env, fs};
 
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
@@ -8,6 +8,7 @@ fn main() {
 
     build_hankaku(&out_dir, &current_dir);
     build_asm(&out_dir, &current_dir);
+    build_usb(&out_dir, &current_dir);
 
     // It allows Rust to include hankaku and other data in the elf.
     println!("cargo:rustc-link-search=native={}", out_dir);
@@ -43,7 +44,7 @@ fn build_hankaku(out_dir: &str, current_dir: &PathBuf) {
         .unwrap();
 
     println!("cargo:rustc-link-lib=static=hankaku");
-    println!("cargo:rerun-if-changed=hankaku.tx");
+    println!("cargo:rerun-if-changed=hankaku.txt");
 }
 
 fn build_asm(out_dir: &str, current_dir: &PathBuf) {
@@ -65,4 +66,19 @@ fn build_asm(out_dir: &str, current_dir: &PathBuf) {
 
     println!("cargo:rustc-link-lib=static=asmfunc");
     println!("cargo:rerun-if-changed=asmfunc.asm");
+}
+
+fn build_usb(out_dir: &str, current_dir: &PathBuf) {
+    let usb_dir = Path::new(current_dir).join("usb");
+
+    Command::new("make").current_dir(&usb_dir).status().unwrap();
+
+    fs::copy(
+        PathBuf::from(&usb_dir).join("libusb.a"),
+        Path::new(out_dir).join("libusb.a"),
+    )
+    .unwrap();
+
+    println!("cargo:rerun-if-changed=usb");
+    println!("cargo:rustc-link-lib=static=usb");
 }

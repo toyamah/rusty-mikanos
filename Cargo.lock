@@ -144,6 +144,7 @@ dependencies = [
 name = "mikan_os_kernel"
 version = "0.1.0"
 dependencies = [
+ "log",
  "shared",
 ]
 

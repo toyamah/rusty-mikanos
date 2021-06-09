@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #![feature(asm)]
 #![feature(llvm_asm)]
 #![no_std]
@@ -7,13 +8,17 @@ mod console;
 mod error;
 mod font;
 mod graphics;
+mod logger;
+mod mouse;
 mod pci;
+mod usb;
 
 use crate::console::Console;
-use crate::graphics::{
-    PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
-};
+use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
+use crate::mouse::MouseCursor;
+use crate::usb::XhciController;
 use core::panic::PanicInfo;
+use log::{debug, error, info};
 use shared::FrameBufferConfig;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
@@ -28,12 +33,18 @@ fn console() -> &'static mut Console<'static> {
     unsafe { CONSOLE.as_mut().unwrap() }
 }
 
+static mut MOUSE_CURSOR: Option<MouseCursor> = None;
+
+fn mouse_cursor() -> &'static mut MouseCursor<'static> {
+    unsafe { MOUSE_CURSOR.as_mut().unwrap() }
+}
+
 #[no_mangle] // disable name mangling
 pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) -> ! {
     initialize_global_vars(frame_buffer_config);
 
-    let frame_width = frame_buffer_config.horizontal_resolution;
-    let frame_height = frame_buffer_config.vertical_resolution;
+    let frame_width = frame_buffer_config.horizontal_resolution as i32;
+    let frame_height = frame_buffer_config.vertical_resolution as i32;
     let writer = pixel_writer();
     writer.fill_rectangle(
         &Vector2D::new(0, 0),
@@ -57,80 +68,76 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     );
 
     printk!("Welcome to MikanOS!\n");
-    write_cursor();
+    mouse_cursor().draw();
 
-    let result = match pci::scan_all_bus() {
-        Ok(_) => "Success",
-        Err(error) => error.name(),
-    };
-    printk!("ScannAllBus: {}\n", result);
+    pci::scan_all_bus().unwrap();
 
-    for device in pci::devices() {
-        printk!("{}\n", device);
+    // for device in pci::devices() {
+    //     printk!("{}\n", device);
+    // }
+
+    let xhc_device = pci::find_xhc_device().unwrap_or_else(|| {
+        info!("no xHC has been found");
+        loop_and_hlt()
+    });
+    info!("xHC has been found: {}", xhc_device);
+
+    let xhc_bar = pci::read_bar(xhc_device, 0).unwrap_or_else(|e| {
+        info!("cannot read base address#0: {}", e);
+        loop_and_hlt()
+    });
+    let xhc_mmio_base = xhc_bar & !(0x0f as u64);
+    // debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
+
+    let controller = XhciController::new(xhc_mmio_base);
+    if xhc_device.is_intel_device() {
+        xhc_device.switch_ehci_to_xhci();
     }
+    controller.initialize().unwrap();
+    controller.run().unwrap();
+    controller.configure_port();
 
     loop {
-        unsafe { asm!("hlt") }
+        controller.process_event().unwrap();
     }
+
+    loop_and_hlt()
 }
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {
-        unsafe { asm!("hlt") }
-    }
+    printk!("{}", _info); // Use printk to show the entire message
+    loop_and_hlt()
 }
 
 fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     unsafe {
         PIXEL_WRITER = Some(PixelWriter::new(frame_buffer_config));
-    }
 
-    unsafe {
         CONSOLE = Some(Console::new(
             pixel_writer(),
             DESKTOP_FG_COLOR,
             DESKTOP_BG_COLOR,
         ));
+
+        MOUSE_CURSOR = Some(MouseCursor::new(
+            pixel_writer(),
+            &DESKTOP_BG_COLOR,
+            Vector2D::new(300, 200),
+        ))
     }
+
+    usb::register_mouse_observer(mouse_observer);
+
+    logger::init(log::LevelFilter::Trace).unwrap();
 }
 
-fn write_cursor() {
-    let writer = pixel_writer();
-    for (dy, str) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
-        for (dx, char) in str.chars().enumerate() {
-            if char == '@' {
-                writer.write((200 + dx) as u32, (100 + dy) as u32, &COLOR_WHITE);
-            } else if char == '.' {
-                writer.write((200 + dx) as u32, (100 + dy) as u32, &COLOR_BLACK);
-            };
-        }
-    }
+extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
+    mouse_cursor().move_relative(&Vector2D::new(displacement_x as i32, displacement_y as i32));
 }
 
-const MOUSE_CURSOR_SHAPE: [&str; 24] = [
-    "@              ",
-    "@@             ",
-    "@.@            ",
-    "@..@           ",
-    "@...@          ",
-    "@....@         ",
-    "@.....@        ",
-    "@......@       ",
-    "@.......@      ",
-    "@........@     ",
-    "@.........@    ",
-    "@..........@   ",
-    "@...........@  ",
-    "@............@ ",
-    "@......@@@@@@@@",
-    "@......@       ",
-    "@....@@.@      ",
-    "@...@ @.@      ",
-    "@..@   @.@     ",
-    "@.@    @.@     ",
-    "@@      @.@    ",
-    "@       @.@    ",
-    "         @.@   ",
-    "         @@@   ",
-];
+fn loop_and_hlt() -> ! {
+    loop {
+        unsafe { asm!("hlt") }
+    }
+}

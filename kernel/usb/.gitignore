@@ -1,0 +1,10 @@
+*.d
+*.cpp
+*.hpp
+*.c
+*.o
+*.a
+
+!lib.cpp
+!logger.cpp
+!usb
