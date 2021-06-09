@@ -67,7 +67,7 @@ impl PixelColor {
 
 pub struct PixelWriter<'a> {
     config: &'a FrameBufferConfig,
-    write_fn: fn(&Self, x: u32, y: u32, &PixelColor) -> (),
+    write_fn: fn(&Self, x: i32, y: i32, &PixelColor) -> (),
 }
 
 impl<'a> PixelWriter<'a> {
@@ -81,23 +81,23 @@ impl<'a> PixelWriter<'a> {
         }
     }
 
-    pub fn write_string(&self, x: u32, y: u32, str: &str, color: &PixelColor) {
+    pub fn write_string(&self, x: i32, y: i32, str: &str, color: &PixelColor) {
         font::write_string(self, x, y, str, color);
     }
 
-    pub fn write_chars(&self, x: u32, y: u32, chars: &[char], color: &PixelColor) {
+    pub fn write_chars(&self, x: i32, y: i32, chars: &[char], color: &PixelColor) {
         font::write_chars(self, x, y, chars, color);
     }
 
-    pub fn write_ascii(&self, x: u32, y: u32, char: char, color: &PixelColor) {
+    pub fn write_ascii(&self, x: i32, y: i32, char: char, color: &PixelColor) {
         font::write_ascii(self, x, y, char, color);
     }
 
-    pub fn write(&self, x: u32, y: u32, color: &PixelColor) {
+    pub fn write(&self, x: i32, y: i32, color: &PixelColor) {
         (self.write_fn)(self, x, y, color);
     }
 
-    pub fn draw_rectange(&self, pos: &Vector2D<u32>, size: &Vector2D<u32>, c: &PixelColor) {
+    pub fn draw_rectange(&self, pos: &Vector2D<i32>, size: &Vector2D<i32>, c: &PixelColor) {
         for dx in 0..size.x {
             self.write(pos.x + dx, pos.y, c);
             self.write(pos.x + dx, pos.y + size.y - 1, c);
@@ -108,7 +108,7 @@ impl<'a> PixelWriter<'a> {
         }
     }
 
-    pub fn fill_rectangle(&self, pos: &Vector2D<u32>, size: &Vector2D<u32>, c: &PixelColor) {
+    pub fn fill_rectangle(&self, pos: &Vector2D<i32>, size: &Vector2D<i32>, c: &PixelColor) {
         for dy in 0..size.y {
             for dx in 0..size.x {
                 self.write(pos.x + dx, pos.y + dy, c);
@@ -116,7 +116,7 @@ impl<'a> PixelWriter<'a> {
         }
     }
 
-    fn write_rgb(self: &Self, x: u32, y: u32, color: &PixelColor) {
+    fn write_rgb(self: &Self, x: i32, y: i32, color: &PixelColor) {
         let p = self.pixel_at(x, y);
         unsafe {
             *p.offset(0) = color.r;
@@ -125,7 +125,7 @@ impl<'a> PixelWriter<'a> {
         }
     }
 
-    fn write_bgr(self: &Self, x: u32, y: u32, color: &PixelColor) {
+    fn write_bgr(self: &Self, x: i32, y: i32, color: &PixelColor) {
         let p = self.pixel_at(x, y);
         unsafe {
             *p.offset(0) = color.b;
@@ -134,8 +134,8 @@ impl<'a> PixelWriter<'a> {
         }
     }
 
-    fn pixel_at(&self, x: u32, y: u32) -> *mut u8 {
-        let pixel_position = self.config.pixels_per_scan_line * y + x;
+    fn pixel_at(&self, x: i32, y: i32) -> *mut u8 {
+        let pixel_position = self.config.pixels_per_scan_line as i32 * y + x;
         let base = (4 * pixel_position) as isize;
         unsafe { self.config.frame_buffer.offset(base) }
     }

@@ -66,8 +66,8 @@ fn erase_mouse_cursor<'a>(
     for (dy, row) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
         for (dx, c) in row.chars().enumerate() {
             if c != ' ' {
-                let x = (position.x + dx as i32) as u32;
-                let y = (position.y + dy as i32) as u32;
+                let x = position.x + dx as i32;
+                let y = position.y + dy as i32;
                 pixel_writer.write(x, y, erase_color);
             }
         }
@@ -79,14 +79,14 @@ fn draw_mouse_cursor<'a>(pixel_writer: &'a PixelWriter, position: &Vector2D<i32>
         for (dx, char) in row.chars().enumerate() {
             if char == '@' {
                 pixel_writer.write(
-                    (position.x + dx as i32) as u32,
-                    (position.y + dy as i32) as u32,
+                    position.x + dx as i32,
+                    position.y + dy as i32,
                     &COLOR_WHITE,
                 );
             } else if char == '.' {
                 pixel_writer.write(
-                    (position.x + dx as i32) as u32,
-                    (position.y + dy as i32) as u32,
+                    position.x + dx as i32,
+                    position.y + dy as i32,
                     &COLOR_BLACK,
                 );
             }

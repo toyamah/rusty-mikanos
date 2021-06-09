@@ -43,8 +43,8 @@ fn mouse_cursor() -> &'static mut MouseCursor<'static> {
 pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) -> ! {
     initialize_global_vars(frame_buffer_config);
 
-    let frame_width = frame_buffer_config.horizontal_resolution;
-    let frame_height = frame_buffer_config.vertical_resolution;
+    let frame_width = frame_buffer_config.horizontal_resolution as i32;
+    let frame_height = frame_buffer_config.vertical_resolution as i32;
     let writer = pixel_writer();
     writer.fill_rectangle(
         &Vector2D::new(0, 0),
@@ -106,7 +106,7 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    error!("{}", _info);
+    printk!("{}", _info); // Use printk to show the entire message
     loop_and_hlt()
 }
 
