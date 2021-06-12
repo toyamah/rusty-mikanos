@@ -1,13 +1,14 @@
 #![allow(dead_code)]
 #![feature(asm)]
-#![feature(llvm_asm)]
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt)]
 
 mod console;
 mod error;
 mod font;
 mod graphics;
+mod interrupt;
 mod logger;
 mod mouse;
 mod pci;
@@ -37,6 +38,12 @@ static mut MOUSE_CURSOR: Option<MouseCursor> = None;
 
 fn mouse_cursor() -> &'static mut MouseCursor<'static> {
     unsafe { MOUSE_CURSOR.as_mut().unwrap() }
+}
+
+static mut XHCI_CONTROLLER: Option<XhciController> = None;
+
+fn xhchi_controller() -> &'static mut XhciController {
+    unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
 }
 
 #[no_mangle] // disable name mangling
@@ -89,16 +96,16 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     let xhc_mmio_base = xhc_bar & !(0x0f as u64);
     // debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
-    let controller = XhciController::new(xhc_mmio_base);
+    unsafe { XHCI_CONTROLLER = Some(XhciController::new(xhc_mmio_base)) };
     if xhc_device.is_intel_device() {
         xhc_device.switch_ehci_to_xhci();
     }
-    controller.initialize().unwrap();
-    controller.run().unwrap();
-    controller.configure_port();
+    xhchi_controller().initialize().unwrap();
+    xhchi_controller().run().unwrap();
+    xhchi_controller().configure_port();
 
     loop {
-        controller.process_event().unwrap();
+        xhchi_controller().process_event().unwrap();
     }
 
     loop_and_hlt()
@@ -134,6 +141,17 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
 
 extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
     mouse_cursor().move_relative(&Vector2D::new(displacement_x as i32, displacement_y as i32));
+}
+
+extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
+    while xhchi_controller().primary_event_ring_has_front() {
+        match xhchi_controller().process_event() {
+            Err(code) => error!("Error while ProcessEvent: {}", code),
+            Ok(_) => {}
+        }
+    }
+
+    interrupt::notify_end_of_interrupt();
 }
 
 fn loop_and_hlt() -> ! {
