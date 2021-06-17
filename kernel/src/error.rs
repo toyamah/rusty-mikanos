@@ -43,6 +43,7 @@ pub enum Code {
     InvalidPhase,
     UnknownXHCISpeedID,
     NoWaiter,
+    NoPCIMSI,
     LastOfCode,
 }
 

@@ -22,6 +22,7 @@ use crate::usb::XhciController;
 use core::panic::PanicInfo;
 use log::{debug, error, info};
 use shared::FrameBufferConfig;
+use crate::interrupt::setup_idt;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -105,9 +106,11 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     xhchi_controller().run().unwrap();
     xhchi_controller().configure_port();
 
-    loop {
-        xhchi_controller().process_event().unwrap();
-    }
+    setup_idt(int_handler_xhci as u64);
+
+    // loop {
+    //     xhchi_controller().process_event().unwrap();
+    // }
 
     loop_and_hlt()
 }
