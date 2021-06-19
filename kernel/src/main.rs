@@ -45,7 +45,7 @@ fn mouse_cursor() -> &'static mut MouseCursor<'static> {
 
 static mut XHCI_CONTROLLER: Option<XhciController> = None;
 
-fn xhchi_controller() -> &'static mut XhciController {
+fn xhci_controller() -> &'static mut XhciController {
     unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
 }
 
@@ -125,7 +125,7 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
         asm!("sti");
     };
 
-    xhchi_controller().configure_port();
+    xhci_controller().configure_port();
 
     loop_and_hlt()
 }
@@ -163,8 +163,8 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
-    while xhchi_controller().primary_event_ring_has_front() {
-        match xhchi_controller().process_event() {
+    while xhci_controller().primary_event_ring_has_front() {
+        match xhci_controller().process_event() {
             Err(code) => error!("Error while ProcessEvent: {}", code),
             Ok(_) => {}
         }
