@@ -16,6 +16,7 @@ mod pci;
 mod usb;
 
 use crate::console::Console;
+use crate::error::Error;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
 use crate::interrupt::setup_idt;
 use crate::mouse::MouseCursor;
@@ -24,6 +25,7 @@ use bit_field::BitField;
 use core::panic::PanicInfo;
 use log::{debug, error, info};
 use shared::FrameBufferConfig;
+use crate::pci::Device;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -94,17 +96,7 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
 
     setup_idt(int_handler_xhci as u64);
 
-    let bsp_local_apic_id_addr = 0xfee00020 as *const u32;
-    let bsp_local_apic_id = unsafe { (*bsp_local_apic_id_addr).get_bits(24..=31) as u8 };
-    pci::configure_msi_fixed_destination(
-        xhc_device,
-        bsp_local_apic_id,
-        pci::MsiTriggerMode::Level,
-        pci::MsiDeliveryMode::Fixed,
-        interrupt::InterruptVectorNumber::XHCI as u8,
-        0,
-    )
-    .unwrap();
+    enable_to_interrupt_for_xhc(xhc_device).unwrap();
 
     let xhc_bar = pci::read_bar(xhc_device, 0).unwrap_or_else(|e| {
         info!("cannot read base address#0: {}", e);
@@ -113,15 +105,15 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     let xhc_mmio_base = xhc_bar & !(0x0f as u64);
     // debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
-    let xhci_controller = XhciController::new(xhc_mmio_base);
+    let controller = XhciController::new(xhc_mmio_base);
     if xhc_device.is_intel_device() {
         xhc_device.switch_ehci_to_xhci();
     }
-    xhci_controller.initialize().unwrap();
-    xhci_controller.run().unwrap();
+    controller.initialize().unwrap();
+    controller.run().unwrap();
 
     unsafe {
-        XHCI_CONTROLLER = Some(xhci_controller);
+        XHCI_CONTROLLER = Some(controller);
         asm!("sti");
     };
 
@@ -177,4 +169,19 @@ fn loop_and_hlt() -> ! {
     loop {
         unsafe { asm!("hlt") }
     }
+}
+
+fn enable_to_interrupt_for_xhc(xhc_device: &Device) -> Result<(), Error> {
+    // bsp is bootstrap processor which is the only core running when the power is turned on.
+    let bsp_local_apic_id_addr = 0xfee00020 as *const u32;
+    let bsp_local_apic_id = unsafe { (*bsp_local_apic_id_addr).get_bits(24..=31) as u8 };
+
+    pci::configure_msi_fixed_destination(
+        xhc_device,
+        bsp_local_apic_id,
+        pci::MsiTriggerMode::Level,
+        pci::MsiDeliveryMode::Fixed,
+        interrupt::InterruptVectorNumber::XHCI as u8,
+        0,
+    )
 }
