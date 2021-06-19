@@ -17,12 +17,13 @@ mod usb;
 
 use crate::console::Console;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
+use crate::interrupt::setup_idt;
 use crate::mouse::MouseCursor;
 use crate::usb::XhciController;
+use bit_field::BitField;
 use core::panic::PanicInfo;
 use log::{debug, error, info};
 use shared::FrameBufferConfig;
-use crate::interrupt::setup_idt;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -91,6 +92,20 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     });
     info!("xHC has been found: {}", xhc_device);
 
+    setup_idt(int_handler_xhci as u64);
+
+    let bsp_local_apic_id_addr = 0xfee00020 as *const u32;
+    let bsp_local_apic_id = unsafe { (*bsp_local_apic_id_addr).get_bits(24..=31) as u8 };
+    pci::configure_msi_fixed_destination(
+        xhc_device,
+        bsp_local_apic_id,
+        pci::MsiTriggerMode::Level,
+        pci::MsiDeliveryMode::Fixed,
+        interrupt::InterruptVectorNumber::XHCI as u8,
+        0,
+    )
+    .unwrap();
+
     let xhc_bar = pci::read_bar(xhc_device, 0).unwrap_or_else(|e| {
         info!("cannot read base address#0: {}", e);
         loop_and_hlt()
@@ -98,19 +113,19 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     let xhc_mmio_base = xhc_bar & !(0x0f as u64);
     // debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
-    unsafe { XHCI_CONTROLLER = Some(XhciController::new(xhc_mmio_base)) };
+    let xhci_controller = XhciController::new(xhc_mmio_base);
     if xhc_device.is_intel_device() {
         xhc_device.switch_ehci_to_xhci();
     }
-    xhchi_controller().initialize().unwrap();
-    xhchi_controller().run().unwrap();
+    xhci_controller.initialize().unwrap();
+    xhci_controller.run().unwrap();
+
+    unsafe {
+        XHCI_CONTROLLER = Some(xhci_controller);
+        asm!("sti");
+    };
+
     xhchi_controller().configure_port();
-
-    setup_idt(int_handler_xhci as u64);
-
-    // loop {
-    //     xhchi_controller().process_event().unwrap();
-    // }
 
     loop_and_hlt()
 }
