@@ -440,6 +440,7 @@ pub fn read_capability_header(dev: &Device, addr: u8) -> CapabilityHeader {
     let header_data = read_conf_reg(dev, addr);
     CapabilityHeader::from(header_data)
 }
+
 pub fn configure_msi(
     dev: &Device,
     msg_addr: u32,
