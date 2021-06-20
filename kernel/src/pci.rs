@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::asm::{io_in_32, io_out_32};
 use crate::error::{Code, Error};
 use crate::make_error;
 use bit_field::BitField;
@@ -158,11 +159,6 @@ impl Display for ClassCode {
     }
 }
 
-extern "C" {
-    fn IoOut32(addr: u16, data: u32);
-    fn IoIn32(addr: u16) -> u32;
-}
-
 /// make a 32-bit unsigned integer for CONFIG_ADDRESS
 ///
 /// ref: https://wiki.osdev.org/PCI#Configuration_Space_Access_Mechanism_.231
@@ -177,17 +173,15 @@ fn make_address(bus: u8, device: u8, function: u8, reg_addr: u8) -> u32 {
 }
 
 fn write_address(address: u32) {
-    unsafe { IoOut32(CONFIG_ADDRESS, address) }
+    io_out_32(CONFIG_ADDRESS, address);
 }
 
 fn write_data(value: u32) {
-    unsafe {
-        IoOut32(CONFIG_DATA, value);
-    }
+    io_out_32(CONFIG_DATA, value);
 }
 
 fn read_data() -> u32 {
-    unsafe { IoIn32(CONFIG_DATA) }
+    io_in_32(CONFIG_DATA)
 }
 
 fn read_vendor_id(bus: u8, device: u8, function: u8) -> u16 {
