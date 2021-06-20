@@ -128,6 +128,21 @@ fn panic(_info: &PanicInfo) -> ! {
     loop_and_hlt()
 }
 
+extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
+    mouse_cursor().move_relative(&Vector2D::new(displacement_x as i32, displacement_y as i32));
+}
+
+extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
+    while xhci_controller().primary_event_ring_has_front() {
+        match xhci_controller().process_event() {
+            Err(code) => error!("Error while ProcessEvent: {}", code),
+            Ok(_) => {}
+        }
+    }
+
+    interrupt::notify_end_of_interrupt();
+}
+
 fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     unsafe {
         PIXEL_WRITER = Some(PixelWriter::new(frame_buffer_config));
@@ -148,21 +163,6 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     usb::register_mouse_observer(mouse_observer);
 
     logger::init(log::LevelFilter::Trace).unwrap();
-}
-
-extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
-    mouse_cursor().move_relative(&Vector2D::new(displacement_x as i32, displacement_y as i32));
-}
-
-extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
-    while xhci_controller().primary_event_ring_has_front() {
-        match xhci_controller().process_event() {
-            Err(code) => error!("Error while ProcessEvent: {}", code),
-            Ok(_) => {}
-        }
-    }
-
-    interrupt::notify_end_of_interrupt();
 }
 
 fn loop_and_hlt() -> ! {
