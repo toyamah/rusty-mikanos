@@ -9,6 +9,7 @@ extern "C" {
     fn UsbXhciController_run(c_impl: *mut XhciControllerImpl) -> i32;
     fn UsbXhciController_configurePort(c_impl: *mut XhciControllerImpl);
     fn UsbXhciController_ProcessXhcEvent(c_impl: *mut XhciControllerImpl) -> i32;
+    fn UsbXhciController_PrimaryEventRing_HasFront(c_impl: *mut XhciControllerImpl) -> bool;
 
     /// ref: https://doc.rust-lang.org/nomicon/ffi.html#targeting-callbacks-to-rust-objects
     fn RegisterMouseObserver(cb: extern "C" fn(displacement_x: i8, displacement_y: i8));
@@ -63,6 +64,10 @@ impl XhciController {
             None => Ok(()),
             Some(code) => Err(make_error!(code)),
         }
+    }
+
+    pub fn primary_event_ring_has_front(&self) -> bool {
+        unsafe { UsbXhciController_PrimaryEventRing_HasFront(self.c_impl) }
     }
 }
 

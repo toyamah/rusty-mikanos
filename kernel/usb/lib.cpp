@@ -53,6 +53,10 @@ extern "C" {
         return error.Cause();
     }
 
+    bool UsbXhciController_PrimaryEventRing_HasFront(XhciController* impl) {
+        return xhc->PrimaryEventRing()->HasFront();
+    }
+
     void RegisterMouseObserver(mouse_observer mouse_observer) {
         usb::HIDMouseDriver::default_observer = mouse_observer;
     }
