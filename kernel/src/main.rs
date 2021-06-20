@@ -54,31 +54,7 @@ fn xhci_controller() -> &'static mut XhciController {
 #[no_mangle] // disable name mangling
 pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) -> ! {
     initialize_global_vars(frame_buffer_config);
-
-    let frame_width = frame_buffer_config.horizontal_resolution as i32;
-    let frame_height = frame_buffer_config.vertical_resolution as i32;
-    let writer = pixel_writer();
-    writer.fill_rectangle(
-        &Vector2D::new(0, 0),
-        &Vector2D::new(frame_width, frame_height),
-        &DESKTOP_BG_COLOR,
-    );
-    writer.fill_rectangle(
-        &Vector2D::new(0, frame_height - 50),
-        &Vector2D::new(frame_width, 50),
-        &PixelColor::new(1, 8, 17),
-    );
-    writer.fill_rectangle(
-        &Vector2D::new(0, frame_height - 50),
-        &Vector2D::new(frame_width / 5, 50),
-        &PixelColor::new(80, 80, 80),
-    );
-    writer.draw_rectange(
-        &Vector2D::new(10, frame_height - 40),
-        &Vector2D::new(30, 30),
-        &PixelColor::new(160, 160, 160),
-    );
-
+    draw_background(frame_buffer_config);
     printk!("Welcome to MikanOS!\n");
     mouse_cursor().draw();
 
@@ -169,6 +145,32 @@ fn loop_and_hlt() -> ! {
     loop {
         unsafe { asm!("hlt") }
     }
+}
+
+fn draw_background(frame_buffer_config: &FrameBufferConfig) {
+    let frame_width = frame_buffer_config.horizontal_resolution as i32;
+    let frame_height = frame_buffer_config.vertical_resolution as i32;
+    let writer = pixel_writer();
+    writer.fill_rectangle(
+        &Vector2D::new(0, 0),
+        &Vector2D::new(frame_width, frame_height),
+        &DESKTOP_BG_COLOR,
+    );
+    writer.fill_rectangle(
+        &Vector2D::new(0, frame_height - 50),
+        &Vector2D::new(frame_width, 50),
+        &PixelColor::new(1, 8, 17),
+    );
+    writer.fill_rectangle(
+        &Vector2D::new(0, frame_height - 50),
+        &Vector2D::new(frame_width / 5, 50),
+        &PixelColor::new(80, 80, 80),
+    );
+    writer.draw_rectange(
+        &Vector2D::new(10, frame_height - 40),
+        &Vector2D::new(30, 30),
+        &PixelColor::new(160, 160, 160),
+    );
 }
 
 fn enable_to_interrupt_for_xhc(xhc_device: &Device) -> Result<(), Error> {
