@@ -78,17 +78,9 @@ fn draw_mouse_cursor<'a>(pixel_writer: &'a PixelWriter, position: &Vector2D<i32>
     for (dy, row) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
         for (dx, char) in row.chars().enumerate() {
             if char == '@' {
-                pixel_writer.write(
-                    position.x + dx as i32,
-                    position.y + dy as i32,
-                    &COLOR_WHITE,
-                );
+                pixel_writer.write(position.x + dx as i32, position.y + dy as i32, &COLOR_WHITE);
             } else if char == '.' {
-                pixel_writer.write(
-                    position.x + dx as i32,
-                    position.y + dy as i32,
-                    &COLOR_BLACK,
-                );
+                pixel_writer.write(position.x + dx as i32, position.y + dy as i32, &COLOR_BLACK);
             }
         }
     }

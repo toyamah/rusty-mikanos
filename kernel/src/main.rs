@@ -54,31 +54,7 @@ fn xhci_controller() -> &'static mut XhciController {
 #[no_mangle] // disable name mangling
 pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) -> ! {
     initialize_global_vars(frame_buffer_config);
-
-    let frame_width = frame_buffer_config.horizontal_resolution as i32;
-    let frame_height = frame_buffer_config.vertical_resolution as i32;
-    let writer = pixel_writer();
-    writer.fill_rectangle(
-        &Vector2D::new(0, 0),
-        &Vector2D::new(frame_width, frame_height),
-        &DESKTOP_BG_COLOR,
-    );
-    writer.fill_rectangle(
-        &Vector2D::new(0, frame_height - 50),
-        &Vector2D::new(frame_width, 50),
-        &PixelColor::new(1, 8, 17),
-    );
-    writer.fill_rectangle(
-        &Vector2D::new(0, frame_height - 50),
-        &Vector2D::new(frame_width / 5, 50),
-        &PixelColor::new(80, 80, 80),
-    );
-    writer.draw_rectange(
-        &Vector2D::new(10, frame_height - 40),
-        &Vector2D::new(30, 30),
-        &PixelColor::new(160, 160, 160),
-    );
-
+    draw_background(frame_buffer_config);
     printk!("Welcome to MikanOS!\n");
     mouse_cursor().draw();
 
@@ -128,6 +104,21 @@ fn panic(_info: &PanicInfo) -> ! {
     loop_and_hlt()
 }
 
+extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
+    mouse_cursor().move_relative(&Vector2D::new(displacement_x as i32, displacement_y as i32));
+}
+
+extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
+    while xhci_controller().primary_event_ring_has_front() {
+        match xhci_controller().process_event() {
+            Err(code) => error!("Error while ProcessEvent: {}", code),
+            Ok(_) => {}
+        }
+    }
+
+    interrupt::notify_end_of_interrupt();
+}
+
 fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     unsafe {
         PIXEL_WRITER = Some(PixelWriter::new(frame_buffer_config));
@@ -150,25 +141,36 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     logger::init(log::LevelFilter::Trace).unwrap();
 }
 
-extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
-    mouse_cursor().move_relative(&Vector2D::new(displacement_x as i32, displacement_y as i32));
-}
-
-extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
-    while xhci_controller().primary_event_ring_has_front() {
-        match xhci_controller().process_event() {
-            Err(code) => error!("Error while ProcessEvent: {}", code),
-            Ok(_) => {}
-        }
-    }
-
-    interrupt::notify_end_of_interrupt();
-}
-
 fn loop_and_hlt() -> ! {
     loop {
         unsafe { asm!("hlt") }
     }
+}
+
+fn draw_background(frame_buffer_config: &FrameBufferConfig) {
+    let frame_width = frame_buffer_config.horizontal_resolution as i32;
+    let frame_height = frame_buffer_config.vertical_resolution as i32;
+    let writer = pixel_writer();
+    writer.fill_rectangle(
+        &Vector2D::new(0, 0),
+        &Vector2D::new(frame_width, frame_height),
+        &DESKTOP_BG_COLOR,
+    );
+    writer.fill_rectangle(
+        &Vector2D::new(0, frame_height - 50),
+        &Vector2D::new(frame_width, 50),
+        &PixelColor::new(1, 8, 17),
+    );
+    writer.fill_rectangle(
+        &Vector2D::new(0, frame_height - 50),
+        &Vector2D::new(frame_width / 5, 50),
+        &PixelColor::new(80, 80, 80),
+    );
+    writer.draw_rectange(
+        &Vector2D::new(10, frame_height - 40),
+        &Vector2D::new(30, 30),
+        &PixelColor::new(160, 160, 160),
+    );
 }
 
 fn enable_to_interrupt_for_xhc(xhc_device: &Device) -> Result<(), Error> {
