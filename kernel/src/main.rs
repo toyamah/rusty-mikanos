@@ -20,12 +20,13 @@ use crate::error::Error;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
 use crate::interrupt::setup_idt;
 use crate::mouse::MouseCursor;
+use crate::pci::Device;
 use crate::usb::XhciController;
 use bit_field::BitField;
+use core::arch::asm;
 use core::panic::PanicInfo;
 use log::{debug, error, info};
 use shared::FrameBufferConfig;
-use crate::pci::Device;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
