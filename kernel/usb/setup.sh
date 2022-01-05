@@ -3,10 +3,12 @@
 set -eu
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
-cd "$script_dir"/../../official/kernel
-files=$(\find . -maxdepth 3 -name "*.cpp" -o -name "*.hpp" -o -name "*.c"  | sed -e 's/\.\///g')
+cd $script_dir
 mkdir -p usb/classdriver
 mkdir -p usb/xhci
+
+cd "$script_dir"/../../official/kernel
+files=$(\find . -maxdepth 3 -name "*.cpp" -o -name "*.hpp" -o -name "*.c"  | sed -e 's/\.\///g')
 
 parse_params() {
   clear=0
