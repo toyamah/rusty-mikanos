@@ -11,12 +11,15 @@ pub struct InterruptFrame {
 }
 
 pub fn notify_end_of_interrupt() {
-    let end_of_interrupt = 0xfee000b0 as *mut u32;
+    //  Writing to this register means the CPU can know an interrupt routine has been completed.
+    let end_of_interrupt_register = 0xfee000b0 as *mut u32;
     unsafe {
-        end_of_interrupt.write_volatile(0);
+        // Use write_volatile to ignore compiler optimization.
+        end_of_interrupt_register.write_volatile(0);
     }
 }
 
+// IDT can have 256(0-255) descriptors
 static mut IDT: [InterruptDescriptor; 256] = [InterruptDescriptor {
     offset_low: 0,
     segment_selector: 0,
@@ -26,6 +29,8 @@ static mut IDT: [InterruptDescriptor; 256] = [InterruptDescriptor {
     reserved: 0,
 }; 256];
 
+/// idt stands for Interrupt Descriptor Table which maps interruption vector numbers to interrupt handlers.
+/// https://en.wikipedia.org/wiki/Interrupt_descriptor_table
 pub fn idt() -> &'static mut [InterruptDescriptor; 256] {
     unsafe { &mut IDT }
 }
