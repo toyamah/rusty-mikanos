@@ -14,6 +14,7 @@ mod logger;
 mod mouse;
 mod pci;
 mod usb;
+mod queue;
 
 use crate::console::Console;
 use crate::error::Error;
@@ -27,6 +28,7 @@ use core::arch::asm;
 use core::panic::PanicInfo;
 use log::{debug, error, info};
 use shared::FrameBufferConfig;
+use crate::queue::ArrayQueue;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -50,6 +52,23 @@ static mut XHCI_CONTROLLER: Option<XhciController> = None;
 
 fn xhci_controller() -> &'static mut XhciController {
     unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Message {
+    m_type: MessageType,
+}
+
+#[derive(Copy, Clone, Debug)]
+enum MessageType {
+    KInterruptXhci
+}
+
+static mut MESSAGES: [Message; 32] = [Message { m_type: MessageType::KInterruptXhci }; 32];
+static mut MAIN_QUEUE: Option<ArrayQueue<Message, 32>> = None;
+
+fn main_queue() -> &'static mut ArrayQueue<'static, Message, 32> {
+    unsafe { MAIN_QUEUE.as_mut().unwrap() }
 }
 
 #[no_mangle] // disable name mangling
@@ -134,7 +153,9 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
             pixel_writer(),
             &DESKTOP_BG_COLOR,
             Vector2D::new(300, 200),
-        ))
+        ));
+
+        MAIN_QUEUE = Some(ArrayQueue::new(&mut MESSAGES));
     }
 
     usb::register_mouse_observer(mouse_observer);
