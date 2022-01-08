@@ -14,6 +14,7 @@ mod logger;
 mod mouse;
 mod pci;
 mod usb;
+mod queue;
 
 use crate::console::Console;
 use crate::error::Error;
@@ -27,6 +28,7 @@ use core::arch::asm;
 use core::panic::PanicInfo;
 use log::{debug, error, info};
 use shared::FrameBufferConfig;
+use crate::queue::ArrayQueue;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -50,6 +52,23 @@ static mut XHCI_CONTROLLER: Option<XhciController> = None;
 
 fn xhci_controller() -> &'static mut XhciController {
     unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Message {
+    m_type: MessageType,
+}
+
+#[derive(Copy, Clone, Debug)]
+enum MessageType {
+    KInterruptXhci
+}
+
+static mut MESSAGES: [Message; 32] = [Message { m_type: MessageType::KInterruptXhci }; 32];
+static mut MAIN_QUEUE: Option<ArrayQueue<Message, 32>> = None;
+
+fn main_queue() -> &'static mut ArrayQueue<'static, Message, 32> {
+    unsafe { MAIN_QUEUE.as_mut().unwrap() }
 }
 
 #[no_mangle] // disable name mangling
@@ -96,7 +115,31 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
 
     xhci_controller().configure_port();
 
-    loop_and_hlt()
+    loop {
+        // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
+        unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
+        if main_queue().count() == 0 {
+            // next interruption event makes CPU get back from power save mode.
+            unsafe { asm!("sti\n\thlt"); }; // execute sti and then hlt
+            continue;
+        }
+
+        let result = main_queue().pop();
+        unsafe { asm!("sti"); }; // set CPU Interrupt Flag 1
+        match result {
+            Ok(Message { m_type: MessageType::KInterruptXhci }) => {
+                while xhci_controller().primary_event_ring_has_front() {
+                    match xhci_controller().process_event() {
+                        Err(code) => error!("Error while ProcessEvent: {}", code),
+                        Ok(_) => {}
+                    }
+                }
+            }
+            Err(error) => {
+                error!("failed to pop a message from MainQueue. {}", error)
+            }
+        }
+    }
 }
 
 #[panic_handler]
@@ -110,12 +153,7 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
-    while xhci_controller().primary_event_ring_has_front() {
-        match xhci_controller().process_event() {
-            Err(code) => error!("Error while ProcessEvent: {}", code),
-            Ok(_) => {}
-        }
-    }
+    main_queue().push(Message { m_type: MessageType::KInterruptXhci });
 
     interrupt::notify_end_of_interrupt();
 }
@@ -134,7 +172,9 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
             pixel_writer(),
             &DESKTOP_BG_COLOR,
             Vector2D::new(300, 200),
-        ))
+        ));
+
+        MAIN_QUEUE = Some(ArrayQueue::new(&mut MESSAGES));
     }
 
     usb::register_mouse_observer(mouse_observer);
