@@ -116,14 +116,16 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
     xhci_controller().configure_port();
 
     loop {
-        unsafe { asm!("cli") };
+        // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
+        unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
         if main_queue().count() == 0 {
-            unsafe { asm!("sti\n\thlt"); };
+            // next interruption event makes CPU get back from power save mode.
+            unsafe { asm!("sti\n\thlt"); }; // execute sti and then hlt
             continue;
         }
 
         let result = main_queue().pop();
-        unsafe { asm!("sti"); };
+        unsafe { asm!("sti"); }; // set CPU Interrupt Flag 1
         match result {
             Ok(Message { m_type: MessageType::KInterruptXhci }) => {
                 while xhci_controller().primary_event_ring_has_front() {
