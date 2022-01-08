@@ -115,7 +115,29 @@ pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) ->
 
     xhci_controller().configure_port();
 
-    loop_and_hlt()
+    loop {
+        unsafe { asm!("cli") };
+        if main_queue().count() == 0 {
+            unsafe { asm!("sti\n\thlt"); };
+            continue;
+        }
+
+        let result = main_queue().pop();
+        unsafe { asm!("sti"); };
+        match result {
+            Ok(Message { m_type: MessageType::KInterruptXhci }) => {
+                while xhci_controller().primary_event_ring_has_front() {
+                    match xhci_controller().process_event() {
+                        Err(code) => error!("Error while ProcessEvent: {}", code),
+                        Ok(_) => {}
+                    }
+                }
+            }
+            Err(error) => {
+                error!("failed to pop a message from MainQueue. {}", error)
+            }
+        }
+    }
 }
 
 #[panic_handler]
@@ -129,12 +151,7 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
-    while xhci_controller().primary_event_ring_has_front() {
-        match xhci_controller().process_event() {
-            Err(code) => error!("Error while ProcessEvent: {}", code),
-            Ok(_) => {}
-        }
-    }
+    main_queue().push(Message { m_type: MessageType::KInterruptXhci });
 
     interrupt::notify_end_of_interrupt();
 }
