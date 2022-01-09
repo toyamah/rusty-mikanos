@@ -36,8 +36,8 @@ impl<T> Vector2D<T> {
 }
 
 impl<T> Add for Vector2D<T>
-    where
-        T: Add<Output=T> + Copy + Clone,
+where
+    T: Add<Output = T> + Copy + Clone,
 {
     type Output = Vector2D<T>;
 
@@ -50,8 +50,8 @@ impl<T> Add for Vector2D<T>
 }
 
 impl<T> AddAssign for Vector2D<T>
-    where
-        T: AddAssign + Copy + Clone,
+where
+    T: AddAssign + Copy + Clone,
 {
     fn add_assign(&mut self, rhs: Self) {
         self.x += rhs.x;
