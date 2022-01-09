@@ -27,7 +27,7 @@ use bit_field::BitField;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use log::{debug, error, info};
-use shared::FrameBufferConfig;
+use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap, MemoryType};
 use crate::queue::ArrayQueue;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
@@ -72,11 +72,41 @@ fn main_queue() -> &'static mut ArrayQueue<'static, Message, 32> {
 }
 
 #[no_mangle] // disable name mangling
-pub extern "C" fn KernelMain(frame_buffer_config: &'static FrameBufferConfig) -> ! {
+pub extern "C" fn KernelMain(
+    frame_buffer_config: &'static FrameBufferConfig,
+    memory_map: &'static MemoryMap,
+) -> ! {
     initialize_global_vars(frame_buffer_config);
     draw_background(frame_buffer_config);
     printk!("Welcome to MikanOS!\n");
     mouse_cursor().draw();
+
+    info!("memory_map: {:p}", memory_map);
+    let available_memory_types = [
+        MemoryType::KEfiBootServicesCode,
+        MemoryType::KEfiBootServicesData,
+        MemoryType::KEfiConventionalMemory,
+    ];
+    let buffer = memory_map.buffer as usize;
+    let mut iter = buffer;
+    while iter < buffer + memory_map.map_size as usize {
+        let desc = iter as *const MemoryDescriptor;
+        for i in 0..available_memory_types.len() {
+            unsafe {
+                if (*desc).type_ == available_memory_types[i] {
+                    info!(
+                        "type = {}, phys = {:x} - {:x}, pages = {}, attr = {:#08x}\n",
+                        (*desc).type_.to_i32(),
+                        (*desc).physical_start,
+                        (*desc).physical_start + ((*desc).number_of_pages as usize) * 4096 - 1,
+                        (*desc).number_of_pages,
+                        (*desc).attribute
+                    );
+                }
+            };
+        }
+        iter += memory_map.descriptor_size as usize;
+    }
 
     pci::scan_all_bus().unwrap();
 

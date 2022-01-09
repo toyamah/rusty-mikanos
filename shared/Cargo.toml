@@ -8,4 +8,4 @@ edition = "2018"
 [dependencies]
 
 [build-dependencies]
-cbindgen = "0.19"
+cbindgen = "0.20"
