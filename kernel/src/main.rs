@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-#![feature(asm)]
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
@@ -27,7 +26,7 @@ use crate::usb::XhciController;
 use bit_field::BitField;
 use core::arch::asm;
 use core::panic::PanicInfo;
-use log::{debug, error, info};
+use log::{error, info};
 use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap, MemoryType};
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
@@ -191,9 +190,11 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
-    main_queue().push(Message {
-        m_type: MessageType::KInterruptXhci,
-    });
+    main_queue()
+        .push(Message {
+            m_type: MessageType::KInterruptXhci,
+        })
+        .unwrap_or_else(|e| error!("failed to push a Message to main_queue {}", e));
 
     interrupt::notify_end_of_interrupt();
 }
