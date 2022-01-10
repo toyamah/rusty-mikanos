@@ -14,8 +14,11 @@ mod memory_map;
 mod mouse;
 mod pci;
 mod queue;
+mod segment;
 mod usb;
+mod x86_descriptor;
 
+use crate::asm::{set_csss, set_ds_all};
 use crate::console::Console;
 use crate::error::Error;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
@@ -23,6 +26,7 @@ use crate::interrupt::setup_idt;
 use crate::mouse::MouseCursor;
 use crate::pci::Device;
 use crate::queue::ArrayQueue;
+use crate::segment::set_up_segment;
 use crate::usb::XhciController;
 use bit_field::BitField;
 use core::arch::asm;
@@ -97,6 +101,13 @@ pub extern "C" fn KernelMainNewStack(
     printk!("Welcome to MikanOS!\n");
     mouse_cursor().draw();
 
+    let kernel_cs: u16 = 1 << 3;
+    let kernel_ss: u16 = 2 << 3;
+    set_up_segment();
+    set_ds_all(0);
+    set_csss(kernel_cs, kernel_ss);
+    //TODO: setup_identity_page_table
+
     info!("memory_map: {:p}", &memory_map);
     let available_memory_types = [
         MemoryType::KEfiBootServicesCode,
@@ -136,7 +147,7 @@ pub extern "C" fn KernelMainNewStack(
     });
     info!("xHC has been found: {}", xhc_device);
 
-    setup_idt(int_handler_xhci as u64);
+    setup_idt(int_handler_xhci as u64, kernel_cs);
 
     enable_to_interrupt_for_xhc(xhc_device).unwrap();
 
