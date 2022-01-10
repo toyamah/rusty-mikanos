@@ -18,7 +18,11 @@ impl Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "code: {}, file = {}, line = {}", self.code, self.file, self.line)
+        write!(
+            f,
+            "code: {}, file = {}, line = {}",
+            self.code, self.file, self.line
+        )
     }
 }
 

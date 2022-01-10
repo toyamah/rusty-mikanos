@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-#![feature(asm)]
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
@@ -13,8 +12,8 @@ mod interrupt;
 mod logger;
 mod mouse;
 mod pci;
-mod usb;
 mod queue;
+mod usb;
 
 use crate::console::Console;
 use crate::error::Error;
@@ -22,13 +21,13 @@ use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKT
 use crate::interrupt::setup_idt;
 use crate::mouse::MouseCursor;
 use crate::pci::Device;
+use crate::queue::ArrayQueue;
 use crate::usb::XhciController;
 use bit_field::BitField;
 use core::arch::asm;
 use core::panic::PanicInfo;
-use log::{debug, error, info};
+use log::{error, info};
 use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap, MemoryType};
-use crate::queue::ArrayQueue;
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -61,10 +60,12 @@ struct Message {
 
 #[derive(Copy, Clone, Debug)]
 enum MessageType {
-    KInterruptXhci
+    KInterruptXhci,
 }
 
-static mut MESSAGES: [Message; 32] = [Message { m_type: MessageType::KInterruptXhci }; 32];
+static mut MESSAGES: [Message; 32] = [Message {
+    m_type: MessageType::KInterruptXhci,
+}; 32];
 static mut MAIN_QUEUE: Option<ArrayQueue<Message, 32>> = None;
 
 fn main_queue() -> &'static mut ArrayQueue<'static, Message, 32> {
@@ -150,14 +151,20 @@ pub extern "C" fn KernelMain(
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
         if main_queue().count() == 0 {
             // next interruption event makes CPU get back from power save mode.
-            unsafe { asm!("sti\n\thlt"); }; // execute sti and then hlt
+            unsafe {
+                asm!("sti\n\thlt"); // execute sti and then hlt
+            };
             continue;
         }
 
         let result = main_queue().pop();
-        unsafe { asm!("sti"); }; // set CPU Interrupt Flag 1
+        unsafe {
+            asm!("sti"); // set CPU Interrupt Flag 1
+        };
         match result {
-            Ok(Message { m_type: MessageType::KInterruptXhci }) => {
+            Ok(Message {
+                m_type: MessageType::KInterruptXhci,
+            }) => {
                 while xhci_controller().primary_event_ring_has_front() {
                     match xhci_controller().process_event() {
                         Err(code) => error!("Error while ProcessEvent: {}", code),
@@ -183,7 +190,11 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
-    main_queue().push(Message { m_type: MessageType::KInterruptXhci });
+    main_queue()
+        .push(Message {
+            m_type: MessageType::KInterruptXhci,
+        })
+        .unwrap_or_else(|e| error!("failed to push a Message to main_queue {}", e));
 
     interrupt::notify_end_of_interrupt();
 }
