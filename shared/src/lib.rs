@@ -91,6 +91,27 @@ impl MemoryType {
             MemoryType::KEfiMaxMemoryType => 15,
         };
     }
+
+    pub fn is_available(&self) -> bool {
+        return match self {
+            MemoryType::KEfiBootServicesCode
+            | MemoryType::KEfiBootServicesData
+            | MemoryType::KEfiConventionalMemory => true,
+            MemoryType::KEfiReservedMemoryType
+            | MemoryType::KEfiLoaderCode
+            | MemoryType::KEfiLoaderData
+            | MemoryType::KEfiRuntimeServicesCode
+            | MemoryType::KEfiRuntimeServicesData
+            | MemoryType::KEfiUnusableMemory
+            | MemoryType::KEfiACPIReclaimMemory
+            | MemoryType::KEfiACPIMemoryNVS
+            | MemoryType::KEfiMemoryMappedIO
+            | MemoryType::KEfiMemoryMappedIOPortSpace
+            | MemoryType::KEfiPalCode
+            | MemoryType::KEfiPersistentMemory
+            | MemoryType::KEfiMaxMemoryType => false,
+        };
+    }
 }
 
 // doesn't generate code without this method...

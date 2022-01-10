@@ -10,6 +10,7 @@ mod font;
 mod graphics;
 mod interrupt;
 mod logger;
+mod memory_map;
 mod mouse;
 mod pci;
 mod queue;
