@@ -38,3 +38,16 @@ LoadIDT:
     pop rbp
     ret
 ; #@@range_end(load_idt_function)
+
+; #@@range_begin(set_main_stack)
+extern KERNEL_MAIN_STACK
+extern KernelMainNewStack
+
+global KernelMain
+KernelMain:
+    mov rsp, KERNEL_MAIN_STACK + 1024 * 1024
+    call KernelMainNewStack
+.fin:
+    hlt
+    jmp .fin
+; #@@range_end(set_main_stack)

@@ -54,6 +54,12 @@ fn xhci_controller() -> &'static mut XhciController {
     unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
 }
 
+static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
+
+fn frame_buffer_config() -> &'static mut FrameBufferConfig {
+    unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
+}
+
 #[derive(Copy, Clone, Debug)]
 struct Message {
     m_type: MessageType,
@@ -73,17 +79,25 @@ fn main_queue() -> &'static mut ArrayQueue<'static, Message, 32> {
     unsafe { MAIN_QUEUE.as_mut().unwrap() }
 }
 
+#[repr(align(16))]
+pub struct KernelMainStack([u8; 1024 * 1024]);
+
+#[no_mangle]
+static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]);
+
 #[no_mangle] // disable name mangling
-pub extern "C" fn KernelMain(
-    frame_buffer_config: &'static FrameBufferConfig,
+pub extern "C" fn KernelMainNewStack(
+    frame_buffer_config_: &'static FrameBufferConfig,
     memory_map: &'static MemoryMap,
 ) -> ! {
-    initialize_global_vars(frame_buffer_config);
-    draw_background(frame_buffer_config);
+    unsafe { FRAME_BUFFER_CONFIG = Some(*frame_buffer_config_) }
+    let memory_map = *memory_map;
+    initialize_global_vars(frame_buffer_config());
+    draw_background(frame_buffer_config());
     printk!("Welcome to MikanOS!\n");
     mouse_cursor().draw();
 
-    info!("memory_map: {:p}", memory_map);
+    info!("memory_map: {:p}", &memory_map);
     let available_memory_types = [
         MemoryType::KEfiBootServicesCode,
         MemoryType::KEfiBootServicesData,
@@ -96,7 +110,7 @@ pub extern "C" fn KernelMain(
         for i in 0..available_memory_types.len() {
             unsafe {
                 if (*desc).type_ == available_memory_types[i] {
-                    info!(
+                    printk!(
                         "type = {}, phys = {:x} - {:x}, pages = {}, attr = {:#08x}\n",
                         (*desc).type_.to_i32(),
                         (*desc).physical_start,
