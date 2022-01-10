@@ -10,7 +10,7 @@ build_and_run() {
   # this allows rustc find -lc and -lc++ libraries which are defined in x86~~-elf.json file
   # see https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags
   export RUSTFLAGS="-C link-arg=$LDFLAGS"
-  cargo build
+  cargo build --release # build in release mode to optimize code
 
   cd ~/edk2
   unlink MikanLoaderPkg
