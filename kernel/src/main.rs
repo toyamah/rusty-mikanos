@@ -12,6 +12,7 @@ mod interrupt;
 mod logger;
 mod memory_map;
 mod mouse;
+mod paging;
 mod pci;
 mod queue;
 mod segment;
@@ -24,6 +25,7 @@ use crate::error::Error;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
 use crate::interrupt::setup_idt;
 use crate::mouse::MouseCursor;
+use crate::paging::setup_identity_page_table;
 use crate::pci::Device;
 use crate::queue::ArrayQueue;
 use crate::segment::set_up_segment;
@@ -106,7 +108,7 @@ pub extern "C" fn KernelMainNewStack(
     set_up_segment();
     set_ds_all(0);
     set_csss(kernel_cs, kernel_ss);
-    //TODO: setup_identity_page_table
+    setup_identity_page_table();
 
     info!("memory_map: {:p}", &memory_map);
     let available_memory_types = [

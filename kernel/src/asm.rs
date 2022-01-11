@@ -6,6 +6,7 @@ extern "C" {
     fn LoadGDT(limit: u16, offset: u64);
     fn SetDSAll(value: u16);
     fn SetCSSS(cs: u16, ss: u16);
+    fn SetCR3(value: u64);
 }
 
 pub fn io_out_32(addr: u16, data: u32) {
@@ -34,4 +35,8 @@ pub fn set_ds_all(value: u16) {
 
 pub fn set_csss(cs: u16, ss: u16) {
     unsafe { SetCSSS(cs, ss) }
+}
+
+pub fn set_cr3(value: u64) {
+    unsafe { SetCR3(value) }
 }

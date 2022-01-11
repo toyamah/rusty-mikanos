@@ -79,6 +79,17 @@ SetDSAll:
     ret
 ; #@@range_end(set_dsall)
 
+; #@@range_begin(set_cr3)
+global SetCR3  ; void SetCR3(uint64_t value);
+SetCR3:
+    mov cr3, rdi
+    ret
+; #@@range_end(set_cr3)
+
+; #@@range_begin(set_main_stack)
+extern kernel_main_stack
+extern KernelMainNewStack
+
 ; #@@range_begin(set_main_stack)
 extern KERNEL_MAIN_STACK
 extern KernelMainNewStack
