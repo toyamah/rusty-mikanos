@@ -10,6 +10,7 @@ mod font;
 mod graphics;
 mod interrupt;
 mod logger;
+mod memory_manager;
 mod memory_map;
 mod mouse;
 mod paging;
@@ -24,6 +25,8 @@ use crate::console::Console;
 use crate::error::Error;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
 use crate::interrupt::setup_idt;
+use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
+use crate::memory_map::UEFI_PAGE_SIZE;
 use crate::mouse::MouseCursor;
 use crate::paging::setup_identity_page_table;
 use crate::pci::Device;
@@ -32,9 +35,10 @@ use crate::segment::set_up_segment;
 use crate::usb::XhciController;
 use bit_field::BitField;
 use core::arch::asm;
+use core::borrow::BorrowMut;
 use core::panic::PanicInfo;
 use log::{error, info};
-use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap, MemoryType};
+use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap};
 
 static mut PIXEL_WRITER: Option<PixelWriter> = None;
 
@@ -64,6 +68,12 @@ static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
 
 fn frame_buffer_config() -> &'static mut FrameBufferConfig {
     unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
+}
+
+static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
+
+fn memory_manager() -> &'static mut BitmapMemoryManager {
+    unsafe { MEMORY_MANAGER.borrow_mut() }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -110,32 +120,36 @@ pub extern "C" fn KernelMainNewStack(
     set_csss(kernel_cs, kernel_ss);
     setup_identity_page_table();
 
-    info!("memory_map: {:p}", &memory_map);
-    let available_memory_types = [
-        MemoryType::KEfiBootServicesCode,
-        MemoryType::KEfiBootServicesData,
-        MemoryType::KEfiConventionalMemory,
-    ];
     let buffer = memory_map.buffer as usize;
+    let bytes_per_frame_size = BYTES_PER_FRAME as usize;
+    let mut available_end = 0;
     let mut iter = buffer;
     while iter < buffer + memory_map.map_size as usize {
         let desc = iter as *const MemoryDescriptor;
-        for i in 0..available_memory_types.len() {
-            unsafe {
-                if (*desc).type_ == available_memory_types[i] {
-                    printk!(
-                        "type = {}, phys = {:x} - {:x}, pages = {}, attr = {:#08x}\n",
-                        (*desc).type_.to_i32(),
-                        (*desc).physical_start,
-                        (*desc).physical_start + ((*desc).number_of_pages as usize) * 4096 - 1,
-                        (*desc).number_of_pages,
-                        (*desc).attribute
-                    );
-                }
-            };
+        unsafe {
+            if available_end < (*desc).physical_start {
+                memory_manager().mark_allocated(
+                    FrameID::new(available_end / bytes_per_frame_size),
+                    ((*desc).physical_start - available_end) / bytes_per_frame_size,
+                );
+            }
+            let physical_end =
+                (*desc).physical_start + ((*desc).number_of_pages * UEFI_PAGE_SIZE as u64) as usize;
+            if (*desc).type_.is_available() {
+                available_end = physical_end;
+            } else {
+                memory_manager().mark_allocated(
+                    FrameID::new((*desc).physical_start / bytes_per_frame_size),
+                    ((*desc).number_of_pages * UEFI_PAGE_SIZE as u64 / BYTES_PER_FRAME) as usize,
+                )
+            }
         }
         iter += memory_map.descriptor_size as usize;
     }
+    memory_manager().set_memory_range(
+        FrameID::new(1),
+        FrameID::new(available_end / bytes_per_frame_size),
+    );
 
     pci::scan_all_bus().unwrap();
 
