@@ -136,13 +136,14 @@ pub extern "C" fn KernelMainNewStack(
         }
 
         let type_ = unsafe { &(*desc).type_ };
-        let physical_end = physical_start + (number_of_pages * UEFI_PAGE_SIZE as u64) as usize;
+        let byte_count = (number_of_pages * UEFI_PAGE_SIZE as u64) as usize;
+        let physical_end = physical_start + byte_count;
         if type_.is_available() {
             available_end = physical_end;
         } else {
             memory_manager().mark_allocated(
                 FrameID::new(physical_start / bytes_per_frame_size),
-                (number_of_pages * UEFI_PAGE_SIZE as u64 / BYTES_PER_FRAME) as usize,
+                byte_count / BYTES_PER_FRAME as usize,
             )
         }
         iter += memory_map.descriptor_size as usize;
