@@ -126,23 +126,24 @@ pub extern "C" fn KernelMainNewStack(
     let mut iter = buffer;
     while iter < buffer + memory_map.map_size as usize {
         let desc = iter as *const MemoryDescriptor;
-        unsafe {
-            if available_end < (*desc).physical_start {
-                memory_manager().mark_allocated(
-                    FrameID::new(available_end / bytes_per_frame_size),
-                    ((*desc).physical_start - available_end) / bytes_per_frame_size,
-                );
-            }
-            let physical_end =
-                (*desc).physical_start + ((*desc).number_of_pages * UEFI_PAGE_SIZE as u64) as usize;
-            if (*desc).type_.is_available() {
-                available_end = physical_end;
-            } else {
-                memory_manager().mark_allocated(
-                    FrameID::new((*desc).physical_start / bytes_per_frame_size),
-                    ((*desc).number_of_pages * UEFI_PAGE_SIZE as u64 / BYTES_PER_FRAME) as usize,
-                )
-            }
+        let physical_start = unsafe { (*desc).physical_start };
+        let number_of_pages = unsafe { (*desc).number_of_pages };
+        if available_end < physical_start {
+            memory_manager().mark_allocated(
+                FrameID::new(available_end / bytes_per_frame_size),
+                (physical_start - available_end) / bytes_per_frame_size,
+            );
+        }
+
+        let type_ = unsafe { &(*desc).type_ };
+        let physical_end = physical_start + (number_of_pages * UEFI_PAGE_SIZE as u64) as usize;
+        if type_.is_available() {
+            available_end = physical_end;
+        } else {
+            memory_manager().mark_allocated(
+                FrameID::new(physical_start / bytes_per_frame_size),
+                (number_of_pages * UEFI_PAGE_SIZE as u64 / BYTES_PER_FRAME) as usize,
+            )
         }
         iter += memory_map.descriptor_size as usize;
     }
