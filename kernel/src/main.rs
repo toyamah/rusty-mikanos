@@ -163,7 +163,6 @@ pub extern "C" fn KernelMainNewStack(
         info!("no xHC has been found");
         loop_and_hlt()
     });
-    info!("xHC has been found: {}", xhc_device);
 
     setup_idt(int_handler_xhci as u64, kernel_cs);
 

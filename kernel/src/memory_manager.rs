@@ -1,5 +1,5 @@
 use crate::error::Code;
-use crate::{make_error, printk, Error};
+use crate::{make_error, Error};
 use core::ffi::c_void;
 
 const fn kib(kib: u64) -> u64 {
