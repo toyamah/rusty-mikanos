@@ -2,6 +2,7 @@
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
+#![feature(alloc_error_handler)]
 
 mod asm;
 mod console;
@@ -10,6 +11,7 @@ mod font;
 mod graphics;
 mod interrupt;
 mod logger;
+mod memory_allocator;
 mod memory_manager;
 mod memory_map;
 mod mouse;
@@ -20,11 +22,14 @@ mod segment;
 mod usb;
 mod x86_descriptor;
 
+extern crate alloc;
+
 use crate::asm::{set_csss, set_ds_all};
 use crate::console::Console;
 use crate::error::Error;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
 use crate::interrupt::setup_idt;
+use crate::memory_allocator::MemoryAllocator;
 use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use crate::memory_map::UEFI_PAGE_SIZE;
 use crate::mouse::MouseCursor;
@@ -33,6 +38,9 @@ use crate::pci::Device;
 use crate::queue::ArrayQueue;
 use crate::segment::set_up_segment;
 use crate::usb::XhciController;
+use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;
 use bit_field::BitField;
 use core::arch::asm;
 use core::borrow::BorrowMut;
@@ -225,6 +233,14 @@ pub extern "C" fn KernelMainNewStack(
 fn panic(_info: &PanicInfo) -> ! {
     printk!("{}", _info); // Use printk to show the entire message
     loop_and_hlt()
+}
+
+#[global_allocator]
+static ALLOCATOR: MemoryAllocator = MemoryAllocator;
+
+#[alloc_error_handler]
+fn alloc_error_handle(layout: alloc::alloc::Layout) -> ! {
+    panic!("allocation error: {:?}", layout)
 }
 
 extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
