@@ -3,6 +3,10 @@ extern "C" {
     fn IoIn32(addr: u16) -> u32;
     fn GetCS() -> u16;
     fn LoadIDT(limit: u16, offset: u64);
+    fn LoadGDT(limit: u16, offset: u64);
+    fn SetDSAll(value: u16);
+    fn SetCSSS(cs: u16, ss: u16);
+    fn SetCR3(value: u64);
 }
 
 pub fn io_out_32(addr: u16, data: u32) {
@@ -19,4 +23,20 @@ pub fn get_code_segment() -> u16 {
 
 pub fn load_interrupt_descriptor_table(limit: u16, offset: u64) {
     unsafe { LoadIDT(limit, offset) }
+}
+
+pub fn load_gdt(limit: u16, offset: u64) {
+    unsafe { LoadGDT(limit, offset) }
+}
+
+pub fn set_ds_all(value: u16) {
+    unsafe { SetDSAll(value) }
+}
+
+pub fn set_csss(cs: u16, ss: u16) {
+    unsafe { SetCSSS(cs, ss) }
+}
+
+pub fn set_cr3(value: u64) {
+    unsafe { SetCR3(value) }
 }

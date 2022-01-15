@@ -10,18 +10,25 @@ mod font;
 mod graphics;
 mod interrupt;
 mod logger;
+mod memory_map;
 mod mouse;
+mod paging;
 mod pci;
 mod queue;
+mod segment;
 mod usb;
+mod x86_descriptor;
 
+use crate::asm::{set_csss, set_ds_all};
 use crate::console::Console;
 use crate::error::Error;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
 use crate::interrupt::setup_idt;
 use crate::mouse::MouseCursor;
+use crate::paging::setup_identity_page_table;
 use crate::pci::Device;
 use crate::queue::ArrayQueue;
+use crate::segment::set_up_segment;
 use crate::usb::XhciController;
 use bit_field::BitField;
 use core::arch::asm;
@@ -53,6 +60,12 @@ fn xhci_controller() -> &'static mut XhciController {
     unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
 }
 
+static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
+
+fn frame_buffer_config() -> &'static mut FrameBufferConfig {
+    unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
+}
+
 #[derive(Copy, Clone, Debug)]
 struct Message {
     m_type: MessageType,
@@ -72,17 +85,32 @@ fn main_queue() -> &'static mut ArrayQueue<'static, Message, 32> {
     unsafe { MAIN_QUEUE.as_mut().unwrap() }
 }
 
+#[repr(align(16))]
+pub struct KernelMainStack([u8; 1024 * 1024]);
+
+#[no_mangle]
+static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]);
+
 #[no_mangle] // disable name mangling
-pub extern "C" fn KernelMain(
-    frame_buffer_config: &'static FrameBufferConfig,
+pub extern "C" fn KernelMainNewStack(
+    frame_buffer_config_: &'static FrameBufferConfig,
     memory_map: &'static MemoryMap,
 ) -> ! {
-    initialize_global_vars(frame_buffer_config);
-    draw_background(frame_buffer_config);
+    unsafe { FRAME_BUFFER_CONFIG = Some(*frame_buffer_config_) }
+    let memory_map = *memory_map;
+    initialize_global_vars(frame_buffer_config());
+    draw_background(frame_buffer_config());
     printk!("Welcome to MikanOS!\n");
     mouse_cursor().draw();
 
-    info!("memory_map: {:p}", memory_map);
+    let kernel_cs: u16 = 1 << 3;
+    let kernel_ss: u16 = 2 << 3;
+    set_up_segment();
+    set_ds_all(0);
+    set_csss(kernel_cs, kernel_ss);
+    setup_identity_page_table();
+
+    info!("memory_map: {:p}", &memory_map);
     let available_memory_types = [
         MemoryType::KEfiBootServicesCode,
         MemoryType::KEfiBootServicesData,
@@ -95,7 +123,7 @@ pub extern "C" fn KernelMain(
         for i in 0..available_memory_types.len() {
             unsafe {
                 if (*desc).type_ == available_memory_types[i] {
-                    info!(
+                    printk!(
                         "type = {}, phys = {:x} - {:x}, pages = {}, attr = {:#08x}\n",
                         (*desc).type_.to_i32(),
                         (*desc).physical_start,
@@ -121,7 +149,7 @@ pub extern "C" fn KernelMain(
     });
     info!("xHC has been found: {}", xhc_device);
 
-    setup_idt(int_handler_xhci as u64);
+    setup_idt(int_handler_xhci as u64, kernel_cs);
 
     enable_to_interrupt_for_xhc(xhc_device).unwrap();
 

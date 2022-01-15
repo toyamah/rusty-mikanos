@@ -1,4 +1,5 @@
-use crate::asm::{get_code_segment, load_interrupt_descriptor_table};
+use crate::asm::load_interrupt_descriptor_table;
+use crate::x86_descriptor::SystemDescriptorType;
 use bit_field::BitField;
 
 #[repr(C)]
@@ -35,11 +36,10 @@ pub fn idt() -> &'static mut [InterruptDescriptor; 256] {
     unsafe { &mut IDT }
 }
 
-pub fn setup_idt(offset: u64) {
+pub fn setup_idt(offset: u64, code_segment: u16) {
     let idt = idt();
-    let code_segment = get_code_segment();
     idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(
-        InterruptDescriptorAttribute::new(DescriptorType::InterruptGate, 0, true, 0),
+        InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
         offset,
         code_segment,
     );
@@ -81,7 +81,7 @@ pub struct InterruptDescriptorAttribute(u16);
 
 impl InterruptDescriptorAttribute {
     pub fn new(
-        descriptor_type: DescriptorType,
+        descriptor_type: SystemDescriptorType,
         descriptor_privilege_level: u8,
         present: bool,
         interrupt_stack_table: u8,
@@ -94,17 +94,6 @@ impl InterruptDescriptorAttribute {
             .set_bits(0..3, interrupt_stack_table as u16);
         Self(field)
     }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum DescriptorType {
-    Upper8Bytes = 0,
-    LDT = 2,
-    TSSAvailable = 9,
-    TSSBusy = 11,
-    CallGate = 12,
-    InterruptGate = 14,
-    TrapGate = 15,
 }
 
 pub enum InterruptVectorNumber {

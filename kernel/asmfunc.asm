@@ -38,3 +38,67 @@ LoadIDT:
     pop rbp
     ret
 ; #@@range_end(load_idt_function)
+
+; #@@range_begin(load_gdt)
+global LoadGDT  ; void LoadGDT(uint16_t limit, uint64_t offset);
+LoadGDT:
+    push rbp
+    mov rbp, rsp
+    sub rsp, 10
+    mov [rsp], di  ; limit
+    mov [rsp + 2], rsi  ; offset
+    lgdt [rsp]
+    mov rsp, rbp
+    pop rbp
+    ret
+; #@@range_end(load_gdt)
+
+; #@@range_begin(set_cs)
+global SetCSSS  ; void SetCSSS(uint16_t cs, uint16_t ss);
+SetCSSS:
+    push rbp
+    mov rbp, rsp
+    mov ss, si
+    mov rax, .next
+    push rdi    ; CS
+    push rax    ; RIP
+    o64 retf
+.next:
+    mov rsp, rbp
+    pop rbp
+    ret
+; #@@range_end(set_cs)
+
+; #@@range_begin(set_dsall)
+global SetDSAll  ; void SetDSAll(uint16_t value);
+SetDSAll:
+    mov ds, di
+    mov es, di
+    mov fs, di
+    mov gs, di
+    ret
+; #@@range_end(set_dsall)
+
+; #@@range_begin(set_cr3)
+global SetCR3  ; void SetCR3(uint64_t value);
+SetCR3:
+    mov cr3, rdi
+    ret
+; #@@range_end(set_cr3)
+
+; #@@range_begin(set_main_stack)
+extern kernel_main_stack
+extern KernelMainNewStack
+
+; #@@range_begin(set_main_stack)
+extern KERNEL_MAIN_STACK
+extern KernelMainNewStack
+
+global KernelMain
+KernelMain:
+    mov rsp, KERNEL_MAIN_STACK + 1024 * 1024
+    call KernelMainNewStack
+.fin:
+    hlt
+    jmp .fin
+; #@@range_end(set_main_stack)

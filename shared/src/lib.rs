@@ -2,14 +2,14 @@
 
 use core::ffi::c_void;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone, Copy)]
 #[repr(C)]
 pub enum PixelFormat {
     KPixelRGBResv8BitPerColor,
     KPixelBGRResv8BitPerColor,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone, Copy)]
 #[warn(dead_code)]
 #[repr(C)]
 pub struct FrameBufferConfig {
@@ -26,7 +26,7 @@ pub struct FrameBufferConfig {
 /// https://github.com/eqrion/cbindgen/blob/master/docs.md#libc-types
 #[warn(dead_code)]
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct MemoryMap {
     pub buffer_size: u64,
     pub buffer: *mut c_void,
@@ -89,6 +89,27 @@ impl MemoryType {
             MemoryType::KEfiPalCode => 13,
             MemoryType::KEfiPersistentMemory => 14,
             MemoryType::KEfiMaxMemoryType => 15,
+        };
+    }
+
+    pub fn is_available(&self) -> bool {
+        return match self {
+            MemoryType::KEfiBootServicesCode
+            | MemoryType::KEfiBootServicesData
+            | MemoryType::KEfiConventionalMemory => true,
+            MemoryType::KEfiReservedMemoryType
+            | MemoryType::KEfiLoaderCode
+            | MemoryType::KEfiLoaderData
+            | MemoryType::KEfiRuntimeServicesCode
+            | MemoryType::KEfiRuntimeServicesData
+            | MemoryType::KEfiUnusableMemory
+            | MemoryType::KEfiACPIReclaimMemory
+            | MemoryType::KEfiACPIMemoryNVS
+            | MemoryType::KEfiMemoryMappedIO
+            | MemoryType::KEfiMemoryMappedIOPortSpace
+            | MemoryType::KEfiPalCode
+            | MemoryType::KEfiPersistentMemory
+            | MemoryType::KEfiMaxMemoryType => false,
         };
     }
 }
