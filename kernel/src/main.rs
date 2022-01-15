@@ -121,7 +121,6 @@ pub extern "C" fn KernelMainNewStack(
     setup_identity_page_table();
 
     let buffer = memory_map.buffer as usize;
-    let bytes_per_frame_size = BYTES_PER_FRAME as usize;
     let mut available_end = 0;
     let mut iter = buffer;
     while iter < buffer + memory_map.map_size as usize {
@@ -130,8 +129,8 @@ pub extern "C" fn KernelMainNewStack(
         let number_of_pages = unsafe { (*desc).number_of_pages };
         if available_end < physical_start {
             memory_manager().mark_allocated(
-                FrameID::new(available_end / bytes_per_frame_size),
-                (physical_start - available_end) / bytes_per_frame_size,
+                FrameID::new(available_end / BYTES_PER_FRAME),
+                (physical_start - available_end) / BYTES_PER_FRAME,
             );
         }
 
@@ -142,7 +141,7 @@ pub extern "C" fn KernelMainNewStack(
             available_end = physical_end;
         } else {
             memory_manager().mark_allocated(
-                FrameID::new(physical_start / bytes_per_frame_size),
+                FrameID::new(physical_start / BYTES_PER_FRAME),
                 byte_count / BYTES_PER_FRAME as usize,
             )
         }
@@ -150,7 +149,7 @@ pub extern "C" fn KernelMainNewStack(
     }
     memory_manager().set_memory_range(
         FrameID::new(1),
-        FrameID::new(available_end / bytes_per_frame_size),
+        FrameID::new(available_end / BYTES_PER_FRAME),
     );
 
     pci::scan_all_bus().unwrap();
