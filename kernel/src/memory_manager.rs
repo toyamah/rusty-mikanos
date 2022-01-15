@@ -18,7 +18,7 @@ const fn gib(gib: u64) -> u64 {
 // FrameId
 //
 
-pub const BYTES_PER_FRAME: u64 = kib(4);
+pub const BYTES_PER_FRAME: usize = kib(4) as usize;
 const NULL_FRAME: FrameID = FrameID(usize::MAX);
 
 #[derive(Copy, Clone, Debug)]
@@ -43,8 +43,8 @@ impl FrameID {
 //
 type MapLineType = u64;
 
-const MAX_PHYSICAL_MEMORY_BYTES: u64 = gib(128);
-const FRAME_COUNT: usize = (MAX_PHYSICAL_MEMORY_BYTES / BYTES_PER_FRAME) as usize;
+const MAX_PHYSICAL_MEMORY_BYTES: usize = gib(128) as usize;
+const FRAME_COUNT: usize = MAX_PHYSICAL_MEMORY_BYTES / BYTES_PER_FRAME;
 const BITS_PER_MAP_LINE: usize = 8 * core::mem::size_of::<MapLineType>();
 
 pub struct BitmapMemoryManager {
