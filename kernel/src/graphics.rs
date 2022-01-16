@@ -65,12 +65,32 @@ impl PixelColor {
     }
 }
 
-pub struct PixelWriter<'a> {
+pub trait PixelWriter {
+    fn write(&self, x: i32, y: i32, color: &PixelColor);
+    fn width(&self) -> i32;
+    fn height(&self) -> i32;
+}
+
+pub struct FrameBufferWriter<'a> {
     config: &'a FrameBufferConfig,
     write_fn: fn(&Self, x: i32, y: i32, &PixelColor) -> (),
 }
 
-impl<'a> PixelWriter<'a> {
+impl<'a> PixelWriter for FrameBufferWriter<'a> {
+    fn write(&self, x: i32, y: i32, color: &PixelColor) {
+        (self.write_fn)(self, x, y, color);
+    }
+
+    fn width(&self) -> i32 {
+        self.config.horizontal_resolution as i32
+    }
+
+    fn height(&self) -> i32 {
+        self.config.vertical_resolution as i32
+    }
+}
+
+impl<'a> FrameBufferWriter<'a> {
     pub fn new(config: &'a FrameBufferConfig) -> Self {
         Self {
             config,
@@ -91,10 +111,6 @@ impl<'a> PixelWriter<'a> {
 
     pub fn write_ascii(&self, x: i32, y: i32, char: char, color: &PixelColor) {
         font::write_ascii(self, x, y, char, color);
-    }
-
-    pub fn write(&self, x: i32, y: i32, color: &PixelColor) {
-        (self.write_fn)(self, x, y, color);
     }
 
     pub fn draw_rectange(&self, pos: &Vector2D<i32>, size: &Vector2D<i32>, c: &PixelColor) {

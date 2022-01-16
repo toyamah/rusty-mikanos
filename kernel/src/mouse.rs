@@ -1,4 +1,6 @@
-use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE};
+use crate::graphics::{
+    FrameBufferWriter, PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE,
+};
 
 const MOUSE_CURSOR_SHAPE: [&str; 24] = [
     "@              ",
@@ -28,14 +30,14 @@ const MOUSE_CURSOR_SHAPE: [&str; 24] = [
 ];
 
 pub struct MouseCursor<'a> {
-    writer: &'a PixelWriter<'a>,
+    writer: &'a FrameBufferWriter<'a>,
     erace_color: &'a PixelColor,
     position: Vector2D<i32>,
 }
 
 impl<'a> MouseCursor<'a> {
     pub fn new(
-        writer: &'a PixelWriter<'a>,
+        writer: &'a FrameBufferWriter<'a>,
         erace_color: &'a PixelColor,
         initial_position: Vector2D<i32>,
     ) -> Self {
@@ -59,7 +61,7 @@ impl<'a> MouseCursor<'a> {
 }
 
 fn erase_mouse_cursor<'a>(
-    pixel_writer: &'a PixelWriter,
+    pixel_writer: &'a FrameBufferWriter,
     position: &Vector2D<i32>,
     erase_color: &PixelColor,
 ) {
@@ -74,7 +76,7 @@ fn erase_mouse_cursor<'a>(
     }
 }
 
-fn draw_mouse_cursor<'a>(pixel_writer: &'a PixelWriter, position: &Vector2D<i32>) {
+fn draw_mouse_cursor<'a>(pixel_writer: &'a FrameBufferWriter, position: &Vector2D<i32>) {
     for (dy, row) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
         for (dx, char) in row.chars().enumerate() {
             if char == '@' {

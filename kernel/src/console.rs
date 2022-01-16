@@ -1,4 +1,4 @@
-use crate::graphics::{PixelColor, PixelWriter};
+use crate::graphics::{FrameBufferWriter, PixelColor, PixelWriter};
 use core::fmt;
 use core::fmt::Write;
 
@@ -6,7 +6,7 @@ const ROWS: usize = 25;
 const COLUMNS: usize = 80;
 
 pub struct Console<'a> {
-    writer: &'a PixelWriter<'a>,
+    writer: &'a FrameBufferWriter<'a>,
     fg_color: PixelColor,
     bg_color: PixelColor,
     cursor_row: usize,
@@ -17,7 +17,7 @@ pub struct Console<'a> {
 
 impl<'a> Console<'a> {
     pub fn new(
-        writer: &'a PixelWriter<'a>,
+        writer: &'a FrameBufferWriter<'a>,
         fg_color: PixelColor,
         bg_color: PixelColor,
     ) -> Console<'a> {
