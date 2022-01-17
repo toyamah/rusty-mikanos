@@ -10,6 +10,7 @@ mod error;
 mod font;
 mod graphics;
 mod interrupt;
+mod layer;
 mod logger;
 mod memory_allocator;
 mod memory_manager;
@@ -20,6 +21,7 @@ mod pci;
 mod queue;
 mod segment;
 mod usb;
+mod window;
 mod x86_descriptor;
 
 extern crate alloc;
@@ -27,7 +29,9 @@ extern crate alloc;
 use crate::asm::{set_csss, set_ds_all};
 use crate::console::Console;
 use crate::error::Error;
-use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
+use crate::graphics::{
+    FrameBufferWriter, PixelColor, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+};
 use crate::interrupt::setup_idt;
 use crate::memory_allocator::MemoryAllocator;
 use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
@@ -48,9 +52,9 @@ use core::panic::PanicInfo;
 use log::{error, info};
 use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap};
 
-static mut PIXEL_WRITER: Option<PixelWriter> = None;
+static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
 
-fn pixel_writer() -> &'static mut PixelWriter<'static> {
+fn pixel_writer() -> &'static mut FrameBufferWriter<'static> {
     unsafe { PIXEL_WRITER.as_mut().unwrap() }
 }
 
@@ -259,7 +263,7 @@ extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) 
 
 fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     unsafe {
-        PIXEL_WRITER = Some(PixelWriter::new(frame_buffer_config));
+        PIXEL_WRITER = Some(FrameBufferWriter::new(frame_buffer_config));
 
         CONSOLE = Some(Console::new(
             pixel_writer(),
