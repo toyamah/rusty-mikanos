@@ -30,7 +30,8 @@ use crate::asm::{set_csss, set_ds_all};
 use crate::console::Console;
 use crate::error::Error;
 use crate::graphics::{
-    FrameBufferWriter, PixelColor, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+    draw_rectangle, fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Vector2D,
+    DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
 use crate::interrupt::setup_idt;
 use crate::memory_allocator::MemoryAllocator;
@@ -42,9 +43,7 @@ use crate::pci::Device;
 use crate::queue::ArrayQueue;
 use crate::segment::set_up_segment;
 use crate::usb::XhciController;
-use alloc::boxed::Box;
-use alloc::vec;
-use alloc::vec::Vec;
+use crate::window::Window;
 use bit_field::BitField;
 use core::arch::asm;
 use core::borrow::BorrowMut;
@@ -121,7 +120,7 @@ pub extern "C" fn KernelMainNewStack(
     unsafe { FRAME_BUFFER_CONFIG = Some(*frame_buffer_config_) }
     let memory_map = *memory_map;
     initialize_global_vars(frame_buffer_config());
-    draw_background(frame_buffer_config());
+    draw_background(pixel_writer());
     printk!("Welcome to MikanOS!\n");
     mouse_cursor().draw();
 
@@ -199,6 +198,11 @@ pub extern "C" fn KernelMainNewStack(
     };
 
     xhci_controller().configure_port();
+
+    let frame_width = frame_buffer_config_.horizontal_resolution;
+    let frame_height = frame_buffer_config_.vertical_resolution;
+    let bg_window = Window::new(frame_width as usize, frame_height as usize);
+    draw_background(bg_window.writer());
 
     loop {
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
@@ -291,27 +295,30 @@ fn loop_and_hlt() -> ! {
     }
 }
 
-fn draw_background(frame_buffer_config: &FrameBufferConfig) {
-    let frame_width = frame_buffer_config.horizontal_resolution as i32;
-    let frame_height = frame_buffer_config.vertical_resolution as i32;
-    let writer = pixel_writer();
-    writer.fill_rectangle(
+fn draw_background<W: PixelWriter>(writer: &W) {
+    let width = writer.width();
+    let height = writer.height();
+    fill_rectangle(
+        writer,
         &Vector2D::new(0, 0),
-        &Vector2D::new(frame_width, frame_height),
+        &Vector2D::new(width, height),
         &DESKTOP_BG_COLOR,
     );
-    writer.fill_rectangle(
-        &Vector2D::new(0, frame_height - 50),
-        &Vector2D::new(frame_width, 50),
+    fill_rectangle(
+        writer,
+        &Vector2D::new(0, height - 50),
+        &Vector2D::new(width, 50),
         &PixelColor::new(1, 8, 17),
     );
-    writer.fill_rectangle(
-        &Vector2D::new(0, frame_height - 50),
-        &Vector2D::new(frame_width / 5, 50),
+    fill_rectangle(
+        writer,
+        &Vector2D::new(0, height - 50),
+        &Vector2D::new(width / 5, 50),
         &PixelColor::new(80, 80, 80),
     );
-    writer.draw_rectange(
-        &Vector2D::new(10, frame_height - 40),
+    draw_rectangle(
+        writer,
+        &Vector2D::new(10, height - 40),
         &Vector2D::new(30, 30),
         &PixelColor::new(160, 160, 160),
     );

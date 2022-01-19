@@ -16,7 +16,7 @@ pub const DESKTOP_BG_COLOR: PixelColor = PixelColor {
 };
 pub const DESKTOP_FG_COLOR: PixelColor = COLOR_BLACK;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct PixelColor {
     r: u8,
     g: u8,
@@ -113,25 +113,6 @@ impl<'a> FrameBufferWriter<'a> {
         font::write_ascii(self, x, y, char, color);
     }
 
-    pub fn draw_rectange(&self, pos: &Vector2D<i32>, size: &Vector2D<i32>, c: &PixelColor) {
-        for dx in 0..size.x {
-            self.write(pos.x + dx, pos.y, c);
-            self.write(pos.x + dx, pos.y + size.y - 1, c);
-        }
-        for dy in 0..size.y {
-            self.write(pos.x, pos.y + dy, c);
-            self.write(pos.x + size.x - 1, pos.y + dy, c);
-        }
-    }
-
-    pub fn fill_rectangle(&self, pos: &Vector2D<i32>, size: &Vector2D<i32>, c: &PixelColor) {
-        for dy in 0..size.y {
-            for dx in 0..size.x {
-                self.write(pos.x + dx, pos.y + dy, c);
-            }
-        }
-    }
-
     fn write_rgb(self: &Self, x: i32, y: i32, color: &PixelColor) {
         let p = self.pixel_at(x, y);
         unsafe {
@@ -154,5 +135,34 @@ impl<'a> FrameBufferWriter<'a> {
         let pixel_position = self.config.pixels_per_scan_line as i32 * y + x;
         let base = (4 * pixel_position) as isize;
         unsafe { self.config.frame_buffer.offset(base) }
+    }
+}
+
+pub fn fill_rectangle<W: PixelWriter>(
+    writer: &W,
+    pos: &Vector2D<i32>,
+    size: &Vector2D<i32>,
+    c: &PixelColor,
+) {
+    for dy in 0..size.y {
+        for dx in 0..size.x {
+            writer.write(pos.x + dx, pos.y + dy, c);
+        }
+    }
+}
+
+pub fn draw_rectangle<W: PixelWriter>(
+    writer: &W,
+    pos: &Vector2D<i32>,
+    size: &Vector2D<i32>,
+    c: &PixelColor,
+) {
+    for dx in 0..size.x {
+        writer.write(pos.x + dx, pos.y, c);
+        writer.write(pos.x + dx, pos.y + size.y - 1, c);
+    }
+    for dy in 0..size.y {
+        writer.write(pos.x, pos.y + dy, c);
+        writer.write(pos.x + size.x - 1, pos.y + dy, c);
     }
 }
