@@ -29,7 +29,7 @@ impl Window {
         }
     }
 
-    pub fn draw_to(self, writer: &mut FrameBufferWriter, position: Vector2D<usize>) {
+    pub fn draw_to(&self, writer: &mut FrameBufferWriter, position: Vector2D<usize>) {
         let w = (*self.actual).borrow();
         match w.transparent_color {
             None => self.on_each_pixel(|x, y| {
