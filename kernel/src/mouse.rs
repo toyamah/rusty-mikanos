@@ -1,6 +1,7 @@
 use crate::graphics::{
     FrameBufferWriter, PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE,
 };
+use crate::Window;
 
 const MOUSE_CURSOR_SHAPE: [&str; 24] = [
     "@              ",
@@ -76,7 +77,7 @@ fn erase_mouse_cursor<'a>(
     }
 }
 
-fn draw_mouse_cursor<'a>(pixel_writer: &'a FrameBufferWriter, position: &Vector2D<i32>) {
+pub fn draw_mouse_cursor<W: PixelWriter>(pixel_writer: &W, position: &Vector2D<i32>) {
     for (dy, row) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
         for (dx, char) in row.chars().enumerate() {
             if char == '@' {
@@ -86,4 +87,8 @@ fn draw_mouse_cursor<'a>(pixel_writer: &'a FrameBufferWriter, position: &Vector2
             }
         }
     }
+}
+
+pub fn new_mouse_cursor_window() -> Window {
+    Window::new(MOUSE_CURSOR_SHAPE[0].len(), MOUSE_CURSOR_SHAPE.len())
 }

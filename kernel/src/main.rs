@@ -34,10 +34,11 @@ use crate::graphics::{
     DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
 use crate::interrupt::setup_idt;
+use crate::layer::LayerManager;
 use crate::memory_allocator::MemoryAllocator;
 use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use crate::memory_map::UEFI_PAGE_SIZE;
-use crate::mouse::MouseCursor;
+use crate::mouse::{draw_mouse_cursor, new_mouse_cursor_window, MouseCursor};
 use crate::paging::setup_identity_page_table;
 use crate::pci::Device;
 use crate::queue::ArrayQueue;
@@ -85,6 +86,27 @@ static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
 
 fn memory_manager() -> &'static mut BitmapMemoryManager {
     unsafe { MEMORY_MANAGER.borrow_mut() }
+}
+
+static mut LAYER_MANAGER: Option<LayerManager> = None;
+fn layer_manager() -> &'static mut LayerManager<'static> {
+    unsafe { LAYER_MANAGER.as_mut().unwrap() }
+}
+
+static mut BG_WINDOW: Option<Window> = None;
+fn bg_window() -> &'static mut Window {
+    unsafe { BG_WINDOW.as_mut().unwrap() }
+}
+fn bg_window_ref() -> &'static Window {
+    unsafe { BG_WINDOW.as_ref().unwrap() }
+}
+
+static mut MOUSE_CURSOR_WINDOW: Option<Window> = None;
+fn mouse_cursor_window() -> &'static mut Window {
+    unsafe { MOUSE_CURSOR_WINDOW.as_mut().unwrap() }
+}
+fn mouse_cursor_window_ref() -> &'static Window {
+    unsafe { MOUSE_CURSOR_WINDOW.as_ref().unwrap() }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -199,10 +221,28 @@ pub extern "C" fn KernelMainNewStack(
 
     xhci_controller().configure_port();
 
-    let frame_width = frame_buffer_config_.horizontal_resolution;
-    let frame_height = frame_buffer_config_.vertical_resolution;
-    let bg_window = Window::new(frame_width as usize, frame_height as usize);
-    draw_background(bg_window.writer());
+    unsafe {
+        BG_WINDOW = Some(Window::new(
+            frame_buffer_config_.horizontal_resolution as usize,
+            frame_buffer_config_.vertical_resolution as usize,
+        ))
+    }
+    draw_background(bg_window().writer());
+
+    unsafe { MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window()) }
+    mouse_cursor_window().set_transparent_color(Some(PixelColor::new(0, 0, 1)));
+    draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
+
+    unsafe { LAYER_MANAGER = Some(LayerManager::new(pixel_writer())) }
+    let bg_layer_id = layer_manager()
+        .new_layer()
+        .set_window(bg_window_ref())
+        .move_(Vector2D::new(0, 0))
+        .id();
+    let mouse_layer_id = layer_manager()
+        .new_layer()
+        .set_window(mouse_cursor_window_ref())
+        .id();
 
     loop {
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
