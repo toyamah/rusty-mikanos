@@ -30,8 +30,7 @@ impl Window {
     }
 
     pub fn draw_to<W: PixelWriter + ?Sized>(&self, writer: &W, position: Vector2D<usize>) {
-        let w = (*self.actual).borrow();
-        match w.transparent_color {
+        match self.window().transparent_color {
             None => self.on_each_pixel(|x, y| {
                 writer.write(
                     (position.x + x) as i32,
@@ -48,8 +47,8 @@ impl Window {
         }
     }
 
-    pub fn set_transparent_color(&mut self, c: Option<PixelColor>) {
-        self.window_mut().transparent_color = c
+    pub fn set_transparent_color(&mut self, c: PixelColor) {
+        self.window_mut().transparent_color = Some(c);
     }
 
     pub fn width(&self) -> usize {

@@ -60,7 +60,7 @@ where
 }
 
 impl PixelColor {
-    pub fn new(r: u8, g: u8, b: u8) -> PixelColor {
+    pub const fn new(r: u8, g: u8, b: u8) -> PixelColor {
         PixelColor { r, g, b }
     }
 }

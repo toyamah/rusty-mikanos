@@ -235,7 +235,6 @@ pub extern "C" fn KernelMainNewStack(
     draw_background(bg_window().writer());
 
     unsafe { MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window()) }
-    mouse_cursor_window().set_transparent_color(Some(PixelColor::new(0, 0, 1)));
     draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
 
     unsafe { LAYER_MANAGER = Some(LayerManager::new(pixel_writer())) }
@@ -248,6 +247,7 @@ pub extern "C" fn KernelMainNewStack(
         MOUSE_LAYER_ID = layer_manager()
             .new_layer()
             .set_window(mouse_cursor_window_ref())
+            .move_(Vector2D::new(200, 200))
             .id();
     }
 
