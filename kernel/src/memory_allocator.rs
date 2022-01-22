@@ -1,4 +1,4 @@
-use crate::{memory_manager, printk, FrameID, BYTES_PER_FRAME};
+use crate::{memory_manager, FrameID, BYTES_PER_FRAME};
 use core::alloc::{GlobalAlloc, Layout};
 use core::ptr::null_mut;
 use log::error;

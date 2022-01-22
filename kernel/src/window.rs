@@ -87,20 +87,6 @@ impl Window {
     }
 }
 
-impl PixelWriter for WindowWriter {
-    fn write(&self, x: i32, y: i32, color: &PixelColor) {
-        (*self.window).borrow_mut().write(x, y, color)
-    }
-
-    fn width(&self) -> i32 {
-        (*self.window).borrow().width as i32
-    }
-
-    fn height(&self) -> i32 {
-        (*self.window).borrow().height as i32
-    }
-}
-
 impl ActualWindow {
     fn new(width: usize, height: usize) -> Self {
         let data: Vec<Vec<_>> = (0..height)
@@ -116,5 +102,19 @@ impl ActualWindow {
 
     fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
         self.data[y as usize][x as usize] = *color
+    }
+}
+
+impl PixelWriter for WindowWriter {
+    fn write(&self, x: i32, y: i32, color: &PixelColor) {
+        (*self.window).borrow_mut().write(x, y, color)
+    }
+
+    fn width(&self) -> i32 {
+        (*self.window).borrow().width as i32
+    }
+
+    fn height(&self) -> i32 {
+        (*self.window).borrow().height as i32
     }
 }

@@ -38,7 +38,7 @@ use crate::layer::LayerManager;
 use crate::memory_allocator::MemoryAllocator;
 use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use crate::memory_map::UEFI_PAGE_SIZE;
-use crate::mouse::{draw_mouse_cursor, new_mouse_cursor_window, MouseCursor};
+use crate::mouse::{draw_mouse_cursor, new_mouse_cursor_window};
 use crate::paging::setup_identity_page_table;
 use crate::pci::Device;
 use crate::queue::ArrayQueue;
@@ -62,12 +62,6 @@ static mut CONSOLE: Option<Console> = None;
 
 fn console() -> &'static mut Console<'static> {
     unsafe { CONSOLE.as_mut().unwrap() }
-}
-
-static mut MOUSE_CURSOR: Option<MouseCursor> = None;
-
-fn mouse_cursor() -> &'static mut MouseCursor<'static> {
-    unsafe { MOUSE_CURSOR.as_mut().unwrap() }
 }
 
 static mut XHCI_CONTROLLER: Option<XhciController> = None;
@@ -149,7 +143,6 @@ pub extern "C" fn KernelMainNewStack(
     initialize_global_vars(frame_buffer_config());
     draw_background(pixel_writer());
     printk!("Welcome to MikanOS!\n");
-    mouse_cursor().draw();
 
     let kernel_cs: u16 = 1 << 3;
     let kernel_ss: u16 = 2 << 3;
@@ -243,12 +236,13 @@ pub extern "C" fn KernelMainNewStack(
         .set_window(bg_window_ref())
         .move_(Vector2D::new(0, 0))
         .id();
-    unsafe {
-        MOUSE_LAYER_ID = layer_manager()
+    {
+        let id = layer_manager()
             .new_layer()
             .set_window(mouse_cursor_window_ref())
             .move_(Vector2D::new(200, 200))
             .id();
+        unsafe { MOUSE_LAYER_ID = id }
     }
 
     layer_manager().up_down(bg_layer_id, 0);
@@ -328,12 +322,6 @@ fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
             pixel_writer(),
             DESKTOP_FG_COLOR,
             DESKTOP_BG_COLOR,
-        ));
-
-        MOUSE_CURSOR = Some(MouseCursor::new(
-            pixel_writer(),
-            &DESKTOP_BG_COLOR,
-            Vector2D::new(300, 200),
         ));
 
         MAIN_QUEUE = Some(ArrayQueue::new(&mut MESSAGES));
