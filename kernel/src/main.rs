@@ -109,6 +109,11 @@ fn mouse_cursor_window_ref() -> &'static Window {
     unsafe { MOUSE_CURSOR_WINDOW.as_ref().unwrap() }
 }
 
+static mut MOUSE_LAYER_ID: u32 = u32::MAX;
+fn mouse_layer_id() -> u32 {
+    unsafe { MOUSE_LAYER_ID }
+}
+
 #[derive(Copy, Clone, Debug)]
 struct Message {
     m_type: MessageType,
@@ -239,10 +244,16 @@ pub extern "C" fn KernelMainNewStack(
         .set_window(bg_window_ref())
         .move_(Vector2D::new(0, 0))
         .id();
-    let mouse_layer_id = layer_manager()
-        .new_layer()
-        .set_window(mouse_cursor_window_ref())
-        .id();
+    unsafe {
+        MOUSE_LAYER_ID = layer_manager()
+            .new_layer()
+            .set_window(mouse_cursor_window_ref())
+            .id();
+    }
+
+    layer_manager().up_down(bg_layer_id, 0);
+    layer_manager().up_down(mouse_layer_id(), 1);
+    layer_manager().draw();
 
     loop {
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
@@ -292,7 +303,11 @@ fn alloc_error_handle(layout: alloc::alloc::Layout) -> ! {
 }
 
 extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
-    mouse_cursor().move_relative(&Vector2D::new(displacement_x as i32, displacement_y as i32));
+    layer_manager().move_relative(
+        mouse_layer_id(),
+        Vector2D::new(displacement_x as i32, displacement_y as i32),
+    );
+    layer_manager().draw();
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {

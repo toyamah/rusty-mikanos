@@ -1,5 +1,5 @@
 use crate::graphics::PixelWriter;
-use crate::{FrameBufferWriter, PixelColor, Vector2D};
+use crate::{PixelColor, Vector2D};
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::{Ref, RefCell, RefMut};
@@ -29,7 +29,7 @@ impl Window {
         }
     }
 
-    pub fn draw_to(&self, writer: &mut FrameBufferWriter, position: Vector2D<usize>) {
+    pub fn draw_to<W: PixelWriter + ?Sized>(&self, writer: &W, position: Vector2D<usize>) {
         let w = (*self.actual).borrow();
         match w.transparent_color {
             None => self.on_each_pixel(|x, y| {

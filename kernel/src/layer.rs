@@ -1,6 +1,6 @@
 use crate::graphics::PixelWriter;
 use crate::window::Window;
-use crate::{FrameBufferWriter, Vector2D};
+use crate::Vector2D;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -43,7 +43,7 @@ impl<'a> Layer<'a> {
         self.position = Vector2D::new(x, y)
     }
 
-    pub fn draw_to(&self, writer: &mut FrameBufferWriter) {
+    pub fn draw_to<W: PixelWriter + ?Sized>(&self, writer: &W) {
         if let Some(w) = self.window {
             w.draw_to(writer, self.position)
         }
@@ -52,11 +52,12 @@ impl<'a> Layer<'a> {
 
 fn usize_add(u: usize, i: i32) -> usize {
     if i.is_negative() {
-        u.checked_sub(i.wrapping_abs() as u32 as usize)
+        let sub = i.wrapping_abs() as u32 as usize;
+        u.checked_sub(sub).unwrap_or(0) //TODO: position should be signed int
     } else {
-        u.checked_sub(i as usize)
+        u.checked_add(i as usize).unwrap_or(0) //TODO position should be signed int
     }
-    .unwrap()
+    // .unwrap()
 }
 
 pub struct LayerManager<'a> {
@@ -83,6 +84,90 @@ impl<'a> LayerManager<'a> {
     pub fn new_layer(&mut self) -> &mut Layer<'a> {
         self.latest_id += 1;
         self.layers.push(Layer::new(self.latest_id));
-        self.layers.first_mut().unwrap()
+        self.layers.iter_mut().last().unwrap()
+    }
+
+    pub fn draw(&mut self) {
+        for &l in &self.layer_stack {
+            l.draw_to(self.writer)
+        }
+    }
+
+    pub fn move_(&'a mut self, id: u32, new_position: Vector2D<usize>) {
+        if let Some(layer) = self.find_layer_mut(id) {
+            layer.move_(new_position);
+        }
+    }
+
+    pub fn move_relative(&'a mut self, id: u32, pos_diff: Vector2D<i32>) {
+        if let Some(layer) = self.find_layer_mut(id) {
+            layer.move_relative(pos_diff);
+        }
+    }
+
+    pub fn up_down(&'a mut self, id: u32, new_height: i32) {
+        if self.layers.is_empty() {
+            return;
+        }
+
+        if new_height.is_negative() {
+            self.hide(id);
+            return;
+        }
+
+        let new_height = {
+            let h = new_height as usize;
+            if h > self.layer_stack.len() {
+                self.layer_stack.len()
+            } else {
+                h
+            }
+        };
+
+        match self
+            .layer_stack
+            .iter()
+            .enumerate()
+            .find(|(_, &l)| l.id == id)
+        {
+            None => {
+                // in case of the layer doesn't show
+                let layer = self.layers.iter().find(|l| l.id == id).unwrap();
+                self.layer_stack.push(layer);
+            }
+            Some((old_index, &layer)) => {
+                let height = if new_height == self.layer_stack.len() - 1 {
+                    new_height - 1
+                } else {
+                    new_height
+                };
+                self.layer_stack.remove(old_index);
+                self.layer_stack.insert(height - 1, layer);
+            }
+        }
+    }
+
+    fn hide(&mut self, id: u32) {
+        if self.layers.is_empty() {
+            return;
+        }
+
+        let last_id = self.layer_stack.last().unwrap().id;
+        let hiding_index = self
+            .layers
+            .iter()
+            .position(|l| l.id == id && l.id != last_id);
+
+        if let Some(i) = hiding_index {
+            self.layer_stack.remove(i);
+        }
+    }
+
+    fn find_layer(&'a self, id: u32) -> Option<&'a Layer<'a>> {
+        return self.layers.iter().find(|&l| l.id == id);
+    }
+
+    fn find_layer_mut(&'a mut self, id: u32) -> Option<&'a mut Layer<'a>> {
+        return self.layers.iter_mut().find(|l| l.id == id);
     }
 }
