@@ -22,6 +22,9 @@ pub struct WindowWriter {
 
 impl Window {
     pub fn new(width: usize, height: usize) -> Self {
+        debug_assert!(width <= i32::MAX as usize);
+        debug_assert!(height <= i32::MAX as usize);
+
         let aw = Rc::new(RefCell::new(ActualWindow::new(width, height)));
         Self {
             actual: aw.clone(),
@@ -29,19 +32,15 @@ impl Window {
         }
     }
 
-    pub fn draw_to<W: PixelWriter + ?Sized>(&self, writer: &W, position: Vector2D<usize>) {
+    pub fn draw_to<W: PixelWriter + ?Sized>(&self, writer: &W, position: Vector2D<i32>) {
         match self.window().transparent_color {
             None => self.on_each_pixel(|x, y| {
-                writer.write(
-                    (position.x + x) as i32,
-                    (position.y + y) as i32,
-                    &self.at(x, y),
-                )
+                writer.write(position.x + x as i32, position.y + y as i32, &self.at(x, y))
             }),
             Some(transparent) => self.on_each_pixel(|x, y| {
                 let color = self.at(x, y);
                 if color != transparent {
-                    writer.write((position.x + x) as i32, (position.y + y) as i32, &color);
+                    writer.write(position.x + x as i32, position.y + y as i32, &color);
                 }
             }),
         }
@@ -103,7 +102,7 @@ impl PixelWriter for WindowWriter {
 }
 
 impl ActualWindow {
-    pub fn new(width: usize, height: usize) -> Self {
+    fn new(width: usize, height: usize) -> Self {
         let data: Vec<Vec<_>> = (0..height)
             .map(|_| (0..width).map(|_| PixelColor::new(0, 0, 0)).collect())
             .collect();

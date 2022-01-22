@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 
 pub struct Layer<'a> {
     id: u32,
-    position: Vector2D<usize>,
+    position: Vector2D<i32>,
     window: Option<&'a Window>,
 }
 
@@ -32,14 +32,14 @@ impl<'a> Layer<'a> {
         self.window
     }
 
-    pub fn move_(&mut self, pos: Vector2D<usize>) -> &mut Layer<'a> {
+    pub fn move_(&mut self, pos: Vector2D<i32>) -> &mut Layer<'a> {
         self.position = pos;
         self
     }
 
     pub fn move_relative(&mut self, diff: Vector2D<i32>) {
-        let x = usize_add(self.position.x, diff.x);
-        let y = usize_add(self.position.y, diff.y);
+        let x = self.position.x + diff.x;
+        let y = self.position.y + diff.y;
         self.position = Vector2D::new(x, y)
     }
 
@@ -48,16 +48,6 @@ impl<'a> Layer<'a> {
             w.draw_to(writer, self.position)
         }
     }
-}
-
-fn usize_add(u: usize, i: i32) -> usize {
-    if i.is_negative() {
-        let sub = i.wrapping_abs() as u32 as usize;
-        u.checked_sub(sub).unwrap_or(0) //TODO: position should be signed int
-    } else {
-        u.checked_add(i as usize).unwrap_or(0) //TODO position should be signed int
-    }
-    // .unwrap()
 }
 
 pub struct LayerManager<'a> {
@@ -93,7 +83,7 @@ impl<'a> LayerManager<'a> {
         }
     }
 
-    pub fn move_(&'a mut self, id: u32, new_position: Vector2D<usize>) {
+    pub fn move_(&'a mut self, id: u32, new_position: Vector2D<i32>) {
         if let Some(layer) = self.find_layer_mut(id) {
             layer.move_(new_position);
         }
