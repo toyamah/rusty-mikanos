@@ -1,7 +1,7 @@
-use crate::graphics::{PixelColor, PixelWriter};
 use crate::{console, layer_manager_op};
 use core::fmt;
 use core::fmt::Write;
+use lib::graphics::{PixelColor, PixelWriter};
 
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;

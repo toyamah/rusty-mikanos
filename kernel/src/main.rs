@@ -7,11 +7,11 @@
 extern crate alloc;
 
 use bit_field::BitField;
+use console::Console;
 use core::arch::asm;
 use core::borrow::BorrowMut;
 use core::panic::PanicInfo;
 use lib::asm::{set_csss, set_ds_all};
-use lib::console::Console;
 use lib::error::Error;
 use lib::graphics::{
     draw_desktop, FrameBufferWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
@@ -27,12 +27,27 @@ use lib::queue::ArrayQueue;
 use lib::segment::set_up_segment;
 use lib::usb::XhciController;
 use lib::window::Window;
-use lib::{console, interrupt, layer_manager, logger, pci, printk, usb, CONSOLE, LAYER_MANAGER};
+use lib::{interrupt, pci, usb};
 use log::{error, info};
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap};
 
-pub mod memory_allocator;
+mod console;
+mod logger;
+mod memory_allocator;
+
+pub static mut CONSOLE: Option<Console> = None;
+pub fn console() -> &'static mut Console<'static> {
+    unsafe { CONSOLE.as_mut().unwrap() }
+}
+
+pub static mut LAYER_MANAGER: Option<LayerManager> = None;
+pub fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
+    unsafe { LAYER_MANAGER.as_mut() }
+}
+pub fn layer_manager() -> &'static mut LayerManager<'static> {
+    unsafe { LAYER_MANAGER.as_mut().unwrap() }
+}
 
 pub static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
 pub fn pixel_writer() -> &'static mut FrameBufferWriter<'static> {
