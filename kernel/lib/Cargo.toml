@@ -1,12 +1,11 @@
 [package]
-name = "mikan_os_kernel"
+name = "lib"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lib = { path = "lib", version = "0.1.0" }
-shared = { path = "../shared", version = "0.1.0" }
+shared = { path = "../../shared", version = "0.1.0" }
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
 bit_field = "0.10.1"
