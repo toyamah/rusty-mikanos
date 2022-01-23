@@ -4,6 +4,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::{Ref, RefCell, RefMut};
 
+/// This struct is defined to aim to prevent circular dependency between [`ActualWindow`] and [`WindowWriter`].
 pub struct Window {
     actual: Rc<RefCell<ActualWindow>>,
     writer: WindowWriter,
