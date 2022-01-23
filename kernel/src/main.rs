@@ -30,8 +30,7 @@ use crate::asm::{set_csss, set_ds_all};
 use crate::console::Console;
 use crate::error::Error;
 use crate::graphics::{
-    draw_rectangle, fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Vector2D,
-    DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+    draw_desktop, FrameBufferWriter, PixelColor, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
 use crate::interrupt::setup_idt;
 use crate::layer::LayerManager;
@@ -141,7 +140,7 @@ pub extern "C" fn KernelMainNewStack(
     unsafe { FRAME_BUFFER_CONFIG = Some(*frame_buffer_config_) }
     let memory_map = *memory_map;
     initialize_global_vars(frame_buffer_config());
-    draw_background(pixel_writer());
+    draw_desktop(pixel_writer());
     printk!("Welcome to MikanOS!\n");
 
     let kernel_cs: u16 = 1 << 3;
@@ -225,7 +224,7 @@ pub extern "C" fn KernelMainNewStack(
             frame_buffer_config_.vertical_resolution as usize,
         ))
     }
-    draw_background(bg_window().writer());
+    draw_desktop(bg_window().writer());
     console().reset_writer(bg_window().writer());
 
     unsafe { MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window()) }
@@ -337,35 +336,6 @@ fn loop_and_hlt() -> ! {
     loop {
         unsafe { asm!("hlt") }
     }
-}
-
-fn draw_background<W: PixelWriter>(writer: &W) {
-    let width = writer.width();
-    let height = writer.height();
-    fill_rectangle(
-        writer,
-        &Vector2D::new(0, 0),
-        &Vector2D::new(width, height),
-        &DESKTOP_BG_COLOR,
-    );
-    fill_rectangle(
-        writer,
-        &Vector2D::new(0, height - 50),
-        &Vector2D::new(width, 50),
-        &PixelColor::new(1, 8, 17),
-    );
-    fill_rectangle(
-        writer,
-        &Vector2D::new(0, height - 50),
-        &Vector2D::new(width / 5, 50),
-        &PixelColor::new(80, 80, 80),
-    );
-    draw_rectangle(
-        writer,
-        &Vector2D::new(10, height - 40),
-        &Vector2D::new(30, 30),
-        &PixelColor::new(160, 160, 160),
-    );
 }
 
 fn enable_to_interrupt_for_xhc(xhc_device: &Device) -> Result<(), Error> {

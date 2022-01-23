@@ -138,7 +138,36 @@ impl<'a> FrameBufferWriter<'a> {
     }
 }
 
-pub fn fill_rectangle<W: PixelWriter>(
+pub fn draw_desktop<W: PixelWriter>(writer: &W) {
+    let width = writer.width();
+    let height = writer.height();
+    fill_rectangle(
+        writer,
+        &Vector2D::new(0, 0),
+        &Vector2D::new(width, height),
+        &DESKTOP_BG_COLOR,
+    );
+    fill_rectangle(
+        writer,
+        &Vector2D::new(0, height - 50),
+        &Vector2D::new(width, 50),
+        &PixelColor::new(1, 8, 17),
+    );
+    fill_rectangle(
+        writer,
+        &Vector2D::new(0, height - 50),
+        &Vector2D::new(width / 5, 50),
+        &PixelColor::new(80, 80, 80),
+    );
+    draw_rectangle(
+        writer,
+        &Vector2D::new(10, height - 40),
+        &Vector2D::new(30, 30),
+        &PixelColor::new(160, 160, 160),
+    );
+}
+
+fn fill_rectangle<W: PixelWriter>(
     writer: &W,
     pos: &Vector2D<i32>,
     size: &Vector2D<i32>,
@@ -151,7 +180,7 @@ pub fn fill_rectangle<W: PixelWriter>(
     }
 }
 
-pub fn draw_rectangle<W: PixelWriter>(
+fn draw_rectangle<W: PixelWriter>(
     writer: &W,
     pos: &Vector2D<i32>,
     size: &Vector2D<i32>,
