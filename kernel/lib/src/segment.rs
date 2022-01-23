@@ -23,43 +23,6 @@ impl SegmentDescriptor {
     const fn new() -> Self {
         Self(0)
     }
-    fn set_code_segment2(
-        self: &mut SegmentDescriptor,
-        type_: SegmentDescriptorType,
-        descriptor_privilege_level: u32,
-        base: u32,
-        limit: u32,
-    ) {
-        let base = base as u64;
-        self.set_base_low(base & 0xffff);
-        self.set_base_middle((base >> 16) & 0xff);
-        self.set_base_high((base >> 24) & 0xff);
-
-        let limit = limit as u64;
-        self.set_limit_low(limit & 0xffff);
-        self.set_limit_high((limit >> 16) & 0xf);
-
-        self.set_type(type_);
-        self.set_system_segment(1); // 1: code & data segment
-        self.set_descriptor_privilege_level(descriptor_privilege_level as u64);
-        self.set_present(1);
-        self.set_available(0);
-        self.set_long_mode(1);
-        self.set_default_operation_size(0); // should be 0 when long mode == 1
-        self.set_granularity(1);
-    }
-
-    pub fn set_data_segment2(
-        self: &mut SegmentDescriptor,
-        type_: SegmentDescriptorType,
-        descriptor_privilege_level: u32,
-        base: u32,
-        limit: u32,
-    ) {
-        self.set_code_segment(type_, descriptor_privilege_level, base, limit);
-        self.set_long_mode(0);
-        self.set_default_operation_size(1); // 32-bit stack segment
-    }
 
     fn set_code_segment(
         &mut self,

@@ -1,6 +1,5 @@
-use crate::graphics::PixelWriter;
+use crate::graphics::{PixelWriter, Vector2D};
 use crate::window::Window;
-use crate::Vector2D;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -153,9 +152,9 @@ impl<'a> LayerManager<'a> {
         }
     }
 
-    fn find_layer(&'a self, id: u32) -> Option<&'a Layer<'a>> {
-        return self.layers.iter().find(|&l| l.id == id);
-    }
+    // fn find_layer(&'a self, id: u32) -> Option<&'a Layer<'a>> {
+    //     return self.layers.iter().find(|&l| l.id == id);
+    // }
 
     fn find_layer_mut(&'a mut self, id: u32) -> Option<&'a mut Layer<'a>> {
         return self.layers.iter_mut().find(|l| l.id == id);

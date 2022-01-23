@@ -1,5 +1,5 @@
 use crate::graphics::{PixelColor, PixelWriter};
-use crate::layer_manager_op;
+use crate::{console, layer_manager_op};
 use core::fmt;
 use core::fmt::Write;
 
@@ -100,7 +100,7 @@ impl<'a> fmt::Write for Console<'a> {
 }
 
 pub fn _printk(args: fmt::Arguments) {
-    crate::console().write_fmt(args).unwrap();
+    console().write_fmt(args).unwrap();
 }
 
 #[macro_export]

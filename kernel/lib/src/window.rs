@@ -1,5 +1,4 @@
-use crate::graphics::PixelWriter;
-use crate::{PixelColor, Vector2D};
+use crate::graphics::{PixelColor, PixelWriter, Vector2D};
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::{Ref, RefCell, RefMut};

@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
-use log::{Metadata, Record};
-
 use log::{LevelFilter, SetLoggerError};
+use log::{Metadata, Record};
 
 const LOGGER: Logger = Logger;
 
