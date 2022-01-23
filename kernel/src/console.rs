@@ -1,4 +1,5 @@
 use crate::graphics::{PixelColor, PixelWriter};
+use crate::layer_manager_op;
 use core::fmt;
 use core::fmt::Write;
 
@@ -53,6 +54,10 @@ impl<'a> Console<'a> {
                 self.buffer[self.cursor_row][self.cursor_column] = char;
                 self.cursor_column += 1;
             }
+        }
+
+        if let Some(m) = layer_manager_op() {
+            m.draw();
         }
     }
 

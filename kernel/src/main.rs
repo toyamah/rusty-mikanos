@@ -82,6 +82,9 @@ fn memory_manager() -> &'static mut BitmapMemoryManager {
 }
 
 static mut LAYER_MANAGER: Option<LayerManager> = None;
+fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
+    unsafe { LAYER_MANAGER.as_mut() }
+}
 fn layer_manager() -> &'static mut LayerManager<'static> {
     unsafe { LAYER_MANAGER.as_mut().unwrap() }
 }
