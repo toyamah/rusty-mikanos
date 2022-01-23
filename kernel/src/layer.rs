@@ -121,13 +121,13 @@ impl<'a> LayerManager<'a> {
             .find(|(_, &l)| l.id == id)
         {
             None => {
-                // in case of the layer doesn't show
+                // in case of the layer doesn't show yet
                 let layer = self.layers.iter().find(|l| l.id == id).unwrap();
                 self.layer_stack.push(layer);
             }
             Some((old_index, &layer)) => {
                 let height = if new_height == self.layer_stack.len() - 1 {
-                    new_height - 1
+                    new_height - 1 // decrement because the stack will remove
                 } else {
                     new_height
                 };
