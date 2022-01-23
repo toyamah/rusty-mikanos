@@ -226,6 +226,7 @@ pub extern "C" fn KernelMainNewStack(
         ))
     }
     draw_background(bg_window().writer());
+    console().reset_writer(bg_window().writer());
 
     unsafe { MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window()) }
     draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));

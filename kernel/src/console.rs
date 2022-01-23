@@ -1,4 +1,4 @@
-use crate::graphics::{FrameBufferWriter, PixelColor, PixelWriter};
+use crate::graphics::{PixelColor, PixelWriter};
 use core::fmt;
 use core::fmt::Write;
 
@@ -6,7 +6,7 @@ const ROWS: usize = 25;
 const COLUMNS: usize = 80;
 
 pub struct Console<'a> {
-    writer: &'a FrameBufferWriter<'a>,
+    writer: &'a dyn PixelWriter,
     fg_color: PixelColor,
     bg_color: PixelColor,
     cursor_row: usize,
@@ -16,8 +16,8 @@ pub struct Console<'a> {
 }
 
 impl<'a> Console<'a> {
-    pub fn new(
-        writer: &'a FrameBufferWriter<'a>,
+    pub fn new<W: PixelWriter>(
+        writer: &'a W,
         fg_color: PixelColor,
         bg_color: PixelColor,
     ) -> Console<'a> {
@@ -29,6 +29,14 @@ impl<'a> Console<'a> {
             cursor_column: 0,
             buffer: [[char::from(0); COLUMNS + 1]; ROWS],
         }
+    }
+
+    pub fn reset_writer<W: PixelWriter>(&mut self, writer: &'a W) {
+        if self.writer as *const _ == writer as *const _ {
+            return;
+        }
+        self.writer = writer;
+        self.refresh();
     }
 
     pub fn put_string(&mut self, str: &str) {
@@ -69,6 +77,13 @@ impl<'a> Console<'a> {
         }
 
         self.buffer[ROWS - 1].fill(char::from(0));
+    }
+
+    fn refresh(&self) {
+        for (i, row) in self.buffer.iter().enumerate() {
+            self.writer
+                .write_chars(0, (16 * i) as i32, row, &self.fg_color);
+        }
     }
 }
 

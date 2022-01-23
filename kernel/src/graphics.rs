@@ -69,6 +69,18 @@ pub trait PixelWriter {
     fn write(&self, x: i32, y: i32, color: &PixelColor);
     fn width(&self) -> i32;
     fn height(&self) -> i32;
+
+    fn write_string(&self, x: i32, y: i32, str: &str, color: &PixelColor) {
+        font::write_string(self, x, y, str, color);
+    }
+
+    fn write_chars(&self, x: i32, y: i32, chars: &[char], color: &PixelColor) {
+        font::write_chars(self, x, y, chars, color);
+    }
+
+    fn write_ascii(&self, x: i32, y: i32, c: char, color: &PixelColor) {
+        font::write_ascii(self, x, y, c, color);
+    }
 }
 
 pub struct FrameBufferWriter<'a> {
@@ -99,18 +111,6 @@ impl<'a> FrameBufferWriter<'a> {
                 PixelFormat::KPixelBGRResv8BitPerColor => Self::write_bgr,
             },
         }
-    }
-
-    pub fn write_string(&self, x: i32, y: i32, str: &str, color: &PixelColor) {
-        font::write_string(self, x, y, str, color);
-    }
-
-    pub fn write_chars(&self, x: i32, y: i32, chars: &[char], color: &PixelColor) {
-        font::write_chars(self, x, y, chars, color);
-    }
-
-    pub fn write_ascii(&self, x: i32, y: i32, char: char, color: &PixelColor) {
-        font::write_ascii(self, x, y, char, color);
     }
 
     fn write_rgb(self: &Self, x: i32, y: i32, color: &PixelColor) {
