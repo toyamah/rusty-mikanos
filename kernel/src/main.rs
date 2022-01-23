@@ -2,6 +2,7 @@
 #![no_std]
 #![no_main]
 #![feature(abi_x86_interrupt)]
+#![feature(alloc_error_handler)]
 
 mod asm;
 mod console;
@@ -9,7 +10,9 @@ mod error;
 mod font;
 mod graphics;
 mod interrupt;
+mod layer;
 mod logger;
+mod memory_allocator;
 mod memory_manager;
 mod memory_map;
 mod mouse;
@@ -18,21 +21,29 @@ mod pci;
 mod queue;
 mod segment;
 mod usb;
+mod window;
 mod x86_descriptor;
+
+extern crate alloc;
 
 use crate::asm::{set_csss, set_ds_all};
 use crate::console::Console;
 use crate::error::Error;
-use crate::graphics::{PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
+use crate::graphics::{
+    draw_desktop, FrameBufferWriter, PixelColor, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+};
 use crate::interrupt::setup_idt;
+use crate::layer::LayerManager;
+use crate::memory_allocator::MemoryAllocator;
 use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use crate::memory_map::UEFI_PAGE_SIZE;
-use crate::mouse::MouseCursor;
+use crate::mouse::{draw_mouse_cursor, new_mouse_cursor_window};
 use crate::paging::setup_identity_page_table;
 use crate::pci::Device;
 use crate::queue::ArrayQueue;
 use crate::segment::set_up_segment;
 use crate::usb::XhciController;
+use crate::window::Window;
 use bit_field::BitField;
 use core::arch::asm;
 use core::borrow::BorrowMut;
@@ -40,9 +51,9 @@ use core::panic::PanicInfo;
 use log::{error, info};
 use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap};
 
-static mut PIXEL_WRITER: Option<PixelWriter> = None;
+static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
 
-fn pixel_writer() -> &'static mut PixelWriter<'static> {
+fn pixel_writer() -> &'static mut FrameBufferWriter<'static> {
     unsafe { PIXEL_WRITER.as_mut().unwrap() }
 }
 
@@ -50,12 +61,6 @@ static mut CONSOLE: Option<Console> = None;
 
 fn console() -> &'static mut Console<'static> {
     unsafe { CONSOLE.as_mut().unwrap() }
-}
-
-static mut MOUSE_CURSOR: Option<MouseCursor> = None;
-
-fn mouse_cursor() -> &'static mut MouseCursor<'static> {
-    unsafe { MOUSE_CURSOR.as_mut().unwrap() }
 }
 
 static mut XHCI_CONTROLLER: Option<XhciController> = None;
@@ -74,6 +79,32 @@ static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
 
 fn memory_manager() -> &'static mut BitmapMemoryManager {
     unsafe { MEMORY_MANAGER.borrow_mut() }
+}
+
+static mut LAYER_MANAGER: Option<LayerManager> = None;
+fn layer_manager() -> &'static mut LayerManager<'static> {
+    unsafe { LAYER_MANAGER.as_mut().unwrap() }
+}
+
+static mut BG_WINDOW: Option<Window> = None;
+fn bg_window() -> &'static mut Window {
+    unsafe { BG_WINDOW.as_mut().unwrap() }
+}
+fn bg_window_ref() -> &'static Window {
+    unsafe { BG_WINDOW.as_ref().unwrap() }
+}
+
+static mut MOUSE_CURSOR_WINDOW: Option<Window> = None;
+fn mouse_cursor_window() -> &'static mut Window {
+    unsafe { MOUSE_CURSOR_WINDOW.as_mut().unwrap() }
+}
+fn mouse_cursor_window_ref() -> &'static Window {
+    unsafe { MOUSE_CURSOR_WINDOW.as_ref().unwrap() }
+}
+
+static mut MOUSE_LAYER_ID: u32 = u32::MAX;
+fn mouse_layer_id() -> u32 {
+    unsafe { MOUSE_LAYER_ID }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -109,9 +140,8 @@ pub extern "C" fn KernelMainNewStack(
     unsafe { FRAME_BUFFER_CONFIG = Some(*frame_buffer_config_) }
     let memory_map = *memory_map;
     initialize_global_vars(frame_buffer_config());
-    draw_background(frame_buffer_config());
+    draw_desktop(pixel_writer());
     printk!("Welcome to MikanOS!\n");
-    mouse_cursor().draw();
 
     let kernel_cs: u16 = 1 << 3;
     let kernel_ss: u16 = 2 << 3;
@@ -188,6 +218,37 @@ pub extern "C" fn KernelMainNewStack(
 
     xhci_controller().configure_port();
 
+    unsafe {
+        BG_WINDOW = Some(Window::new(
+            frame_buffer_config_.horizontal_resolution as usize,
+            frame_buffer_config_.vertical_resolution as usize,
+        ))
+    }
+    draw_desktop(bg_window().writer());
+    console().reset_writer(bg_window().writer());
+
+    unsafe { MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window()) }
+    draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
+
+    unsafe { LAYER_MANAGER = Some(LayerManager::new(pixel_writer())) }
+    let bg_layer_id = layer_manager()
+        .new_layer()
+        .set_window(bg_window_ref())
+        .move_(Vector2D::new(0, 0))
+        .id();
+    {
+        let id = layer_manager()
+            .new_layer()
+            .set_window(mouse_cursor_window_ref())
+            .move_(Vector2D::new(200, 200))
+            .id();
+        unsafe { MOUSE_LAYER_ID = id }
+    }
+
+    layer_manager().up_down(bg_layer_id, 0);
+    layer_manager().up_down(mouse_layer_id(), 1);
+    layer_manager().draw();
+
     loop {
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
@@ -227,8 +288,20 @@ fn panic(_info: &PanicInfo) -> ! {
     loop_and_hlt()
 }
 
+#[global_allocator]
+static ALLOCATOR: MemoryAllocator = MemoryAllocator;
+
+#[alloc_error_handler]
+fn alloc_error_handle(layout: alloc::alloc::Layout) -> ! {
+    panic!("allocation error: {:?}", layout)
+}
+
 extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
-    mouse_cursor().move_relative(&Vector2D::new(displacement_x as i32, displacement_y as i32));
+    layer_manager().move_relative(
+        mouse_layer_id(),
+        Vector2D::new(displacement_x as i32, displacement_y as i32),
+    );
+    layer_manager().draw();
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
@@ -243,18 +316,12 @@ extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) 
 
 fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
     unsafe {
-        PIXEL_WRITER = Some(PixelWriter::new(frame_buffer_config));
+        PIXEL_WRITER = Some(FrameBufferWriter::new(frame_buffer_config));
 
         CONSOLE = Some(Console::new(
             pixel_writer(),
             DESKTOP_FG_COLOR,
             DESKTOP_BG_COLOR,
-        ));
-
-        MOUSE_CURSOR = Some(MouseCursor::new(
-            pixel_writer(),
-            &DESKTOP_BG_COLOR,
-            Vector2D::new(300, 200),
         ));
 
         MAIN_QUEUE = Some(ArrayQueue::new(&mut MESSAGES));
@@ -269,32 +336,6 @@ fn loop_and_hlt() -> ! {
     loop {
         unsafe { asm!("hlt") }
     }
-}
-
-fn draw_background(frame_buffer_config: &FrameBufferConfig) {
-    let frame_width = frame_buffer_config.horizontal_resolution as i32;
-    let frame_height = frame_buffer_config.vertical_resolution as i32;
-    let writer = pixel_writer();
-    writer.fill_rectangle(
-        &Vector2D::new(0, 0),
-        &Vector2D::new(frame_width, frame_height),
-        &DESKTOP_BG_COLOR,
-    );
-    writer.fill_rectangle(
-        &Vector2D::new(0, frame_height - 50),
-        &Vector2D::new(frame_width, 50),
-        &PixelColor::new(1, 8, 17),
-    );
-    writer.fill_rectangle(
-        &Vector2D::new(0, frame_height - 50),
-        &Vector2D::new(frame_width / 5, 50),
-        &PixelColor::new(80, 80, 80),
-    );
-    writer.draw_rectange(
-        &Vector2D::new(10, frame_height - 40),
-        &Vector2D::new(30, 30),
-        &PixelColor::new(160, 160, 160),
-    );
 }
 
 fn enable_to_interrupt_for_xhc(xhc_device: &Device) -> Result<(), Error> {

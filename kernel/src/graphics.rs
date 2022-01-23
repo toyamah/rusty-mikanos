@@ -16,7 +16,7 @@ pub const DESKTOP_BG_COLOR: PixelColor = PixelColor {
 };
 pub const DESKTOP_FG_COLOR: PixelColor = COLOR_BLACK;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct PixelColor {
     r: u8,
     g: u8,
@@ -60,17 +60,49 @@ where
 }
 
 impl PixelColor {
-    pub fn new(r: u8, g: u8, b: u8) -> PixelColor {
+    pub const fn new(r: u8, g: u8, b: u8) -> PixelColor {
         PixelColor { r, g, b }
     }
 }
 
-pub struct PixelWriter<'a> {
+pub trait PixelWriter {
+    fn write(&self, x: i32, y: i32, color: &PixelColor);
+    fn width(&self) -> i32;
+    fn height(&self) -> i32;
+
+    fn write_string(&self, x: i32, y: i32, str: &str, color: &PixelColor) {
+        font::write_string(self, x, y, str, color);
+    }
+
+    fn write_chars(&self, x: i32, y: i32, chars: &[char], color: &PixelColor) {
+        font::write_chars(self, x, y, chars, color);
+    }
+
+    fn write_ascii(&self, x: i32, y: i32, c: char, color: &PixelColor) {
+        font::write_ascii(self, x, y, c, color);
+    }
+}
+
+pub struct FrameBufferWriter<'a> {
     config: &'a FrameBufferConfig,
     write_fn: fn(&Self, x: i32, y: i32, &PixelColor) -> (),
 }
 
-impl<'a> PixelWriter<'a> {
+impl<'a> PixelWriter for FrameBufferWriter<'a> {
+    fn write(&self, x: i32, y: i32, color: &PixelColor) {
+        (self.write_fn)(self, x, y, color);
+    }
+
+    fn width(&self) -> i32 {
+        self.config.horizontal_resolution as i32
+    }
+
+    fn height(&self) -> i32 {
+        self.config.vertical_resolution as i32
+    }
+}
+
+impl<'a> FrameBufferWriter<'a> {
     pub fn new(config: &'a FrameBufferConfig) -> Self {
         Self {
             config,
@@ -78,41 +110,6 @@ impl<'a> PixelWriter<'a> {
                 PixelFormat::KPixelRGBResv8BitPerColor => Self::write_rgb,
                 PixelFormat::KPixelBGRResv8BitPerColor => Self::write_bgr,
             },
-        }
-    }
-
-    pub fn write_string(&self, x: i32, y: i32, str: &str, color: &PixelColor) {
-        font::write_string(self, x, y, str, color);
-    }
-
-    pub fn write_chars(&self, x: i32, y: i32, chars: &[char], color: &PixelColor) {
-        font::write_chars(self, x, y, chars, color);
-    }
-
-    pub fn write_ascii(&self, x: i32, y: i32, char: char, color: &PixelColor) {
-        font::write_ascii(self, x, y, char, color);
-    }
-
-    pub fn write(&self, x: i32, y: i32, color: &PixelColor) {
-        (self.write_fn)(self, x, y, color);
-    }
-
-    pub fn draw_rectange(&self, pos: &Vector2D<i32>, size: &Vector2D<i32>, c: &PixelColor) {
-        for dx in 0..size.x {
-            self.write(pos.x + dx, pos.y, c);
-            self.write(pos.x + dx, pos.y + size.y - 1, c);
-        }
-        for dy in 0..size.y {
-            self.write(pos.x, pos.y + dy, c);
-            self.write(pos.x + size.x - 1, pos.y + dy, c);
-        }
-    }
-
-    pub fn fill_rectangle(&self, pos: &Vector2D<i32>, size: &Vector2D<i32>, c: &PixelColor) {
-        for dy in 0..size.y {
-            for dx in 0..size.x {
-                self.write(pos.x + dx, pos.y + dy, c);
-            }
         }
     }
 
@@ -138,5 +135,63 @@ impl<'a> PixelWriter<'a> {
         let pixel_position = self.config.pixels_per_scan_line as i32 * y + x;
         let base = (4 * pixel_position) as isize;
         unsafe { self.config.frame_buffer.offset(base) }
+    }
+}
+
+pub fn draw_desktop<W: PixelWriter>(writer: &W) {
+    let width = writer.width();
+    let height = writer.height();
+    fill_rectangle(
+        writer,
+        &Vector2D::new(0, 0),
+        &Vector2D::new(width, height),
+        &DESKTOP_BG_COLOR,
+    );
+    fill_rectangle(
+        writer,
+        &Vector2D::new(0, height - 50),
+        &Vector2D::new(width, 50),
+        &PixelColor::new(1, 8, 17),
+    );
+    fill_rectangle(
+        writer,
+        &Vector2D::new(0, height - 50),
+        &Vector2D::new(width / 5, 50),
+        &PixelColor::new(80, 80, 80),
+    );
+    draw_rectangle(
+        writer,
+        &Vector2D::new(10, height - 40),
+        &Vector2D::new(30, 30),
+        &PixelColor::new(160, 160, 160),
+    );
+}
+
+fn fill_rectangle<W: PixelWriter>(
+    writer: &W,
+    pos: &Vector2D<i32>,
+    size: &Vector2D<i32>,
+    c: &PixelColor,
+) {
+    for dy in 0..size.y {
+        for dx in 0..size.x {
+            writer.write(pos.x + dx, pos.y + dy, c);
+        }
+    }
+}
+
+fn draw_rectangle<W: PixelWriter>(
+    writer: &W,
+    pos: &Vector2D<i32>,
+    size: &Vector2D<i32>,
+    c: &PixelColor,
+) {
+    for dx in 0..size.x {
+        writer.write(pos.x + dx, pos.y, c);
+        writer.write(pos.x + dx, pos.y + size.y - 1, c);
+    }
+    for dy in 0..size.y {
+        writer.write(pos.x, pos.y + dy, c);
+        writer.write(pos.x + size.x - 1, pos.y + dy, c);
     }
 }
