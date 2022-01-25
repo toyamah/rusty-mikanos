@@ -25,16 +25,17 @@ use lib::paging::setup_identity_page_table;
 use lib::pci::Device;
 use lib::queue::ArrayQueue;
 use lib::segment::set_up_segment;
-use lib::usb::XhciController;
 use lib::window::Window;
-use lib::{interrupt, pci, usb};
+use lib::{interrupt, pci};
 use log::{error, info};
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap};
+use usb::XhciController;
 
 mod console;
 mod logger;
 mod memory_allocator;
+pub mod usb;
 
 pub static mut CONSOLE: Option<Console> = None;
 pub fn console() -> &'static mut Console<'static> {

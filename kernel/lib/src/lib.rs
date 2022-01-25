@@ -16,7 +16,6 @@ pub mod paging;
 pub mod pci;
 pub mod queue;
 pub mod segment;
-pub mod usb;
 pub mod window;
 mod x86_descriptor;
 
