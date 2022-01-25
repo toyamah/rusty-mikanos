@@ -35,67 +35,67 @@ use usb::XhciController;
 mod console;
 mod logger;
 mod memory_allocator;
-pub mod usb;
+mod usb;
 
-pub static mut CONSOLE: Option<Console> = None;
-pub fn console() -> &'static mut Console<'static> {
+static mut CONSOLE: Option<Console> = None;
+fn console() -> &'static mut Console<'static> {
     unsafe { CONSOLE.as_mut().unwrap() }
 }
 
-pub static mut LAYER_MANAGER: Option<LayerManager> = None;
-pub fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
+static mut LAYER_MANAGER: Option<LayerManager> = None;
+fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
     unsafe { LAYER_MANAGER.as_mut() }
 }
-pub fn layer_manager() -> &'static mut LayerManager<'static> {
+fn layer_manager() -> &'static mut LayerManager<'static> {
     unsafe { LAYER_MANAGER.as_mut().unwrap() }
 }
 
-pub static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
-pub fn pixel_writer() -> &'static mut FrameBufferWriter<'static> {
+static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
+fn pixel_writer() -> &'static mut FrameBufferWriter<'static> {
     unsafe { PIXEL_WRITER.as_mut().unwrap() }
 }
 
-pub static mut XHCI_CONTROLLER: Option<XhciController> = None;
-pub fn xhci_controller() -> &'static mut XhciController {
+static mut XHCI_CONTROLLER: Option<XhciController> = None;
+fn xhci_controller() -> &'static mut XhciController {
     unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
 }
 
-pub static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
-pub fn frame_buffer_config() -> &'static mut FrameBufferConfig {
+static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
+fn frame_buffer_config() -> &'static mut FrameBufferConfig {
     unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
 }
 
-pub static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
-pub fn memory_manager() -> &'static mut BitmapMemoryManager {
+static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
+fn memory_manager() -> &'static mut BitmapMemoryManager {
     unsafe { MEMORY_MANAGER.borrow_mut() }
 }
 
-pub static mut BG_WINDOW: Option<Window> = None;
-pub fn bg_window() -> &'static mut Window {
+static mut BG_WINDOW: Option<Window> = None;
+fn bg_window() -> &'static mut Window {
     unsafe { BG_WINDOW.as_mut().unwrap() }
 }
-pub fn bg_window_ref() -> &'static Window {
+fn bg_window_ref() -> &'static Window {
     unsafe { BG_WINDOW.as_ref().unwrap() }
 }
 
-pub static mut MOUSE_CURSOR_WINDOW: Option<Window> = None;
-pub fn mouse_cursor_window() -> &'static mut Window {
+static mut MOUSE_CURSOR_WINDOW: Option<Window> = None;
+fn mouse_cursor_window() -> &'static mut Window {
     unsafe { MOUSE_CURSOR_WINDOW.as_mut().unwrap() }
 }
-pub fn mouse_cursor_window_ref() -> &'static Window {
+fn mouse_cursor_window_ref() -> &'static Window {
     unsafe { MOUSE_CURSOR_WINDOW.as_ref().unwrap() }
 }
 
-pub static mut MOUSE_LAYER_ID: u32 = u32::MAX;
-pub fn mouse_layer_id() -> u32 {
+static mut MOUSE_LAYER_ID: u32 = u32::MAX;
+fn mouse_layer_id() -> u32 {
     unsafe { MOUSE_LAYER_ID }
 }
 
 #[repr(align(16))]
-pub struct KernelMainStack([u8; 1024 * 1024]);
+struct KernelMainStack([u8; 1024 * 1024]);
 
 #[no_mangle]
-pub static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]);
+static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]);
 
 #[derive(Copy, Clone, Debug)]
 struct Message {
