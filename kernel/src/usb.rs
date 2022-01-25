@@ -1,6 +1,6 @@
-use crate::error::Code::*;
-use crate::error::{Code, Error};
-use crate::make_error;
+use lib::error::Code::*;
+use lib::error::{Code, Error};
+use lib::make_error;
 use log::{error, trace};
 
 extern "C" {

@@ -1,5 +1,5 @@
-use crate::error::Code;
-use crate::{make_error, Error};
+use crate::error::{Code, Error};
+use crate::make_error;
 use core::ffi::c_void;
 
 const fn kib(kib: u64) -> u64 {
@@ -19,7 +19,7 @@ const fn gib(gib: u64) -> u64 {
 //
 
 pub const BYTES_PER_FRAME: usize = kib(4) as usize;
-const NULL_FRAME: FrameID = FrameID(usize::MAX);
+// const NULL_FRAME: FrameID = FrameID(usize::MAX);
 
 #[derive(Copy, Clone, Debug)]
 pub struct FrameID(usize);

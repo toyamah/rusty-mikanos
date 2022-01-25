@@ -23,7 +23,7 @@ pub struct PixelColor {
     b: u8,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Vector2D<T> {
     pub x: T,
     pub y: T,

@@ -1,6 +1,5 @@
-use crate::graphics::PixelWriter;
+use crate::graphics::{PixelWriter, Vector2D};
 use crate::window::Window;
-use crate::Vector2D;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -83,14 +82,14 @@ impl<'a> LayerManager<'a> {
         }
     }
 
-    pub fn move_(&'a mut self, id: u32, new_position: Vector2D<i32>) {
-        if let Some(layer) = self.find_layer_mut(id) {
+    pub fn move_(&mut self, id: u32, new_position: Vector2D<i32>) {
+        if let Some(layer) = self.layers.iter_mut().find(|l| l.id == id) {
             layer.move_(new_position);
         }
     }
 
-    pub fn move_relative(&'a mut self, id: u32, pos_diff: Vector2D<i32>) {
-        if let Some(layer) = self.find_layer_mut(id) {
+    pub fn move_relative(&mut self, id: u32, pos_diff: Vector2D<i32>) {
+        if let Some(layer) = self.layers.iter_mut().find(|l| l.id == id) {
             layer.move_relative(pos_diff);
         }
     }
@@ -152,12 +151,75 @@ impl<'a> LayerManager<'a> {
             self.layer_stack.remove(i);
         }
     }
+}
 
-    fn find_layer(&'a self, id: u32) -> Option<&'a Layer<'a>> {
-        return self.layers.iter().find(|&l| l.id == id);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graphics::PixelColor;
+    use core::cell::RefCell;
+
+    struct MockWriter {
+        width: i32,
+        height: i32,
+        write_history: RefCell<Vec<(i32, i32, PixelColor)>>,
     }
 
-    fn find_layer_mut(&'a mut self, id: u32) -> Option<&'a mut Layer<'a>> {
-        return self.layers.iter_mut().find(|l| l.id == id);
+    impl MockWriter {
+        fn new(width: i32, height: i32) -> Self {
+            Self {
+                width,
+                height,
+                write_history: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl PixelWriter for MockWriter {
+        fn write(&self, x: i32, y: i32, color: &PixelColor) {
+            self.write_history.borrow_mut().push((x, y, *color))
+        }
+
+        fn width(&self) -> i32 {
+            self.width
+        }
+
+        fn height(&self) -> i32 {
+            self.height
+        }
+    }
+
+    #[test]
+    fn move_() {
+        let writer = MockWriter::new(1, 2);
+        let window1 = Window::new(1, 1);
+        let mut lm = LayerManager::new(&writer);
+        let id1 = lm.new_layer().set_window(&window1).id();
+
+        lm.move_(id1, Vector2D::new(100, 10));
+
+        assert_eq!(layer(&lm, id1).position, Vector2D::new(100, 10));
+    }
+
+    #[test]
+    fn move_relative() {
+        let writer = MockWriter::new(1, 2);
+        let window1 = Window::new(1, 1);
+        let mut lm = LayerManager::new(&writer);
+        let id1 = lm
+            .new_layer()
+            .set_window(&window1)
+            .move_(Vector2D::new(100, 100))
+            .id();
+
+        lm.move_relative(id1, Vector2D::new(-50, -30));
+        assert_eq!(layer(&lm, id1).position, Vector2D::new(50, 70));
+
+        lm.move_relative(id1, Vector2D::new(-60, -60));
+        assert_eq!(layer(&lm, id1).position, Vector2D::new(-10, 10));
+    }
+
+    fn layer<'a>(lm: &'a LayerManager, id: u32) -> &'a Layer<'a> {
+        lm.layers.iter().find(|l| l.id == id).unwrap()
     }
 }

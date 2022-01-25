@@ -1,5 +1,5 @@
-use crate::error::Code;
-use crate::{make_error, Error};
+use crate::error::{Code, Error};
+use crate::make_error;
 
 pub struct ArrayQueue<'a, T, const N: usize> {
     data: &'a mut [T; N],

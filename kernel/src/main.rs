@@ -4,81 +4,42 @@
 #![feature(abi_x86_interrupt)]
 #![feature(alloc_error_handler)]
 
-mod asm;
-mod console;
-mod error;
-mod font;
-mod graphics;
-mod interrupt;
-mod layer;
-mod logger;
-mod memory_allocator;
-mod memory_manager;
-mod memory_map;
-mod mouse;
-mod paging;
-mod pci;
-mod queue;
-mod segment;
-mod usb;
-mod window;
-mod x86_descriptor;
-
 extern crate alloc;
 
-use crate::asm::{set_csss, set_ds_all};
-use crate::console::Console;
-use crate::error::Error;
-use crate::graphics::{
-    draw_desktop, FrameBufferWriter, PixelColor, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
-};
-use crate::interrupt::setup_idt;
-use crate::layer::LayerManager;
-use crate::memory_allocator::MemoryAllocator;
-use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
-use crate::memory_map::UEFI_PAGE_SIZE;
-use crate::mouse::{draw_mouse_cursor, new_mouse_cursor_window};
-use crate::paging::setup_identity_page_table;
-use crate::pci::Device;
-use crate::queue::ArrayQueue;
-use crate::segment::set_up_segment;
-use crate::usb::XhciController;
-use crate::window::Window;
 use bit_field::BitField;
+use console::Console;
 use core::arch::asm;
 use core::borrow::BorrowMut;
 use core::panic::PanicInfo;
+use lib::asm::{set_csss, set_ds_all};
+use lib::error::Error;
+use lib::graphics::{
+    draw_desktop, FrameBufferWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+};
+use lib::interrupt::setup_idt;
+use lib::layer::LayerManager;
+use lib::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
+use lib::memory_map::UEFI_PAGE_SIZE;
+use lib::mouse::{draw_mouse_cursor, new_mouse_cursor_window};
+use lib::paging::setup_identity_page_table;
+use lib::pci::Device;
+use lib::queue::ArrayQueue;
+use lib::segment::set_up_segment;
+use lib::window::Window;
+use lib::{interrupt, pci};
 use log::{error, info};
+use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap};
+use usb::XhciController;
 
-static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
-
-fn pixel_writer() -> &'static mut FrameBufferWriter<'static> {
-    unsafe { PIXEL_WRITER.as_mut().unwrap() }
-}
+mod console;
+mod logger;
+mod memory_allocator;
+mod usb;
 
 static mut CONSOLE: Option<Console> = None;
-
 fn console() -> &'static mut Console<'static> {
     unsafe { CONSOLE.as_mut().unwrap() }
-}
-
-static mut XHCI_CONTROLLER: Option<XhciController> = None;
-
-fn xhci_controller() -> &'static mut XhciController {
-    unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
-}
-
-static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
-
-fn frame_buffer_config() -> &'static mut FrameBufferConfig {
-    unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
-}
-
-static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
-
-fn memory_manager() -> &'static mut BitmapMemoryManager {
-    unsafe { MEMORY_MANAGER.borrow_mut() }
 }
 
 static mut LAYER_MANAGER: Option<LayerManager> = None;
@@ -87,6 +48,26 @@ fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
 }
 fn layer_manager() -> &'static mut LayerManager<'static> {
     unsafe { LAYER_MANAGER.as_mut().unwrap() }
+}
+
+static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
+fn pixel_writer() -> &'static mut FrameBufferWriter<'static> {
+    unsafe { PIXEL_WRITER.as_mut().unwrap() }
+}
+
+static mut XHCI_CONTROLLER: Option<XhciController> = None;
+fn xhci_controller() -> &'static mut XhciController {
+    unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
+}
+
+static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
+fn frame_buffer_config() -> &'static mut FrameBufferConfig {
+    unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
+}
+
+static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
+fn memory_manager() -> &'static mut BitmapMemoryManager {
+    unsafe { MEMORY_MANAGER.borrow_mut() }
 }
 
 static mut BG_WINDOW: Option<Window> = None;
@@ -110,6 +91,12 @@ fn mouse_layer_id() -> u32 {
     unsafe { MOUSE_LAYER_ID }
 }
 
+#[repr(align(16))]
+struct KernelMainStack([u8; 1024 * 1024]);
+
+#[no_mangle]
+static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]);
+
 #[derive(Copy, Clone, Debug)]
 struct Message {
     m_type: MessageType,
@@ -128,12 +115,6 @@ static mut MAIN_QUEUE: Option<ArrayQueue<Message, 32>> = None;
 fn main_queue() -> &'static mut ArrayQueue<'static, Message, 32> {
     unsafe { MAIN_QUEUE.as_mut().unwrap() }
 }
-
-#[repr(align(16))]
-pub struct KernelMainStack([u8; 1024 * 1024]);
-
-#[no_mangle]
-static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]);
 
 #[no_mangle] // disable name mangling
 pub extern "C" fn KernelMainNewStack(
