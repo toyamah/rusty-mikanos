@@ -25,6 +25,7 @@ use lib::paging::setup_identity_page_table;
 use lib::pci::Device;
 use lib::queue::ArrayQueue;
 use lib::segment::set_up_segment;
+use lib::timer::{initialize_api_timer, measure_time};
 use lib::window::Window;
 use lib::{interrupt, pci};
 use log::{error, info};
@@ -126,6 +127,7 @@ pub extern "C" fn KernelMainNewStack(
     initialize_global_vars(frame_buffer_config());
     draw_desktop(pixel_writer());
     printk!("Welcome to MikanOS!\n");
+    initialize_api_timer();
 
     let kernel_cs: u16 = 1 << 3;
     let kernel_ss: u16 = 2 << 3;
@@ -285,7 +287,8 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
         mouse_layer_id(),
         Vector2D::new(displacement_x as i32, displacement_y as i32),
     );
-    layer_manager().draw();
+    let time = measure_time(|| layer_manager().draw());
+    printk!("mouse draw = {:?}ms\n", time);
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
