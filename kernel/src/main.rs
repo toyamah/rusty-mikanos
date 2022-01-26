@@ -288,7 +288,7 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
         Vector2D::new(displacement_x as i32, displacement_y as i32),
     );
     let time = measure_time(|| layer_manager().draw());
-    printk!("mouse draw = {:?}ms\n", time);
+    printk!("mouse draw = {}\n", time);
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {

@@ -1,5 +1,3 @@
-use core::time::Duration;
-
 const COUNT_MAX: u32 = 0xffffffff;
 
 pub fn initialize_api_timer() {
@@ -9,7 +7,7 @@ pub fn initialize_api_timer() {
     }
 }
 
-pub fn measure_time<F>(f: F) -> Duration
+pub fn measure_time<F>(f: F) -> u32
 where
     F: FnOnce() -> (),
 {
@@ -17,7 +15,7 @@ where
     f();
     let time = lapic_timer_elapsed();
     stop_lapic_timer();
-    Duration::from_millis(time as u64)
+    time
 }
 
 fn start_lapic_timer() {
