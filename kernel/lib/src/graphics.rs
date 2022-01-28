@@ -83,12 +83,12 @@ pub trait PixelWriter {
     }
 }
 
-pub struct FrameBufferWriter<'a> {
-    config: &'a FrameBufferConfig,
+pub struct FrameBufferWriter {
+    config: FrameBufferConfig,
     write_fn: fn(&Self, x: i32, y: i32, &PixelColor) -> (),
 }
 
-impl<'a> PixelWriter for FrameBufferWriter<'a> {
+impl PixelWriter for FrameBufferWriter {
     fn write(&self, x: i32, y: i32, color: &PixelColor) {
         (self.write_fn)(self, x, y, color);
     }
@@ -102,8 +102,8 @@ impl<'a> PixelWriter for FrameBufferWriter<'a> {
     }
 }
 
-impl<'a> FrameBufferWriter<'a> {
-    pub fn new(config: &'a FrameBufferConfig) -> Self {
+impl FrameBufferWriter {
+    pub fn new(config: FrameBufferConfig) -> Self {
         Self {
             config,
             write_fn: match config.pixel_format {

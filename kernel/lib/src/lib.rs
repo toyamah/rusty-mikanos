@@ -6,6 +6,7 @@ use crate::window::Window;
 pub mod asm;
 pub mod error;
 mod font;
+pub mod frame_buffer;
 pub mod graphics;
 pub mod interrupt;
 pub mod layer;
