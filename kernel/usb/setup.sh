@@ -31,6 +31,7 @@ parse_params() {
 make_links() {
   mkdir -p usb/classdriver
   mkdir -p usb/xhci
+  mkdir -p test
 
   cd "$script_dir"
   for file in $files; do

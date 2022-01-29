@@ -67,3 +67,8 @@ extern "C" {
 extern "C" void __cxa_pure_virtual() {
   while (1) __asm__("hlt");
 }
+
+// libcxx_support.cpp depends on printk function
+int printk(const char* format, ...) {
+  // noop
+}
