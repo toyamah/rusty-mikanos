@@ -19,6 +19,7 @@ impl FrameBuffer {
                 * config.vertical_resolution as usize;
             let mut buf: Vec<u8> = (0..cap).map(|_| 0).collect();
             config.frame_buffer = buf.as_mut_ptr();
+            config.pixels_per_scan_line = config.horizontal_resolution;
             buf
         } else {
             vec![]

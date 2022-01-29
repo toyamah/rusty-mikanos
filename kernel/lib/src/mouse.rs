@@ -30,8 +30,9 @@ const MOUSE_CURSOR_SHAPE: [&str; 24] = [
     "         @@@   ",
 ];
 
-pub fn draw_mouse_cursor<W: PixelWriter>(pixel_writer: &W, position: &Vector2D<i32>) {
-    // pub fn draw_mouse_cursor(pixel_writer: &FrameBufferWriter, position: &Vector2D<i32>) {
+// don't know why Rust cannot compile this signature
+// pub fn draw_mouse_cursor<W: PixelWriter>(writer: &W, position: &Vector2D<i32>) {
+pub fn draw_mouse_cursor(writer: &Window, position: &Vector2D<i32>) {
     for (dy, row) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
         for (dx, char) in row.chars().enumerate() {
             let color = match char {
@@ -39,7 +40,7 @@ pub fn draw_mouse_cursor<W: PixelWriter>(pixel_writer: &W, position: &Vector2D<i
                 '.' => &COLOR_BLACK,
                 _ => &MOUSE_TRANSPARENT_COLOR,
             };
-            pixel_writer.write(position.x + dx as i32, position.y + dy as i32, color);
+            writer.write(position.x + dx as i32, position.y + dy as i32, color);
         }
     }
 }

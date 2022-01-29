@@ -1,5 +1,5 @@
 use crate::frame_buffer::FrameBuffer;
-use crate::graphics::{FrameBufferWriter, PixelColor, PixelWriter, Vector2D};
+use crate::graphics::{PixelColor, PixelWriter, Vector2D};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use shared::{FrameBufferConfig, PixelFormat};
@@ -10,7 +10,7 @@ pub struct Window {
     height: usize,
     //TODO: try to define without RefCel
     data: RefCell<Vec<Vec<PixelColor>>>,
-    shadow_buffer: RefCell<FrameBuffer>,
+    pub shadow_buffer: RefCell<FrameBuffer>,
     transparent_color: Option<PixelColor>,
 }
 
@@ -53,8 +53,9 @@ impl Window {
         self.transparent_color = Some(c);
     }
 
-    pub fn writer(&mut self) -> &FrameBufferWriter {
-        self.shadow_buffer.get_mut().writer()
+    pub fn writer(&mut self) -> &Window {
+        // returns self because My Window implements PixelWriter and removed WindowPixelWriter which the Official MikanOS defined.
+        self
     }
 
     fn on_each_pixel<F>(&self, mut f: F)
