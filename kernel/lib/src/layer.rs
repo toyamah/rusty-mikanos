@@ -67,10 +67,6 @@ impl<'a> LayerManager<'a> {
         }
     }
 
-    // pub fn set_writer<W: PixelWriter>(&mut self, writer: &'a W) {
-    //     self.writer = writer
-    // }
-
     pub fn new_layer(&mut self) -> &mut Layer<'a> {
         self.latest_id += 1;
         self.layers.push(Layer::new(self.latest_id));
