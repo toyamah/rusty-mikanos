@@ -7,13 +7,14 @@ use shared::FrameBufferConfig;
 
 pub struct FrameBuffer {
     config: FrameBufferConfig,
-    buffer: Vec<u8>,
+    // unused. handle it through config.frame_buffer instead.
+    _buffer: Vec<u8>,
     writer: FrameBufferWriter,
 }
 
 impl FrameBuffer {
     pub fn new(mut config: FrameBufferConfig) -> Self {
-        let buffer = if config.frame_buffer.is_null() {
+        let _buffer = if config.frame_buffer.is_null() {
             let cap = config.pixel_format.bytes_per_pixel()
                 * config.horizontal_resolution as usize
                 * config.vertical_resolution as usize;
@@ -26,7 +27,7 @@ impl FrameBuffer {
         };
         Self {
             config,
-            buffer,
+            _buffer,
             writer: FrameBufferWriter::new(config),
         }
     }
@@ -52,10 +53,14 @@ impl FrameBuffer {
         let bytes_per_copy_line = bytes_per_pixel * (copy_end_dst_x - copy_start_dst_x) as usize;
 
         let pixels_per_scan_line = self.config.pixels_per_scan_line as usize;
-        let i = bytes_per_pixel
-            * (pixels_per_scan_line * copy_start_dst_y as usize + copy_start_dst_x as usize);
+        let pixel_position =
+            pixels_per_scan_line * copy_start_dst_y as usize + copy_start_dst_x as usize;
 
-        let mut dst_buf = unsafe { self.config.frame_buffer.offset(i as isize) };
+        let mut dst_buf = unsafe {
+            self.config
+                .frame_buffer
+                .offset((bytes_per_pixel * pixel_position) as isize)
+        };
         let mut src_buf = src.config.frame_buffer;
 
         for _ in 0..copy_end_dst_y - copy_start_dst_y {
