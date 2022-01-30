@@ -13,6 +13,7 @@ use core::borrow::BorrowMut;
 use core::panic::PanicInfo;
 use lib::asm::{set_csss, set_ds_all};
 use lib::error::Error;
+use lib::frame_buffer::FrameBuffer;
 use lib::graphics::{
     draw_desktop, FrameBufferWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
@@ -52,7 +53,7 @@ fn layer_manager() -> &'static mut LayerManager<'static> {
 }
 
 static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
-fn pixel_writer() -> &'static mut FrameBufferWriter<'static> {
+fn pixel_writer() -> &'static mut FrameBufferWriter {
     unsafe { PIXEL_WRITER.as_mut().unwrap() }
 }
 
@@ -92,6 +93,11 @@ fn mouse_layer_id() -> u32 {
     unsafe { MOUSE_LAYER_ID }
 }
 
+static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
+fn screen_frame_buffer() -> &'static mut FrameBuffer {
+    unsafe { SCREEN_FRAME_BUFFER.as_mut().unwrap() }
+}
+
 #[repr(align(16))]
 struct KernelMainStack([u8; 1024 * 1024]);
 
@@ -124,7 +130,7 @@ pub extern "C" fn KernelMainNewStack(
 ) -> ! {
     unsafe { FRAME_BUFFER_CONFIG = Some(*frame_buffer_config_) }
     let memory_map = *memory_map;
-    initialize_global_vars(frame_buffer_config());
+    initialize_global_vars(*frame_buffer_config_);
     draw_desktop(pixel_writer());
     printk!("Welcome to MikanOS!\n");
     initialize_api_timer();
@@ -208,15 +214,19 @@ pub extern "C" fn KernelMainNewStack(
         BG_WINDOW = Some(Window::new(
             frame_buffer_config_.horizontal_resolution as usize,
             frame_buffer_config_.vertical_resolution as usize,
+            frame_buffer_config().pixel_format,
         ))
     }
     draw_desktop(bg_window().writer());
     console().reset_writer(bg_window().writer());
 
-    unsafe { MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window()) }
-    draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
+    unsafe {
+        MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window(frame_buffer_config().pixel_format))
+    }
+    draw_mouse_cursor(&mouse_cursor_window().writer(), &Vector2D::new(0, 0));
 
-    unsafe { LAYER_MANAGER = Some(LayerManager::new(pixel_writer())) }
+    unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
+    unsafe { LAYER_MANAGER = Some(LayerManager::new(screen_frame_buffer())) };
     let bg_layer_id = layer_manager()
         .new_layer()
         .set_window(bg_window_ref())
@@ -301,7 +311,7 @@ extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) 
     interrupt::notify_end_of_interrupt();
 }
 
-fn initialize_global_vars(frame_buffer_config: &'static FrameBufferConfig) {
+fn initialize_global_vars(frame_buffer_config: FrameBufferConfig) {
     unsafe {
         PIXEL_WRITER = Some(FrameBufferWriter::new(frame_buffer_config));
 

@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 use core::ffi::c_void;
 
@@ -7,6 +7,20 @@ use core::ffi::c_void;
 pub enum PixelFormat {
     KPixelRGBResv8BitPerColor,
     KPixelBGRResv8BitPerColor,
+}
+
+impl PixelFormat {
+    pub fn bits_per_pixel(&self) -> usize {
+        match self {
+            PixelFormat::KPixelRGBResv8BitPerColor => 32,
+            PixelFormat::KPixelBGRResv8BitPerColor => 32,
+        }
+    }
+
+    pub fn bytes_per_pixel(&self) -> usize {
+        let bits = self.bits_per_pixel();
+        (bits + 7) / 8
+    }
 }
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -18,6 +32,23 @@ pub struct FrameBufferConfig {
     pub horizontal_resolution: u32,
     pub vertical_resolution: u32,
     pub pixel_format: PixelFormat,
+}
+
+impl FrameBufferConfig {
+    pub fn new(
+        horizontal_resolution: u32,
+        vertical_resolution: u32,
+        pixels_per_scan_line: u32,
+        pixel_format: PixelFormat,
+    ) -> FrameBufferConfig {
+        Self {
+            frame_buffer: core::ptr::null_mut(),
+            pixels_per_scan_line,
+            horizontal_resolution,
+            vertical_resolution,
+            pixel_format,
+        }
+    }
 }
 
 /// To generate unsigned long long type, each value should be defined as c_ulonglong.

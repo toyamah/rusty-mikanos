@@ -1,4 +1,5 @@
-use crate::graphics::{PixelWriter, Vector2D};
+use crate::frame_buffer::FrameBuffer;
+use crate::graphics::Vector2D;
 use crate::window::Window;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -42,32 +43,28 @@ impl<'a> Layer<'a> {
         self.position = Vector2D::new(x, y)
     }
 
-    pub fn draw_to<W: PixelWriter + ?Sized>(&self, writer: &W) {
+    pub fn draw_to(&self, screen: &mut FrameBuffer) {
         if let Some(w) = self.window {
-            w.draw_to(writer, self.position)
+            w.draw_to(screen, self.position)
         }
     }
 }
 
 pub struct LayerManager<'a> {
-    writer: &'a dyn PixelWriter,
+    screen: &'a mut FrameBuffer,
     layers: Vec<Layer<'a>>,
     layer_stack: Vec<&'a Layer<'a>>,
     latest_id: u32,
 }
 
 impl<'a> LayerManager<'a> {
-    pub fn new<W: PixelWriter>(writer: &'a W) -> LayerManager<'a> {
+    pub fn new(screen: &'a mut FrameBuffer) -> LayerManager<'a> {
         Self {
-            writer,
+            screen,
             layers: vec![],
             layer_stack: vec![],
             latest_id: 0,
         }
-    }
-
-    pub fn set_writer<W: PixelWriter>(&mut self, writer: &'a W) {
-        self.writer = writer
     }
 
     pub fn new_layer(&mut self) -> &mut Layer<'a> {
@@ -77,8 +74,8 @@ impl<'a> LayerManager<'a> {
     }
 
     pub fn draw(&mut self) {
-        for &l in &self.layer_stack {
-            l.draw_to(self.writer)
+        for l in self.layer_stack.iter_mut() {
+            l.draw_to(self.screen)
         }
     }
 
@@ -156,56 +153,28 @@ impl<'a> LayerManager<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::PixelColor;
-    use core::cell::RefCell;
-
-    struct MockWriter {
-        width: i32,
-        height: i32,
-        write_history: RefCell<Vec<(i32, i32, PixelColor)>>,
-    }
-
-    impl MockWriter {
-        fn new(width: i32, height: i32) -> Self {
-            Self {
-                width,
-                height,
-                write_history: RefCell::new(Vec::new()),
-            }
-        }
-    }
-
-    impl PixelWriter for MockWriter {
-        fn write(&self, x: i32, y: i32, color: &PixelColor) {
-            self.write_history.borrow_mut().push((x, y, *color))
-        }
-
-        fn width(&self) -> i32 {
-            self.width
-        }
-
-        fn height(&self) -> i32 {
-            self.height
-        }
-    }
+    use shared::{FrameBufferConfig, PixelFormat};
 
     #[test]
     fn move_() {
-        let writer = MockWriter::new(1, 2);
-        let window1 = Window::new(1, 1);
-        let mut lm = LayerManager::new(&writer);
+        let config = FrameBufferConfig::new(1, 1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
+        let mut screen = FrameBuffer::new(config);
+        let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
+        let mut lm = LayerManager::new(&mut screen);
         let id1 = lm.new_layer().set_window(&window1).id();
 
         lm.move_(id1, Vector2D::new(100, 10));
 
-        assert_eq!(layer(&lm, id1).position, Vector2D::new(100, 10));
+        let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
+        assert_eq!(l1.position, Vector2D::new(100, 10));
     }
 
     #[test]
     fn move_relative() {
-        let writer = MockWriter::new(1, 2);
-        let window1 = Window::new(1, 1);
-        let mut lm = LayerManager::new(&writer);
+        let config = FrameBufferConfig::new(1, 1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
+        let mut screen = FrameBuffer::new(config);
+        let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
+        let mut lm = LayerManager::new(&mut screen);
         let id1 = lm
             .new_layer()
             .set_window(&window1)
@@ -213,13 +182,13 @@ mod tests {
             .id();
 
         lm.move_relative(id1, Vector2D::new(-50, -30));
-        assert_eq!(layer(&lm, id1).position, Vector2D::new(50, 70));
+        {
+            let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
+            assert_eq!(l1.position, Vector2D::new(50, 70));
+        }
 
         lm.move_relative(id1, Vector2D::new(-60, -60));
-        assert_eq!(layer(&lm, id1).position, Vector2D::new(-10, 10));
-    }
-
-    fn layer<'a>(lm: &'a LayerManager, id: u32) -> &'a Layer<'a> {
-        lm.layers.iter().find(|l| l.id == id).unwrap()
+        let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
+        assert_eq!(l1.position, Vector2D::new(-10, 10));
     }
 }
