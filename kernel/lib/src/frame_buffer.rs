@@ -1,7 +1,6 @@
 use crate::graphics::{FrameBufferWriter, Vector2D};
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cmp::{max, min};
 use core::ptr::copy_nonoverlapping;
 use shared::FrameBufferConfig;
 
@@ -39,37 +38,34 @@ impl FrameBuffer {
     pub fn copy(&self, pos: Vector2D<i32>, src: &FrameBuffer) {
         assert!(self.config.pixel_format == src.config.pixel_format);
 
-        let dst_width = self.config.horizontal_resolution as i32;
-        let dst_height = self.config.vertical_resolution as i32;
-        let src_width = src.config.horizontal_resolution as i32;
-        let src_height = src.config.vertical_resolution as i32;
-
-        let copy_start_dst_x = max(pos.x, 0);
-        let copy_start_dst_y = max(pos.y, 0);
-        let copy_end_dst_x = min(pos.x + src_width, dst_width);
-        let copy_end_dst_y = min(pos.y + src_height, dst_height);
-
-        let bytes_per_pixel = self.config.pixel_format.bytes_per_pixel();
-        let bytes_per_copy_line = bytes_per_pixel * (copy_end_dst_x - copy_start_dst_x) as usize;
-
-        let pixels_per_scan_line = self.config.pixels_per_scan_line as usize;
-        let pixel_position =
-            pixels_per_scan_line * copy_start_dst_y as usize + copy_start_dst_x as usize;
-
+        let dst_size = frame_buffer_size(&self.config);
+        let src_size = frame_buffer_size(&src.config);
+        let dst_start = pos.element_max(Vector2D::new(0, 0));
+        let dst_end = dst_size.element_min(Vector2D::new(
+            pos.x + src_size.x as i32,
+            pos.y + src_size.y as i32,
+        ));
         let mut dst_buf = unsafe {
             self.config
-                .frame_buffer
-                .offset((bytes_per_pixel * pixel_position) as isize)
+                .frame_addr_at(dst_start.x as usize, dst_start.y as usize)
         };
-        let mut src_buf = src.config.frame_buffer;
+        let mut src_buf = unsafe { src.config.frame_addr_at(0, 0) };
 
-        for _ in 0..copy_end_dst_y - copy_start_dst_y {
+        let bytes_per_copy_line =
+            self.config.pixel_format.bytes_per_pixel() * (dst_end.x - dst_start.x) as usize;
+        for _ in dst_start.y..dst_end.y {
             unsafe {
                 copy_nonoverlapping(src_buf, dst_buf, bytes_per_copy_line);
-                dst_buf = dst_buf.offset((bytes_per_pixel * pixels_per_scan_line) as isize);
-                src_buf = src_buf
-                    .offset((bytes_per_pixel * src.config.pixels_per_scan_line as usize) as isize);
+                dst_buf = dst_buf.add(self.config.bytes_per_scan_line());
+                src_buf = src_buf.add(src.config.bytes_per_scan_line());
             }
         }
     }
+}
+
+fn frame_buffer_size(config: &FrameBufferConfig) -> Vector2D<i32> {
+    Vector2D::new(
+        config.horizontal_resolution as i32,
+        config.vertical_resolution as i32,
+    )
 }
