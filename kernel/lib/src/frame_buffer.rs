@@ -1,4 +1,4 @@
-use crate::graphics::{FrameBufferWriter, Vector2D};
+use crate::graphics::{FrameBufferWriter, Rectangle, Vector2D};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ptr::copy_nonoverlapping;
@@ -58,6 +58,44 @@ impl FrameBuffer {
                 copy_nonoverlapping(src_buf, dst_buf, bytes_per_copy_line);
                 dst_buf = dst_buf.add(self.config.bytes_per_scan_line());
                 src_buf = src_buf.add(src.config.bytes_per_scan_line());
+            }
+        }
+    }
+
+    pub fn move_(&mut self, pos: Vector2D<i32>, src: &Rectangle<i32>) {
+        let bytes_per_pixel = self.config.pixel_format.bytes_per_pixel();
+        let bytes_per_scan_line = self.config.bytes_per_scan_line();
+
+        if pos.y < src.pos.y {
+            // move up
+            let dst_buf = unsafe { self.config.frame_addr_at(pos.x as usize, pos.y as usize) };
+            let src_buf = unsafe {
+                self.config
+                    .frame_addr_at(src.pos.x as usize, src.pos.y as usize)
+            };
+            for _ in 0..src.size.y {
+                unsafe {
+                    copy_nonoverlapping(src_buf, dst_buf, bytes_per_pixel * src.size.x as usize);
+                    dst_buf.add(bytes_per_scan_line);
+                    src_buf.add(bytes_per_scan_line);
+                }
+            }
+        } else {
+            // move down
+            let dst_buff = unsafe {
+                self.config
+                    .frame_addr_at(pos.x as usize, (pos.y + src.size.y - 1) as usize)
+            };
+            let src_buf = unsafe {
+                self.config
+                    .frame_addr_at(src.pos.x as usize, (src.pos.y + src.size.y - 1) as usize)
+            };
+            for _ in 0..src.size.y {
+                unsafe {
+                    copy_nonoverlapping(src_buf, dst_buff, bytes_per_pixel * src.size.x as usize);
+                    dst_buff.sub(bytes_per_scan_line);
+                    src_buf.sub(bytes_per_scan_line);
+                }
             }
         }
     }
