@@ -1,16 +1,15 @@
 use crate::{console, layer_manager_op};
-use alloc::format;
-use alloc::string::ToString;
 use core::fmt;
 use core::fmt::Write;
-use lib::graphics::{PixelColor, PixelWriter};
+use lib::graphics::{FrameBufferWriter, PixelColor, PixelWriter};
 use lib::timer::measure_time;
+use lib::window::Window;
 
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;
 
 pub struct Console<'a> {
-    writer: &'a dyn PixelWriter,
+    writer: ConsoleWriter<'a>,
     fg_color: PixelColor,
     bg_color: PixelColor,
     cursor_row: usize,
@@ -20,13 +19,13 @@ pub struct Console<'a> {
 }
 
 impl<'a> Console<'a> {
-    pub fn new<W: PixelWriter>(
-        writer: &'a W,
+    pub fn new(
+        writer: &'a FrameBufferWriter,
         fg_color: PixelColor,
         bg_color: PixelColor,
     ) -> Console<'a> {
         Self {
-            writer,
+            writer: ConsoleWriter::FrameBufferWriter(writer),
             fg_color,
             bg_color,
             cursor_row: 0,
@@ -35,11 +34,8 @@ impl<'a> Console<'a> {
         }
     }
 
-    pub fn reset_writer<W: PixelWriter>(&mut self, writer: &'a W) {
-        if self.writer as *const _ == writer as *const _ {
-            return;
-        }
-        self.writer = writer;
+    pub fn reset_window(&mut self, window: &'a mut Window) {
+        self.writer = ConsoleWriter::Window(window);
         self.refresh();
     }
 
@@ -87,10 +83,38 @@ impl<'a> Console<'a> {
         self.buffer[ROWS - 1].fill(char::from(0));
     }
 
-    fn refresh(&self) {
+    fn refresh(&mut self) {
         for (i, row) in self.buffer.iter().enumerate() {
             self.writer
                 .write_chars(0, (16 * i) as i32, row, &self.fg_color);
+        }
+    }
+}
+
+enum ConsoleWriter<'a> {
+    FrameBufferWriter(&'a FrameBufferWriter),
+    Window(&'a mut Window),
+}
+
+impl<'a> PixelWriter for ConsoleWriter<'a> {
+    fn write(&self, x: i32, y: i32, color: &PixelColor) {
+        match self {
+            ConsoleWriter::FrameBufferWriter(w) => w.write(x, y, color),
+            ConsoleWriter::Window(w) => w.write(x, y, color),
+        }
+    }
+
+    fn width(&self) -> i32 {
+        match self {
+            ConsoleWriter::FrameBufferWriter(w) => w.width(),
+            ConsoleWriter::Window(w) => w.width(),
+        }
+    }
+
+    fn height(&self) -> i32 {
+        match self {
+            ConsoleWriter::FrameBufferWriter(w) => w.height(),
+            ConsoleWriter::Window(w) => w.height(),
         }
     }
 }

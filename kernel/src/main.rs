@@ -218,7 +218,7 @@ pub extern "C" fn KernelMainNewStack(
         ))
     }
     draw_desktop(bg_window().writer());
-    console().reset_writer(bg_window().writer());
+    console().reset_window(bg_window());
 
     unsafe {
         MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window(frame_buffer_config().pixel_format))
