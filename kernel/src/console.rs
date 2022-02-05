@@ -2,7 +2,8 @@ use crate::{console, layer_manager_op};
 use core::fmt;
 use core::fmt::Write;
 use lib::graphics::{
-    fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR,
+    fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Rectangle, Vector2D,
+    DESKTOP_BG_COLOR,
 };
 use lib::timer::measure_time;
 use lib::window::Window;
@@ -69,19 +70,42 @@ impl<'a> Console<'a> {
             return;
         }
 
-        fill_rectangle(
-            &self.writer,
-            &Vector2D::new(0, 0),
-            &Vector2D::new((8 * COLUMNS) as i32, (16 * ROWS) as i32),
-            &DESKTOP_BG_COLOR,
-        );
-        for row in 0..ROWS - 1 {
-            let next = row + 1;
-            self.buffer.copy_within(next..=next, row);
-            self.writer
-                .write_chars(0, (16 * row) as i32, &self.buffer[row], &self.fg_color);
+        match &self.writer {
+            ConsoleWriter::Window(w) => {
+                let rows = ROWS as i32;
+                let columns = COLUMNS as i32;
+                let move_src = Rectangle::new(
+                    Vector2D::new(0, 16),
+                    Vector2D::new(8 * columns, 16 * (rows - 1)),
+                );
+                w.move_(Vector2D::new(0, 0), &move_src);
+                fill_rectangle(
+                    &self.writer,
+                    &Vector2D::new(0, 16 * (rows - 1)),
+                    &Vector2D::new(8 * columns, 16),
+                    &DESKTOP_BG_COLOR,
+                );
+            }
+            ConsoleWriter::FrameBufferWriter(_) => {
+                fill_rectangle(
+                    &self.writer,
+                    &Vector2D::new(0, 0),
+                    &Vector2D::new((8 * COLUMNS) as i32, (16 * ROWS) as i32),
+                    &DESKTOP_BG_COLOR,
+                );
+                for row in 0..ROWS - 1 {
+                    let next = row + 1;
+                    self.buffer.copy_within(next..=next, row);
+                    self.writer.write_chars(
+                        0,
+                        (16 * row) as i32,
+                        &self.buffer[row],
+                        &self.fg_color,
+                    );
+                }
+                self.buffer[ROWS - 1].fill(char::from(0));
+            }
         }
-        self.buffer[ROWS - 1].fill(char::from(0));
     }
 
     fn refresh(&mut self) {
@@ -129,9 +153,7 @@ impl<'a> fmt::Write for Console<'a> {
 
 pub fn _printk(args: fmt::Arguments) {
     let time = measure_time(|| console().write_fmt(args).unwrap());
-    console()
-        .write_fmt(format_args!("print time = {}\n", time))
-        .unwrap();
+    console().write_fmt(format_args!("[{:#09}]", time)).unwrap();
 }
 
 #[macro_export]

@@ -35,15 +35,15 @@ impl FrameBuffer {
         &self.writer
     }
 
-    pub fn copy(&self, pos: Vector2D<i32>, src: &FrameBuffer) {
+    pub fn copy(&self, dst_pos: Vector2D<i32>, src: &FrameBuffer) {
         assert!(self.config.pixel_format == src.config.pixel_format);
 
         let dst_size = frame_buffer_size(&self.config);
         let src_size = frame_buffer_size(&src.config);
-        let dst_start = pos.element_max(Vector2D::new(0, 0));
+        let dst_start = dst_pos.element_max(Vector2D::new(0, 0));
         let dst_end = dst_size.element_min(Vector2D::new(
-            pos.x + src_size.x as i32,
-            pos.y + src_size.y as i32,
+            dst_pos.x + src_size.x as i32,
+            dst_pos.y + src_size.y as i32,
         ));
         let mut dst_buf = unsafe {
             self.config
@@ -62,39 +62,42 @@ impl FrameBuffer {
         }
     }
 
-    pub fn move_(&mut self, pos: Vector2D<i32>, src: &Rectangle<i32>) {
+    pub fn move_(&mut self, dst_pos: Vector2D<i32>, src: &Rectangle<i32>) {
         let bytes_per_pixel = self.config.pixel_format.bytes_per_pixel();
         let bytes_per_scan_line = self.config.bytes_per_scan_line();
 
-        if pos.y < src.pos.y {
+        if dst_pos.y < src.pos.y {
             // move up
-            let dst_buf = unsafe { self.config.frame_addr_at(pos.x as usize, pos.y as usize) };
-            let src_buf = unsafe {
+            let mut dst_buf = unsafe {
+                self.config
+                    .frame_addr_at(dst_pos.x as usize, dst_pos.y as usize)
+            };
+            let mut src_buf = unsafe {
                 self.config
                     .frame_addr_at(src.pos.x as usize, src.pos.y as usize)
             };
             for _ in 0..src.size.y {
                 unsafe {
                     copy_nonoverlapping(src_buf, dst_buf, bytes_per_pixel * src.size.x as usize);
-                    dst_buf.add(bytes_per_scan_line);
-                    src_buf.add(bytes_per_scan_line);
+                    dst_buf = dst_buf.add(bytes_per_scan_line);
+                    src_buf = src_buf.add(bytes_per_scan_line);
                 }
             }
         } else {
-            // move down
-            let dst_buff = unsafe {
+            // // move down
+            let mut dst_buf = unsafe {
                 self.config
-                    .frame_addr_at(pos.x as usize, (pos.y + src.size.y - 1) as usize)
+                    .frame_addr_at(dst_pos.x as usize, (dst_pos.y + src.size.y - 1) as usize)
             };
-            let src_buf = unsafe {
+            let mut src_buf = unsafe {
                 self.config
                     .frame_addr_at(src.pos.x as usize, (src.pos.y + src.size.y - 1) as usize)
             };
             for _ in 0..src.size.y {
                 unsafe {
-                    copy_nonoverlapping(src_buf, dst_buff, bytes_per_pixel * src.size.x as usize);
-                    dst_buff.sub(bytes_per_scan_line);
-                    src_buf.sub(bytes_per_scan_line);
+                    copy_nonoverlapping(src_buf, dst_buf, bytes_per_pixel * src.size.x as usize);
+                    dst_buf = dst_buf.sub(bytes_per_scan_line);
+                    src_buf = src_buf.sub(bytes_per_scan_line);
                 }
             }
         }
