@@ -1,7 +1,9 @@
 use crate::{console, layer_manager_op};
 use core::fmt;
 use core::fmt::Write;
-use lib::graphics::{FrameBufferWriter, PixelColor, PixelWriter};
+use lib::graphics::{
+    fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Vector2D, DESKTOP_BG_COLOR,
+};
 use lib::timer::measure_time;
 use lib::window::Window;
 
@@ -67,19 +69,18 @@ impl<'a> Console<'a> {
             return;
         }
 
-        for y in 0..16 * ROWS {
-            for x in 0..8 * COLUMNS {
-                self.writer.write(x as i32, y as i32, &self.bg_color);
-            }
-        }
-
+        fill_rectangle(
+            &self.writer,
+            &Vector2D::new(0, 0),
+            &Vector2D::new((8 * COLUMNS) as i32, (16 * ROWS) as i32),
+            &DESKTOP_BG_COLOR,
+        );
         for row in 0..ROWS - 1 {
             let next = row + 1;
             self.buffer.copy_within(next..=next, row);
             self.writer
                 .write_chars(0, (16 * row) as i32, &self.buffer[row], &self.fg_color);
         }
-
         self.buffer[ROWS - 1].fill(char::from(0));
     }
 

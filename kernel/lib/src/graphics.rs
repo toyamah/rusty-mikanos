@@ -193,7 +193,7 @@ pub fn draw_desktop<W: PixelWriter>(writer: &W) {
     );
 }
 
-fn fill_rectangle<W: PixelWriter>(
+pub fn fill_rectangle<W: PixelWriter>(
     writer: &W,
     pos: &Vector2D<i32>,
     size: &Vector2D<i32>,
