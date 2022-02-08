@@ -1,4 +1,5 @@
 use crate::{console, layer_manager_op};
+use alloc::format;
 use core::fmt;
 use core::fmt::Write;
 use lib::graphics::{
@@ -152,8 +153,15 @@ impl<'a> fmt::Write for Console<'a> {
 }
 
 pub fn _printk(args: fmt::Arguments) {
-    let time = measure_time(|| console().write_fmt(args).unwrap());
-    console().write_fmt(format_args!("[{:#09}]", time)).unwrap();
+    // let time = measure_time(|| console().write_fmt(args).unwrap());
+    // console().write_fmt(format_args!("[{:#09}]", time)).unwrap();
+
+    // To draw text rapidly, avoid using write_fmt
+    // because write_fmt calls write_str for every argument and then LayoutManager.draw() is called as many times as the argument's size.
+    let text = format!("{}", args);
+    let time = measure_time(|| console().write_str(&text).unwrap());
+    let text = format!("{}", format_args!("[{:#09}]", time));
+    console().write_str(&text).unwrap();
 }
 
 #[macro_export]

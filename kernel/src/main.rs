@@ -6,6 +6,8 @@
 
 extern crate alloc;
 
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
 use bit_field::BitField;
 use console::Console;
 use core::arch::asm;
