@@ -9,7 +9,7 @@ pub struct Window {
     height: usize,
     //TODO: try to define without RefCel
     data: RefCell<Vec<Vec<PixelColor>>>,
-    pub shadow_buffer: RefCell<FrameBuffer>,
+    shadow_buffer: RefCell<FrameBuffer>,
     transparent_color: Option<PixelColor>,
 }
 
