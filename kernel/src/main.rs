@@ -6,6 +6,8 @@
 
 extern crate alloc;
 
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
 use bit_field::BitField;
 use console::Console;
 use core::arch::asm;
@@ -40,7 +42,7 @@ mod memory_allocator;
 mod usb;
 
 static mut CONSOLE: Option<Console> = None;
-fn console() -> &'static mut Console<'static> {
+fn console() -> &'static mut Console {
     unsafe { CONSOLE.as_mut().unwrap() }
 }
 
@@ -218,7 +220,7 @@ pub extern "C" fn KernelMainNewStack(
         ))
     }
     draw_desktop(bg_window().writer());
-    console().reset_writer(bg_window().writer());
+    console().reset_mode(console::Mode::BgWindow, bg_window());
 
     unsafe {
         MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window(frame_buffer_config().pixel_format))
@@ -315,11 +317,7 @@ fn initialize_global_vars(frame_buffer_config: FrameBufferConfig) {
     unsafe {
         PIXEL_WRITER = Some(FrameBufferWriter::new(frame_buffer_config));
 
-        CONSOLE = Some(Console::new(
-            pixel_writer(),
-            DESKTOP_FG_COLOR,
-            DESKTOP_BG_COLOR,
-        ));
+        CONSOLE = Some(Console::new(DESKTOP_FG_COLOR, DESKTOP_BG_COLOR));
 
         MAIN_QUEUE = Some(ArrayQueue::new(&mut MESSAGES));
     }

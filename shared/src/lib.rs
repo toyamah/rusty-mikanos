@@ -49,6 +49,18 @@ impl FrameBufferConfig {
             pixel_format,
         }
     }
+
+    pub fn bytes_per_scan_line(&self) -> usize {
+        self.pixel_format.bytes_per_pixel() * self.pixels_per_scan_line as usize
+    }
+
+    pub fn pixel_position_at(&self, x: usize, y: usize) -> usize {
+        self.pixel_format.bytes_per_pixel() * (self.pixels_per_scan_line as usize * y + x)
+    }
+
+    pub unsafe fn frame_addr_at(&self, x: usize, y: usize) -> *mut u8 {
+        self.frame_buffer.add(self.pixel_position_at(x, y))
+    }
 }
 
 /// To generate unsigned long long type, each value should be defined as c_ulonglong.

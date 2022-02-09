@@ -1,13 +1,18 @@
-use crate::{console, layer_manager_op};
+use crate::console::Mode::{BgWindow, Frame};
+use crate::{bg_window, console, layer_manager_op, pixel_writer};
+use alloc::format;
 use core::fmt;
 use core::fmt::Write;
-use lib::graphics::{PixelColor, PixelWriter};
+use lib::graphics::{
+    fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, DESKTOP_BG_COLOR,
+};
+use lib::timer::measure_time;
 
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;
 
-pub struct Console<'a> {
-    writer: &'a dyn PixelWriter,
+pub struct Console {
+    mode: Mode,
     fg_color: PixelColor,
     bg_color: PixelColor,
     cursor_row: usize,
@@ -16,14 +21,16 @@ pub struct Console<'a> {
     buffer: [[char; COLUMNS + 1]; ROWS],
 }
 
-impl<'a> Console<'a> {
-    pub fn new<W: PixelWriter>(
-        writer: &'a W,
-        fg_color: PixelColor,
-        bg_color: PixelColor,
-    ) -> Console<'a> {
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Mode {
+    Frame,
+    BgWindow,
+}
+
+impl Console {
+    pub fn new(fg_color: PixelColor, bg_color: PixelColor) -> Console {
         Self {
-            writer,
+            mode: Frame,
             fg_color,
             bg_color,
             cursor_row: 0,
@@ -32,20 +39,17 @@ impl<'a> Console<'a> {
         }
     }
 
-    pub fn reset_writer<W: PixelWriter>(&mut self, writer: &'a W) {
-        if self.writer as *const _ == writer as *const _ {
-            return;
-        }
-        self.writer = writer;
-        self.refresh();
+    pub fn reset_mode<W: PixelWriter>(&mut self, mode: Mode, writer: &mut W) {
+        self.mode = mode;
+        self.refresh(writer);
     }
 
-    pub fn put_string(&mut self, str: &str) {
+    fn put_string<W: PixelWriter>(&mut self, str: &str, writer: &W) {
         for char in str.chars() {
             if char == '\n' {
-                self.new_line();
+                self.new_line(writer);
             } else if self.cursor_column < COLUMNS - 1 {
-                self.writer.write_ascii(
+                writer.write_ascii(
                     (8 * self.cursor_column) as i32,
                     (16 * self.cursor_row) as i32,
                     char,
@@ -61,46 +65,74 @@ impl<'a> Console<'a> {
         }
     }
 
-    fn new_line(&mut self) {
+    fn new_line<W: PixelWriter>(&mut self, writer: &W) {
         self.cursor_column = 0;
         if self.cursor_row < ROWS - 1 {
             self.cursor_row += 1;
             return;
         }
 
-        for y in 0..16 * ROWS {
-            for x in 0..8 * COLUMNS {
-                self.writer.write(x as i32, y as i32, &self.bg_color);
+        match self.mode {
+            BgWindow => {
+                let rows = ROWS as i32;
+                let columns = COLUMNS as i32;
+                let move_src = Rectangle::new(
+                    Vector2D::new(0, 16),
+                    Vector2D::new(8 * columns, 16 * (rows - 1)),
+                );
+                // TODO: take off referencing a global var if possible
+                bg_window().move_(Vector2D::new(0, 0), &move_src);
+                fill_rectangle(
+                    writer,
+                    &Vector2D::new(0, 16 * (rows - 1)),
+                    &Vector2D::new(8 * columns, 16),
+                    &DESKTOP_BG_COLOR,
+                );
+            }
+            Frame => {
+                fill_rectangle(
+                    writer,
+                    &Vector2D::new(0, 0),
+                    &Vector2D::new((8 * COLUMNS) as i32, (16 * ROWS) as i32),
+                    &DESKTOP_BG_COLOR,
+                );
+                for row in 0..ROWS - 1 {
+                    let next = row + 1;
+                    self.buffer.copy_within(next..=next, row);
+                    writer.write_chars(0, (16 * row) as i32, &self.buffer[row], &self.fg_color);
+                }
+                self.buffer[ROWS - 1].fill(char::from(0));
             }
         }
-
-        for row in 0..ROWS - 1 {
-            let next = row + 1;
-            self.buffer.copy_within(next..=next, row);
-            self.writer
-                .write_chars(0, (16 * row) as i32, &self.buffer[row], &self.fg_color);
-        }
-
-        self.buffer[ROWS - 1].fill(char::from(0));
     }
 
-    fn refresh(&self) {
+    fn refresh<W: PixelWriter>(&mut self, writer: &mut W) {
         for (i, row) in self.buffer.iter().enumerate() {
-            self.writer
-                .write_chars(0, (16 * i) as i32, row, &self.fg_color);
+            writer.write_chars(0, (16 * i) as i32, row, &self.fg_color);
         }
     }
 }
 
-impl<'a> fmt::Write for Console<'a> {
+impl<'a> fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.put_string(s);
+        match self.mode {
+            Frame => self.put_string(s, pixel_writer()),
+            BgWindow => self.put_string(s, bg_window()),
+        }
         Ok(())
     }
 }
 
 pub fn _printk(args: fmt::Arguments) {
-    console().write_fmt(args).unwrap();
+    // let time = measure_time(|| console().write_fmt(args).unwrap());
+    // console().write_fmt(format_args!("[{:#09}]", time)).unwrap();
+
+    // To draw text rapidly, avoid using write_fmt
+    // because write_fmt calls write_str for every argument and then LayoutManager.draw() is called as many times as the argument's size.
+    let text = format!("{}", args);
+    let time = measure_time(|| console().write_str(&text).unwrap());
+    let text = format!("{}", format_args!("[{:#09}]", time));
+    console().write_str(&text).unwrap();
 }
 
 #[macro_export]

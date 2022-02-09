@@ -1,4 +1,5 @@
 use crate::font;
+use core::cmp::{max, min};
 use core::ops::{Add, AddAssign};
 use shared::{FrameBufferConfig, PixelFormat};
 
@@ -35,6 +36,19 @@ impl<T> Vector2D<T> {
     }
 }
 
+impl<T> Vector2D<T>
+where
+    T: Copy + Ord,
+{
+    pub fn element_max(&self, other: Vector2D<T>) -> Vector2D<T> {
+        Vector2D::new(max(self.x, other.x), max(self.y, other.y))
+    }
+
+    pub fn element_min(&self, other: Vector2D<T>) -> Vector2D<T> {
+        Vector2D::new(min(self.x, other.x), min(self.y, other.y))
+    }
+}
+
 impl<T> Add for Vector2D<T>
 where
     T: Add<Output = T> + Copy + Clone,
@@ -56,6 +70,18 @@ where
     fn add_assign(&mut self, rhs: Self) {
         self.x += rhs.x;
         self.y += rhs.y;
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Rectangle<T> {
+    pub pos: Vector2D<T>,
+    pub size: Vector2D<T>,
+}
+
+impl<T> Rectangle<T> {
+    pub fn new(pos: Vector2D<T>, size: Vector2D<T>) -> Rectangle<T> {
+        Self { pos, size }
     }
 }
 
@@ -167,7 +193,7 @@ pub fn draw_desktop<W: PixelWriter>(writer: &W) {
     );
 }
 
-fn fill_rectangle<W: PixelWriter>(
+pub fn fill_rectangle<W: PixelWriter>(
     writer: &W,
     pos: &Vector2D<i32>,
     size: &Vector2D<i32>,
@@ -193,5 +219,34 @@ fn draw_rectangle<W: PixelWriter>(
     for dy in 0..size.y {
         writer.write(pos.x, pos.y + dy, c);
         writer.write(pos.x + size.x - 1, pos.y + dy, c);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vector2d_element_max() {
+        let max = Vector2D::new(100, 20).element_max(Vector2D::new(10, 200));
+        assert_eq!(Vector2D::new(100, 200), max);
+
+        let max = Vector2D::new(11, 222).element_max(Vector2D::new(111, 22));
+        assert_eq!(Vector2D::new(111, 222), max);
+
+        let max = Vector2D::new(1, 2).element_max(Vector2D::new(1, 2));
+        assert_eq!(Vector2D::new(1, 2), max);
+    }
+
+    #[test]
+    fn vector2d_element_min() {
+        let min = Vector2D::new(100, 20).element_min(Vector2D::new(10, 200));
+        assert_eq!(Vector2D::new(10, 20), min);
+
+        let min = Vector2D::new(11, 222).element_min(Vector2D::new(111, 22));
+        assert_eq!(Vector2D::new(11, 22), min);
+
+        let min = Vector2D::new(1, 2).element_min(Vector2D::new(1, 2));
+        assert_eq!(Vector2D::new(1, 2), min);
     }
 }

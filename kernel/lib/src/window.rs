@@ -1,10 +1,9 @@
 use crate::frame_buffer::FrameBuffer;
-use crate::graphics::{PixelColor, PixelWriter, Vector2D};
+use crate::graphics::{PixelColor, PixelWriter, Rectangle, Vector2D};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use shared::{FrameBufferConfig, PixelFormat};
 
-/// This struct is defined to aim to prevent circular dependency between [`ActualWindow`] and [`WindowWriter`].
 pub struct Window {
     width: usize,
     height: usize,
@@ -47,6 +46,10 @@ impl Window {
                 }
             }),
         }
+    }
+
+    pub fn move_(&mut self, pos: Vector2D<i32>, src: &Rectangle<i32>) {
+        self.shadow_buffer.borrow_mut().move_(pos, src)
     }
 
     pub fn set_transparent_color(&mut self, c: PixelColor) {
