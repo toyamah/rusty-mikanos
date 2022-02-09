@@ -227,7 +227,7 @@ pub extern "C" fn KernelMainNewStack(
     draw_mouse_cursor(&mouse_cursor_window().writer(), &Vector2D::new(0, 0));
 
     unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
-    unsafe { LAYER_MANAGER = Some(LayerManager::new(screen_frame_buffer())) };
+    unsafe { LAYER_MANAGER = Some(LayerManager::new()) };
     let bg_layer_id = layer_manager()
         .new_layer()
         .set_window(bg_window_ref())
@@ -244,7 +244,7 @@ pub extern "C" fn KernelMainNewStack(
 
     layer_manager().up_down(bg_layer_id, 0);
     layer_manager().up_down(mouse_layer_id(), 1);
-    layer_manager().draw();
+    layer_manager().draw(screen_frame_buffer());
 
     loop {
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
@@ -298,7 +298,7 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
         mouse_layer_id(),
         Vector2D::new(displacement_x as i32, displacement_y as i32),
     );
-    let time = measure_time(|| layer_manager().draw());
+    let time = measure_time(|| layer_manager().draw(screen_frame_buffer()));
     printk!("mouse draw = {}\n", time);
 }
 

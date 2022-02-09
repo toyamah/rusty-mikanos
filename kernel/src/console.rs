@@ -1,5 +1,5 @@
 use crate::console::Mode::{BgWindow, Frame};
-use crate::{bg_window, console, layer_manager_op, pixel_writer};
+use crate::{bg_window, console, layer_manager_op, pixel_writer, screen_frame_buffer};
 use alloc::format;
 use core::fmt;
 use core::fmt::Write;
@@ -61,7 +61,7 @@ impl Console {
         }
 
         if let Some(m) = layer_manager_op() {
-            m.draw();
+            m.draw(screen_frame_buffer());
         }
     }
 
