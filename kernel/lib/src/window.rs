@@ -48,7 +48,7 @@ impl Window {
         }
     }
 
-    pub fn move_(&self, pos: Vector2D<i32>, src: &Rectangle<i32>) {
+    pub fn move_(&mut self, pos: Vector2D<i32>, src: &Rectangle<i32>) {
         self.shadow_buffer.borrow_mut().move_(pos, src)
     }
 
