@@ -1,5 +1,5 @@
 use crate::console::Mode::{BgWindow, Frame};
-use crate::{bg_window, console, layer_manager_op, pixel_writer};
+use crate::{bg_window, console, layer_manager_op, pixel_writer, screen_frame_buffer};
 use alloc::format;
 use core::fmt;
 use core::fmt::Write;
@@ -44,7 +44,7 @@ impl Console {
         self.refresh(writer);
     }
 
-    fn put_string<W: PixelWriter>(&mut self, str: &str, writer: &W) {
+    fn put_string<W: PixelWriter>(&mut self, str: &str, writer: &mut W) {
         for char in str.chars() {
             if char == '\n' {
                 self.new_line(writer);
@@ -61,11 +61,11 @@ impl Console {
         }
 
         if let Some(m) = layer_manager_op() {
-            m.draw();
+            m.draw(screen_frame_buffer());
         }
     }
 
-    fn new_line<W: PixelWriter>(&mut self, writer: &W) {
+    fn new_line<W: PixelWriter>(&mut self, writer: &mut W) {
         self.cursor_column = 0;
         if self.cursor_row < ROWS - 1 {
             self.cursor_row += 1;
@@ -113,7 +113,7 @@ impl Console {
     }
 }
 
-impl<'a> fmt::Write for Console {
+impl fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         match self.mode {
             Frame => self.put_string(s, pixel_writer()),

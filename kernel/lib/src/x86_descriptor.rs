@@ -3,7 +3,7 @@
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SystemDescriptorType {
     Upper8Bytes = 0,
-    LDT = 2,
+    Ldt = 2,
     TSSAvailable = 9,
     TSSBusy = 11,
     CallGate = 12,

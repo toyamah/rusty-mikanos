@@ -40,10 +40,12 @@ impl<T> Vector2D<T>
 where
     T: Copy + Ord,
 {
+    #[must_use]
     pub fn element_max(&self, other: Vector2D<T>) -> Vector2D<T> {
         Vector2D::new(max(self.x, other.x), max(self.y, other.y))
     }
 
+    #[must_use]
     pub fn element_min(&self, other: Vector2D<T>) -> Vector2D<T> {
         Vector2D::new(min(self.x, other.x), min(self.y, other.y))
     }
@@ -92,19 +94,19 @@ impl PixelColor {
 }
 
 pub trait PixelWriter {
-    fn write(&self, x: i32, y: i32, color: &PixelColor);
+    fn write(&mut self, x: i32, y: i32, color: &PixelColor);
     fn width(&self) -> i32;
     fn height(&self) -> i32;
 
-    fn write_string(&self, x: i32, y: i32, str: &str, color: &PixelColor) {
+    fn write_string(&mut self, x: i32, y: i32, str: &str, color: &PixelColor) {
         font::write_string(self, x, y, str, color);
     }
 
-    fn write_chars(&self, x: i32, y: i32, chars: &[char], color: &PixelColor) {
+    fn write_chars(&mut self, x: i32, y: i32, chars: &[char], color: &PixelColor) {
         font::write_chars(self, x, y, chars, color);
     }
 
-    fn write_ascii(&self, x: i32, y: i32, c: char, color: &PixelColor) {
+    fn write_ascii(&mut self, x: i32, y: i32, c: char, color: &PixelColor) {
         font::write_ascii(self, x, y, c, color);
     }
 }
@@ -115,7 +117,7 @@ pub struct FrameBufferWriter {
 }
 
 impl PixelWriter for FrameBufferWriter {
-    fn write(&self, x: i32, y: i32, color: &PixelColor) {
+    fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
         (self.write_fn)(self, x, y, color);
     }
 
@@ -139,7 +141,7 @@ impl FrameBufferWriter {
         }
     }
 
-    fn write_rgb(self: &Self, x: i32, y: i32, color: &PixelColor) {
+    fn write_rgb(&self, x: i32, y: i32, color: &PixelColor) {
         let p = self.pixel_at(x, y);
         unsafe {
             *p.offset(0) = color.r;
@@ -148,7 +150,7 @@ impl FrameBufferWriter {
         }
     }
 
-    fn write_bgr(self: &Self, x: i32, y: i32, color: &PixelColor) {
+    fn write_bgr(&self, x: i32, y: i32, color: &PixelColor) {
         let p = self.pixel_at(x, y);
         unsafe {
             *p.offset(0) = color.b;
@@ -164,7 +166,7 @@ impl FrameBufferWriter {
     }
 }
 
-pub fn draw_desktop<W: PixelWriter>(writer: &W) {
+pub fn draw_desktop<W: PixelWriter>(writer: &mut W) {
     let width = writer.width();
     let height = writer.height();
     fill_rectangle(
@@ -194,7 +196,7 @@ pub fn draw_desktop<W: PixelWriter>(writer: &W) {
 }
 
 pub fn fill_rectangle<W: PixelWriter>(
-    writer: &W,
+    writer: &mut W,
     pos: &Vector2D<i32>,
     size: &Vector2D<i32>,
     c: &PixelColor,
@@ -207,7 +209,7 @@ pub fn fill_rectangle<W: PixelWriter>(
 }
 
 fn draw_rectangle<W: PixelWriter>(
-    writer: &W,
+    writer: &mut W,
     pos: &Vector2D<i32>,
     size: &Vector2D<i32>,
     c: &PixelColor,

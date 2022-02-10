@@ -6,8 +6,6 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
-use alloc::string::{String, ToString};
 use bit_field::BitField;
 use console::Console;
 use core::arch::asm;
@@ -116,13 +114,13 @@ enum MessageType {
     KInterruptXhci,
 }
 
-static mut MESSAGES: [Message; 32] = [Message {
-    m_type: MessageType::KInterruptXhci,
-}; 32];
-static mut MAIN_QUEUE: Option<ArrayQueue<Message, 32>> = None;
-
-fn main_queue() -> &'static mut ArrayQueue<'static, Message, 32> {
-    unsafe { MAIN_QUEUE.as_mut().unwrap() }
+static mut MAIN_QUEUE: ArrayQueue<Message, 32> = ArrayQueue::new(
+    [Message {
+        m_type: MessageType::KInterruptXhci,
+    }; 32],
+);
+fn main_queue() -> &'static mut ArrayQueue<Message, 32> {
+    unsafe { &mut MAIN_QUEUE }
 }
 
 #[no_mangle] // disable name mangling
@@ -187,7 +185,7 @@ pub extern "C" fn KernelMainNewStack(
         loop_and_hlt()
     });
 
-    setup_idt(int_handler_xhci as u64, kernel_cs);
+    setup_idt(int_handler_xhci as usize, kernel_cs);
 
     enable_to_interrupt_for_xhc(xhc_device).unwrap();
 
@@ -195,7 +193,7 @@ pub extern "C" fn KernelMainNewStack(
         info!("cannot read base address#0: {}", e);
         loop_and_hlt()
     });
-    let xhc_mmio_base = xhc_bar & !(0x0f as u64);
+    let xhc_mmio_base = xhc_bar & !(0x0f_u64);
     // debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
     let controller = XhciController::new(xhc_mmio_base);
@@ -225,10 +223,10 @@ pub extern "C" fn KernelMainNewStack(
     unsafe {
         MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window(frame_buffer_config().pixel_format))
     }
-    draw_mouse_cursor(&mouse_cursor_window().writer(), &Vector2D::new(0, 0));
+    draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
 
     unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
-    unsafe { LAYER_MANAGER = Some(LayerManager::new(screen_frame_buffer())) };
+    unsafe { LAYER_MANAGER = Some(LayerManager::new()) };
     let bg_layer_id = layer_manager()
         .new_layer()
         .set_window(bg_window_ref())
@@ -245,7 +243,7 @@ pub extern "C" fn KernelMainNewStack(
 
     layer_manager().up_down(bg_layer_id, 0);
     layer_manager().up_down(mouse_layer_id(), 1);
-    layer_manager().draw();
+    layer_manager().draw(screen_frame_buffer());
 
     loop {
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
@@ -267,9 +265,8 @@ pub extern "C" fn KernelMainNewStack(
                 m_type: MessageType::KInterruptXhci,
             }) => {
                 while xhci_controller().primary_event_ring_has_front() {
-                    match xhci_controller().process_event() {
-                        Err(code) => error!("Error while ProcessEvent: {}", code),
-                        Ok(_) => {}
+                    if let Err(code) = xhci_controller().process_event() {
+                        error!("Error while ProcessEvent: {}", code)
                     }
                 }
             }
@@ -299,7 +296,7 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
         mouse_layer_id(),
         Vector2D::new(displacement_x as i32, displacement_y as i32),
     );
-    let time = measure_time(|| layer_manager().draw());
+    let time = measure_time(|| layer_manager().draw(screen_frame_buffer()));
     printk!("mouse draw = {}\n", time);
 }
 
@@ -318,8 +315,6 @@ fn initialize_global_vars(frame_buffer_config: FrameBufferConfig) {
         PIXEL_WRITER = Some(FrameBufferWriter::new(frame_buffer_config));
 
         CONSOLE = Some(Console::new(DESKTOP_FG_COLOR, DESKTOP_BG_COLOR));
-
-        MAIN_QUEUE = Some(ArrayQueue::new(&mut MESSAGES));
     }
 
     usb::register_mouse_observer(mouse_observer);

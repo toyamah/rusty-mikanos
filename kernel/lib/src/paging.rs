@@ -42,7 +42,7 @@ pub fn setup_identity_page_table() {
             PDP_TABLE.0[i_pdpt] = &PAGE_DIRECTORY.0[i_pdpt] as *const _ as u64 | 0x003;
             for i_pd in 0..512 {
                 PAGE_DIRECTORY.0[i_pdpt][i_pd] =
-                    i_pdpt as u64 * PAGE_SIZE_1G + i_pd as u64 * PAGE_SIZE_2M | 0x083;
+                    (i_pdpt as u64 * PAGE_SIZE_1G + i_pd as u64 * PAGE_SIZE_2M) | 0x083;
             }
         }
 

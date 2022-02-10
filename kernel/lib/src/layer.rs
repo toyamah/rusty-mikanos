@@ -51,18 +51,17 @@ impl<'a> Layer<'a> {
 }
 
 pub struct LayerManager<'a> {
-    screen: &'a mut FrameBuffer,
     layers: Vec<Layer<'a>>,
-    layer_stack: Vec<&'a Layer<'a>>,
+    layer_id_stack: Vec<u32>,
     latest_id: u32,
 }
 
 impl<'a> LayerManager<'a> {
-    pub fn new(screen: &'a mut FrameBuffer) -> LayerManager<'a> {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> LayerManager<'a> {
         Self {
-            screen,
             layers: vec![],
-            layer_stack: vec![],
+            layer_id_stack: vec![],
             latest_id: 0,
         }
     }
@@ -73,9 +72,13 @@ impl<'a> LayerManager<'a> {
         self.layers.iter_mut().last().unwrap()
     }
 
-    pub fn draw(&mut self) {
-        for l in self.layer_stack.iter_mut() {
-            l.draw_to(self.screen)
+    pub fn draw(&mut self, screen: &mut FrameBuffer) {
+        for &layer_id in &self.layer_id_stack {
+            let index = self
+                .layers
+                .binary_search_by(|l| l.id.cmp(&layer_id))
+                .unwrap();
+            self.layers[index].draw_to(screen);
         }
     }
 
@@ -103,32 +106,32 @@ impl<'a> LayerManager<'a> {
 
         let new_height = {
             let h = new_height as usize;
-            if h > self.layer_stack.len() {
-                self.layer_stack.len()
+            if h > self.layer_id_stack.len() {
+                self.layer_id_stack.len()
             } else {
                 h
             }
         };
 
         match self
-            .layer_stack
+            .layer_id_stack
             .iter()
             .enumerate()
-            .find(|(_, &l)| l.id == id)
+            .find(|(_, &layer_id)| layer_id == id)
         {
             None => {
                 // in case of the layer doesn't show yet
                 let layer = self.layers.iter().find(|l| l.id == id).unwrap();
-                self.layer_stack.push(layer);
+                self.layer_id_stack.push(layer.id);
             }
-            Some((old_index, &layer)) => {
-                let height = if new_height == self.layer_stack.len() - 1 {
+            Some((old_index, &layer_id)) => {
+                let height = if new_height == self.layer_id_stack.len() - 1 {
                     new_height - 1 // decrement because the stack will remove
                 } else {
                     new_height
                 };
-                self.layer_stack.remove(old_index);
-                self.layer_stack.insert(height - 1, layer);
+                self.layer_id_stack.remove(old_index);
+                self.layer_id_stack.insert(height - 1, layer_id);
             }
         }
     }
@@ -138,14 +141,14 @@ impl<'a> LayerManager<'a> {
             return;
         }
 
-        let last_id = self.layer_stack.last().unwrap().id;
+        let last_id = *self.layer_id_stack.last().unwrap();
         let hiding_index = self
             .layers
             .iter()
             .position(|l| l.id == id && l.id != last_id);
 
         if let Some(i) = hiding_index {
-            self.layer_stack.remove(i);
+            self.layer_id_stack.remove(i);
         }
     }
 }
@@ -153,14 +156,12 @@ impl<'a> LayerManager<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shared::{FrameBufferConfig, PixelFormat};
+    use shared::PixelFormat;
 
     #[test]
     fn move_() {
-        let config = FrameBufferConfig::new(1, 1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut screen = FrameBuffer::new(config);
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new(&mut screen);
+        let mut lm = LayerManager::new();
         let id1 = lm.new_layer().set_window(&window1).id();
 
         lm.move_(id1, Vector2D::new(100, 10));
@@ -171,10 +172,8 @@ mod tests {
 
     #[test]
     fn move_relative() {
-        let config = FrameBufferConfig::new(1, 1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut screen = FrameBuffer::new(config);
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new(&mut screen);
+        let mut lm = LayerManager::new();
         let id1 = lm
             .new_layer()
             .set_window(&window1)

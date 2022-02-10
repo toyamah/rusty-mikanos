@@ -31,7 +31,10 @@ jobs:
         rustup override set $RELEASE_CHANNEL
         rustup component add rust-src --toolchain ${RELEASE_CHANNEL}-${TARGET}
         sudo apt-get install nasm
-      
+
+    - name: fmt
+      run: cargo fmt -- --check
+
     - name: run tests
       run: cargo test --target ${TARGET} -Z build-std --verbose
       working-directory: ./kernel/lib/

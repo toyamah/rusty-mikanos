@@ -1,7 +1,7 @@
 use crate::graphics::{PixelColor, PixelWriter};
 
 pub fn write_string<W: PixelWriter + ?Sized>(
-    writer: &W,
+    writer: &mut W,
     x: i32,
     y: i32,
     str: &str,
@@ -13,7 +13,7 @@ pub fn write_string<W: PixelWriter + ?Sized>(
 }
 
 pub fn write_chars<W: PixelWriter + ?Sized>(
-    writer: &W,
+    writer: &mut W,
     x: i32,
     y: i32,
     chars: &[char],
@@ -25,7 +25,7 @@ pub fn write_chars<W: PixelWriter + ?Sized>(
 }
 
 pub fn write_ascii<W: PixelWriter + ?Sized>(
-    writer: &W,
+    writer: &mut W,
     x: i32,
     y: i32,
     c: char,
@@ -59,7 +59,7 @@ unsafe fn get_font(c: char) -> Option<*mut u8> {
 
     if index < size {
         let start = (&_binary_hankaku_bin_start as *const u8) as *mut u8;
-        Some(start.offset(index as isize))
+        Some(start.add(index))
     } else {
         None
     }
