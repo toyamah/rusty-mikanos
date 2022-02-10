@@ -219,7 +219,7 @@ pub extern "C" fn KernelMainNewStack(
     unsafe {
         MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window(frame_buffer_config().pixel_format))
     }
-    draw_mouse_cursor(&mouse_cursor_window().writer(), &Vector2D::new(0, 0));
+    draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
 
     unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
     unsafe { LAYER_MANAGER = Some(LayerManager::new()) };

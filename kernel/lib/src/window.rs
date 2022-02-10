@@ -56,7 +56,7 @@ impl Window {
         self.transparent_color = Some(c);
     }
 
-    pub fn writer(&mut self) -> &Window {
+    pub fn writer(&mut self) -> &mut Window {
         // returns self because My Window implements PixelWriter and removed WindowPixelWriter which the Official MikanOS defined.
         self
     }
@@ -78,7 +78,7 @@ impl Window {
 }
 
 impl PixelWriter for Window {
-    fn write(&self, x: i32, y: i32, color: &PixelColor) {
+    fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
         self.data.borrow_mut()[y as usize][x as usize] = *color;
         self.shadow_buffer.borrow_mut().writer().write(x, y, color);
     }

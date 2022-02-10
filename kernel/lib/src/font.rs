@@ -1,7 +1,7 @@
 use crate::graphics::{PixelColor, PixelWriter};
 
 pub fn write_string<W: PixelWriter + ?Sized>(
-    writer: &W,
+    writer: &mut W,
     x: i32,
     y: i32,
     str: &str,
@@ -13,7 +13,7 @@ pub fn write_string<W: PixelWriter + ?Sized>(
 }
 
 pub fn write_chars<W: PixelWriter + ?Sized>(
-    writer: &W,
+    writer: &mut W,
     x: i32,
     y: i32,
     chars: &[char],
@@ -25,7 +25,7 @@ pub fn write_chars<W: PixelWriter + ?Sized>(
 }
 
 pub fn write_ascii<W: PixelWriter + ?Sized>(
-    writer: &W,
+    writer: &mut W,
     x: i32,
     y: i32,
     c: char,

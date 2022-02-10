@@ -44,7 +44,7 @@ impl Console {
         self.refresh(writer);
     }
 
-    fn put_string<W: PixelWriter>(&mut self, str: &str, writer: &W) {
+    fn put_string<W: PixelWriter>(&mut self, str: &str, writer: &mut W) {
         for char in str.chars() {
             if char == '\n' {
                 self.new_line(writer);
@@ -65,7 +65,7 @@ impl Console {
         }
     }
 
-    fn new_line<W: PixelWriter>(&mut self, writer: &W) {
+    fn new_line<W: PixelWriter>(&mut self, writer: &mut W) {
         self.cursor_column = 0;
         if self.cursor_row < ROWS - 1 {
             self.cursor_row += 1;

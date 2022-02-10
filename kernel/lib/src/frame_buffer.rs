@@ -31,8 +31,8 @@ impl FrameBuffer {
         }
     }
 
-    pub fn writer(&self) -> &FrameBufferWriter {
-        &self.writer
+    pub fn writer(&mut self) -> &mut FrameBufferWriter {
+        &mut self.writer
     }
 
     pub fn copy(&self, dst_pos: Vector2D<i32>, src: &FrameBuffer) {
