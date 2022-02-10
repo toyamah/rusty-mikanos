@@ -1,15 +1,15 @@
 use crate::error::{Code, Error};
 use crate::make_error;
 
-pub struct ArrayQueue<'a, T, const N: usize> {
-    data: &'a mut [T; N],
+pub struct ArrayQueue<T, const N: usize> {
+    data: [T; N],
     length: usize,
     write_pos: usize,
     read_pos: usize,
 }
 
-impl<'a, T, const N: usize> ArrayQueue<'a, T, N> {
-    pub fn new(data: &'a mut [T; N]) -> Self {
+impl<T, const N: usize> ArrayQueue<T, N> {
+    pub fn new(data: [T; N]) -> Self {
         Self {
             data,
             length: 0,

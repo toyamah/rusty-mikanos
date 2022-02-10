@@ -6,7 +6,6 @@
 
 extern crate alloc;
 
-use alloc::string::ToString;
 use bit_field::BitField;
 use console::Console;
 use core::arch::asm;
@@ -115,12 +114,8 @@ enum MessageType {
     KInterruptXhci,
 }
 
-static mut MESSAGES: [Message; 32] = [Message {
-    m_type: MessageType::KInterruptXhci,
-}; 32];
 static mut MAIN_QUEUE: Option<ArrayQueue<Message, 32>> = None;
-
-fn main_queue() -> &'static mut ArrayQueue<'static, Message, 32> {
+fn main_queue() -> &'static mut ArrayQueue<Message, 32> {
     unsafe { MAIN_QUEUE.as_mut().unwrap() }
 }
 
@@ -318,7 +313,11 @@ fn initialize_global_vars(frame_buffer_config: FrameBufferConfig) {
 
         CONSOLE = Some(Console::new(DESKTOP_FG_COLOR, DESKTOP_BG_COLOR));
 
-        MAIN_QUEUE = Some(ArrayQueue::new(&mut MESSAGES));
+        MAIN_QUEUE = Some(ArrayQueue::new(
+            [Message {
+                m_type: MessageType::KInterruptXhci,
+            }; 32],
+        ));
     }
 
     usb::register_mouse_observer(mouse_observer);
