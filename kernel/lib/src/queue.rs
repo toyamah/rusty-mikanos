@@ -9,7 +9,7 @@ pub struct ArrayQueue<T, const N: usize> {
 }
 
 impl<T, const N: usize> ArrayQueue<T, N> {
-    pub fn new(data: [T; N]) -> Self {
+    pub const fn new(data: [T; N]) -> Self {
         Self {
             data,
             length: 0,

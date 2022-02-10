@@ -114,9 +114,13 @@ enum MessageType {
     KInterruptXhci,
 }
 
-static mut MAIN_QUEUE: Option<ArrayQueue<Message, 32>> = None;
+static mut MAIN_QUEUE: ArrayQueue<Message, 32> = ArrayQueue::new(
+    [Message {
+        m_type: MessageType::KInterruptXhci,
+    }; 32],
+);
 fn main_queue() -> &'static mut ArrayQueue<Message, 32> {
-    unsafe { MAIN_QUEUE.as_mut().unwrap() }
+    unsafe { &mut MAIN_QUEUE }
 }
 
 #[no_mangle] // disable name mangling
@@ -311,12 +315,6 @@ fn initialize_global_vars(frame_buffer_config: FrameBufferConfig) {
         PIXEL_WRITER = Some(FrameBufferWriter::new(frame_buffer_config));
 
         CONSOLE = Some(Console::new(DESKTOP_FG_COLOR, DESKTOP_BG_COLOR));
-
-        MAIN_QUEUE = Some(ArrayQueue::new(
-            [Message {
-                m_type: MessageType::KInterruptXhci,
-            }; 32],
-        ));
     }
 
     usb::register_mouse_observer(mouse_observer);
