@@ -113,7 +113,7 @@ impl Console {
     }
 }
 
-impl<'a> fmt::Write for Console {
+impl fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         match self.mode {
             Frame => self.put_string(s, pixel_writer()),
