@@ -57,6 +57,7 @@ pub struct LayerManager<'a> {
 }
 
 impl<'a> LayerManager<'a> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> LayerManager<'a> {
         Self {
             layers: vec![],

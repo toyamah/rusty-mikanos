@@ -40,10 +40,12 @@ impl<T> Vector2D<T>
 where
     T: Copy + Ord,
 {
+    #[must_use]
     pub fn element_max(&self, other: Vector2D<T>) -> Vector2D<T> {
         Vector2D::new(max(self.x, other.x), max(self.y, other.y))
     }
 
+    #[must_use]
     pub fn element_min(&self, other: Vector2D<T>) -> Vector2D<T> {
         Vector2D::new(min(self.x, other.x), min(self.y, other.y))
     }
@@ -139,7 +141,7 @@ impl FrameBufferWriter {
         }
     }
 
-    fn write_rgb(self: &Self, x: i32, y: i32, color: &PixelColor) {
+    fn write_rgb(&self, x: i32, y: i32, color: &PixelColor) {
         let p = self.pixel_at(x, y);
         unsafe {
             *p.offset(0) = color.r;
@@ -148,7 +150,7 @@ impl FrameBufferWriter {
         }
     }
 
-    fn write_bgr(self: &Self, x: i32, y: i32, color: &PixelColor) {
+    fn write_bgr(&self, x: i32, y: i32, color: &PixelColor) {
         let p = self.pixel_at(x, y);
         unsafe {
             *p.offset(0) = color.b;

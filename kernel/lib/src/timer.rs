@@ -9,7 +9,7 @@ pub fn initialize_api_timer() {
 
 pub fn measure_time<F>(f: F) -> u32
 where
-    F: FnOnce() -> (),
+    F: FnOnce(),
 {
     start_lapic_timer();
     f();

@@ -62,7 +62,7 @@ impl Window {
 
     fn on_each_pixel<F>(&self, mut f: F)
     where
-        F: FnMut(usize, usize) -> (),
+        F: FnMut(usize, usize),
     {
         for y in 0..self.height {
             for x in 0..self.width {

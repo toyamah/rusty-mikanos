@@ -181,7 +181,7 @@ pub extern "C" fn KernelMainNewStack(
         loop_and_hlt()
     });
 
-    setup_idt(int_handler_xhci as u64, kernel_cs);
+    setup_idt(int_handler_xhci as usize, kernel_cs);
 
     enable_to_interrupt_for_xhc(xhc_device).unwrap();
 
@@ -189,7 +189,7 @@ pub extern "C" fn KernelMainNewStack(
         info!("cannot read base address#0: {}", e);
         loop_and_hlt()
     });
-    let xhc_mmio_base = xhc_bar & !(0x0f as u64);
+    let xhc_mmio_base = xhc_bar & !(0x0f_u64);
     // debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
     let controller = XhciController::new(xhc_mmio_base);
@@ -261,9 +261,8 @@ pub extern "C" fn KernelMainNewStack(
                 m_type: MessageType::KInterruptXhci,
             }) => {
                 while xhci_controller().primary_event_ring_has_front() {
-                    match xhci_controller().process_event() {
-                        Err(code) => error!("Error while ProcessEvent: {}", code),
-                        Ok(_) => {}
+                    if let Err(code) = xhci_controller().process_event() {
+                        error!("Error while ProcessEvent: {}", code)
                     }
                 }
             }

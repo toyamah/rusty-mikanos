@@ -12,7 +12,7 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", out_dir);
 }
 
-fn build_usb(out_dir: &str, current_dir: &PathBuf) {
+fn build_usb(out_dir: &str, current_dir: &Path) {
     let usb_dir = Path::new(current_dir).join("usb");
 
     Command::new("make").current_dir(&usb_dir).status().unwrap();

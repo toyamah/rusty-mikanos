@@ -58,6 +58,7 @@ impl FrameBufferConfig {
         self.pixel_format.bytes_per_pixel() * (self.pixels_per_scan_line as usize * y + x)
     }
 
+    /// # Safety
     pub unsafe fn frame_addr_at(&self, x: usize, y: usize) -> *mut u8 {
         self.frame_buffer.add(self.pixel_position_at(x, y))
     }
@@ -115,7 +116,7 @@ pub enum MemoryType {
 
 impl MemoryType {
     pub fn to_i32(&self) -> i32 {
-        return match self {
+        match self {
             MemoryType::KEfiReservedMemoryType => 0,
             MemoryType::KEfiLoaderCode => 1,
             MemoryType::KEfiLoaderData => 2,
@@ -132,11 +133,11 @@ impl MemoryType {
             MemoryType::KEfiPalCode => 13,
             MemoryType::KEfiPersistentMemory => 14,
             MemoryType::KEfiMaxMemoryType => 15,
-        };
+        }
     }
 
     pub fn is_available(&self) -> bool {
-        return match self {
+        match self {
             MemoryType::KEfiBootServicesCode
             | MemoryType::KEfiBootServicesData
             | MemoryType::KEfiConventionalMemory => true,
@@ -153,11 +154,11 @@ impl MemoryType {
             | MemoryType::KEfiPalCode
             | MemoryType::KEfiPersistentMemory
             | MemoryType::KEfiMaxMemoryType => false,
-        };
+        }
     }
 }
 
-// doesn't generate code without this method...
+/// # Safety
 #[no_mangle]
 pub unsafe extern "C" fn _dummy(
     _: *const FrameBufferConfig,

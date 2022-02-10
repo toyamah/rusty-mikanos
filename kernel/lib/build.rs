@@ -1,5 +1,5 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 fn main() {
@@ -13,7 +13,7 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", out_dir);
 }
 
-fn build_hankaku(out_dir: &str, current_dir: &PathBuf) {
+fn build_hankaku(out_dir: &str, current_dir: &Path) {
     let make_font = Path::new(current_dir)
         .parent()
         .and_then(|p| p.parent())
@@ -47,7 +47,7 @@ fn build_hankaku(out_dir: &str, current_dir: &PathBuf) {
     println!("cargo:rerun-if-changed=hankaku.txt");
 }
 
-fn build_asm(out_dir: &str, current_dir: &PathBuf) {
+fn build_asm(out_dir: &str, current_dir: &Path) {
     // https://github.com/uchan-nos/mikanos/blob/osbook_day06b/kernel/Makefile#L37
     Command::new("nasm")
         .current_dir(current_dir)

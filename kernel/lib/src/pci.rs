@@ -74,10 +74,7 @@ impl Device {
     }
 
     pub fn switch_ehci_to_xhci(&self) {
-        let intel_ehc_exist = devices()
-            .iter()
-            .find(|device| device.is_intel_ehc())
-            .is_some();
+        let intel_ehc_exist = devices().iter().any(|device| device.is_intel_ehc());
 
         if !intel_ehc_exist {
             return;
@@ -168,7 +165,7 @@ fn make_address(bus: u8, device: u8, function: u8, reg_addr: u8) -> u32 {
         x << bits
     }
     // this bit enables to read/write data at the made address
-    let enabled_bit: u32 = (1 as u32) << 31;
+    let enabled_bit: u32 = (1_u32) << 31;
     enabled_bit | shl(bus, 16) | shl(device, 11) | shl(function, 8) | (reg_addr & 0xfc) as u32
 }
 
@@ -234,7 +231,7 @@ pub fn scan_all_bus() -> Result<(), Error> {
     }
 
     // Multiple PCI host controllers
-    for function in 1..8 as u8 {
+    for function in 1..8_u8 {
         if read_vendor_id(0, 0, function) == NON_EXISTENT_DEVICE {
             continue;
         }
@@ -249,7 +246,7 @@ pub fn scan_all_bus() -> Result<(), Error> {
 
 /// ref: https://wiki.osdev.org/PCI#Recursive_Scan
 fn scan_bus(bus: u8) -> Result<(), Error> {
-    for device in 0..32 as u8 {
+    for device in 0..32_u8 {
         if read_vendor_id(bus, device, 0) == NON_EXISTENT_DEVICE {
             continue;
         }
@@ -268,7 +265,7 @@ fn scan_device(bus: u8, device: u8) -> Result<(), Error> {
     }
 
     // It is a multi-function device, so check remaining functions
-    for function in 1..8 as u8 {
+    for function in 1..8_u8 {
         if read_vendor_id(bus, device, function) == NON_EXISTENT_DEVICE {
             continue;
         }
@@ -336,7 +333,7 @@ pub fn read_bar(device: &Device, bar_index: usize) -> Result<u64, Error> {
     }
 
     let bar_upper = read_conf_reg(device, addr + 4) as u64;
-    return Ok(bar | bar_upper << 32);
+    Ok(bar | bar_upper << 32)
 }
 
 fn calc_bar_address(bar_index: usize) -> u8 {
@@ -365,7 +362,7 @@ impl CapabilityHeader {
 
 impl From<u32> for CapabilityHeader {
     fn from(value: u32) -> Self {
-        Self { 0: value }
+        Self(value)
     }
 }
 
@@ -412,7 +409,7 @@ impl MsiCapabilityHeader {
 
 impl From<u32> for MsiCapabilityHeader {
     fn from(value: u32) -> Self {
-        Self { 0: value }
+        Self(value)
     }
 }
 

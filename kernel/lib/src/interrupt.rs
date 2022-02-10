@@ -36,11 +36,11 @@ pub fn idt() -> &'static mut [InterruptDescriptor; 256] {
     unsafe { &mut IDT }
 }
 
-pub fn setup_idt(offset: u64, code_segment: u16) {
+pub fn setup_idt(offset: usize, code_segment: u16) {
     let idt = idt();
     idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(
         InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
-        offset,
+        offset as u64,
         code_segment,
     );
     load_interrupt_descriptor_table(

@@ -59,7 +59,7 @@ unsafe fn get_font(c: char) -> Option<*mut u8> {
 
     if index < size {
         let start = (&_binary_hankaku_bin_start as *const u8) as *mut u8;
-        Some(start.offset(index as isize))
+        Some(start.add(index))
     } else {
         None
     }
