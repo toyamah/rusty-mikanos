@@ -6,6 +6,7 @@
 
 extern crate alloc;
 
+use alloc::format;
 use bit_field::BitField;
 use console::Console;
 use core::arch::asm;
@@ -15,8 +16,8 @@ use lib::asm::{set_csss, set_ds_all};
 use lib::error::Error;
 use lib::frame_buffer::FrameBuffer;
 use lib::graphics::{
-    draw_desktop, FrameBufferWriter, PixelWriter, Vector2D, COLOR_WHITE, DESKTOP_BG_COLOR,
-    DESKTOP_FG_COLOR,
+    draw_desktop, fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Vector2D,
+    COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
 use lib::interrupt::setup_idt;
 use lib::layer::LayerManager;
@@ -248,11 +249,9 @@ pub extern "C" fn KernelMainNewStack(
     draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
 
     unsafe {
-        MAIN_WINDOW = Some(Window::new(160, 68, frame_buffer_config().pixel_format));
+        MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format));
     }
     main_window().draw_window("hello window");
-    main_window().write_string(24, 28, "Welcome to", &COLOR_WHITE);
-    main_window().write_string(24, 44, " MikanOS world!", &COLOR_WHITE);
 
     unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
     unsafe { LAYER_MANAGER = Some(LayerManager::new()) };
@@ -282,13 +281,25 @@ pub extern "C" fn KernelMainNewStack(
     layer_manager().up_down(main_window_layer_id, 1);
     layer_manager().draw(screen_frame_buffer());
 
+    let mut count = 0;
     loop {
+        count += 1;
+        fill_rectangle(
+            main_window().writer(),
+            &Vector2D::new(24, 28),
+            &Vector2D::new(8 * 10, 16),
+            &PixelColor::new(0xc6, 0xc6, 0xc6),
+        );
+        main_window().write_string(24, 28, &format!("{:010}", count), &COLOR_WHITE);
+        layer_manager().draw(screen_frame_buffer());
+
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
         if main_queue().count() == 0 {
             // next interruption event makes CPU get back from power save mode.
             unsafe {
-                asm!("sti\n\thlt"); // execute sti and then hlt
+                asm!("sti");
+                // asm!("sti\n\thlt"); // execute sti and then hlt
             };
             continue;
         }
