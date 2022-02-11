@@ -1,5 +1,7 @@
 use crate::frame_buffer::FrameBuffer;
-use crate::graphics::{PixelColor, PixelWriter, Rectangle, Vector2D};
+use crate::graphics::{
+    fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
+};
 use alloc::vec::Vec;
 use core::cmp::{max, min};
 use shared::{FrameBufferConfig, PixelFormat};
@@ -57,6 +59,40 @@ impl Window {
         self
     }
 
+    pub fn draw_window(&mut self, title: &str) {
+        let win_w = self.width as i32;
+        let win_h = self.height as i32;
+
+        self.fill_rect((0, 0), (win_w, 1), 0xc6c6c6);
+        self.fill_rect((1, 1), (win_w - 2, 1), 0xffffff);
+        self.fill_rect((0, 0), (1, win_h), 0xc6c6c6);
+        self.fill_rect((1, 1), (1, win_h - 2), 0xffffff);
+        self.fill_rect((win_w - 2, 1), (1, win_h - 2), 0x848484);
+        self.fill_rect((win_w - 1, 0), (1, win_h), 0x000000);
+        self.fill_rect((2, 2), (win_w - 4, win_h - 4), 0xc6c6c6);
+        self.fill_rect((3, 3), (win_w - 6, 18), 0x000084);
+        self.fill_rect((1, win_h - 2), (win_w - 2, 1), 0x848484);
+        self.fill_rect((0, win_h - 1), (win_w, 1), 0x000000);
+
+        self.write_string(24, 4, title, &PixelColor::from(0xffffff));
+
+        for (y, &str) in CLOSE_BUTTON.iter().enumerate() {
+            for (x, char) in str.chars().enumerate() {
+                let color = match char {
+                    '@' => COLOR_WHITE,
+                    '$' => PixelColor::from(0x848484),
+                    ':' => PixelColor::from(0xc6c6c6),
+                    _ => COLOR_BLACK,
+                };
+                self.write(
+                    win_w - 5 - str.len() as i32 + x as i32,
+                    (5 + y) as i32,
+                    &color,
+                );
+            }
+        }
+    }
+
     fn draw_with_transparent_to(
         &self,
         dst: &mut FrameBuffer,
@@ -86,6 +122,15 @@ impl Window {
     fn at(&self, x: usize, y: usize) -> PixelColor {
         self.data[y][x]
     }
+
+    fn fill_rect(&mut self, pos: (i32, i32), size: (i32, i32), c: u32) {
+        fill_rectangle(
+            self,
+            &Vector2D::new(pos.0, pos.1),
+            &Vector2D::new(size.0, size.1),
+            &PixelColor::from(c),
+        )
+    }
 }
 
 impl PixelWriter for Window {
@@ -102,3 +147,20 @@ impl PixelWriter for Window {
         self.height as i32
     }
 }
+
+const CLOSE_BUTTON: [&str; 14] = [
+    "...............@",
+    ".:::::::::::::$@",
+    ".:::::::::::::$@",
+    ".:::@@::::@@::$@",
+    ".::::@@::@@:::$@",
+    ".:::::@@@@::::$@",
+    ".::::::@@:::::$@",
+    ".:::::@@@@::::$@",
+    ".::::@@::@@:::$@",
+    ".:::@@::::@@::$@",
+    ".:::::::::::::$@",
+    ".:::::::::::::$@",
+    ".$$$$$$$$$$$$$$@",
+    "@@@@@@@@@@@@@@@@",
+];

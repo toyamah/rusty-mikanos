@@ -15,7 +15,8 @@ use lib::asm::{set_csss, set_ds_all};
 use lib::error::Error;
 use lib::frame_buffer::FrameBuffer;
 use lib::graphics::{
-    draw_desktop, FrameBufferWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+    draw_desktop, FrameBufferWriter, PixelWriter, Vector2D, COLOR_WHITE, DESKTOP_BG_COLOR,
+    DESKTOP_FG_COLOR,
 };
 use lib::interrupt::setup_idt;
 use lib::layer::LayerManager;
@@ -93,6 +94,14 @@ fn mouse_cursor_window() -> &'static mut Window {
 }
 fn mouse_cursor_window_ref() -> &'static Window {
     unsafe { MOUSE_CURSOR_WINDOW.as_ref().unwrap() }
+}
+
+static mut MAIN_WINDOW: Option<Window> = None;
+fn main_window() -> &'static mut Window {
+    unsafe { MAIN_WINDOW.as_mut().unwrap() }
+}
+fn main_window_ref() -> &'static Window {
+    unsafe { MAIN_WINDOW.as_ref().unwrap() }
 }
 
 static mut MOUSE_LAYER_ID: u32 = u32::MAX;
@@ -238,6 +247,13 @@ pub extern "C" fn KernelMainNewStack(
     }
     draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
 
+    unsafe {
+        MAIN_WINDOW = Some(Window::new(160, 68, frame_buffer_config().pixel_format));
+    }
+    main_window().draw_window("hello window");
+    main_window().write_string(24, 28, "Welcome to", &COLOR_WHITE);
+    main_window().write_string(24, 44, " MikanOS world!", &COLOR_WHITE);
+
     unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
     unsafe { LAYER_MANAGER = Some(LayerManager::new()) };
     let bg_layer_id = layer_manager()
@@ -245,6 +261,13 @@ pub extern "C" fn KernelMainNewStack(
         .set_window(bg_window_ref())
         .move_(Vector2D::new(0, 0))
         .id();
+
+    let main_window_layer_id = layer_manager()
+        .new_layer()
+        .set_window(main_window_ref())
+        .move_(Vector2D::new(300, 100))
+        .id();
+
     {
         let id = layer_manager()
             .new_layer()
@@ -256,6 +279,7 @@ pub extern "C" fn KernelMainNewStack(
 
     layer_manager().up_down(bg_layer_id, 0);
     layer_manager().up_down(mouse_layer_id(), 1);
+    layer_manager().up_down(main_window_layer_id, 1);
     layer_manager().draw(screen_frame_buffer());
 
     loop {

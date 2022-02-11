@@ -24,6 +24,16 @@ pub struct PixelColor {
     b: u8,
 }
 
+impl From<u32> for PixelColor {
+    fn from(v: u32) -> Self {
+        PixelColor::new(
+            (v >> 16 & 0xff) as u8,
+            (v >> 8 & 0xff) as u8,
+            (v & 0xff) as u8,
+        )
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Vector2D<T> {
     pub x: T,
@@ -233,6 +243,12 @@ fn draw_rectangle<W: PixelWriter>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pixel_color_from() {
+        let p = PixelColor::from(0x123456);
+        assert_eq!(p, PixelColor::new(0x12, 0x34, 0x56));
+    }
 
     #[test]
     fn vector2d_element_max() {
