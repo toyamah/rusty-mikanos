@@ -26,7 +26,7 @@ use lib::paging::setup_identity_page_table;
 use lib::pci::Device;
 use lib::queue::ArrayQueue;
 use lib::segment::set_up_segment;
-use lib::timer::{initialize_api_timer, measure_time};
+use lib::timer::initialize_api_timer;
 use lib::window::Window;
 use lib::{interrupt, pci};
 use log::{error, info};
@@ -66,6 +66,13 @@ static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
 fn frame_buffer_config() -> &'static mut FrameBufferConfig {
     unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
 }
+fn screen_size() -> Vector2D<usize> {
+    let c = frame_buffer_config();
+    Vector2D::new(
+        c.horizontal_resolution as usize,
+        c.vertical_resolution as usize,
+    )
+}
 
 static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
 fn memory_manager() -> &'static mut BitmapMemoryManager {
@@ -96,6 +103,11 @@ fn mouse_layer_id() -> u32 {
 static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
 fn screen_frame_buffer() -> &'static mut FrameBuffer {
     unsafe { SCREEN_FRAME_BUFFER.as_mut().unwrap() }
+}
+
+static mut MOUSE_POSITION: Vector2D<usize> = Vector2D::new(200, 200);
+fn mouse_position() -> Vector2D<usize> {
+    unsafe { MOUSE_POSITION }
 }
 
 #[repr(align(16))]
@@ -211,9 +223,10 @@ pub extern "C" fn KernelMainNewStack(
     xhci_controller().configure_port();
 
     unsafe {
+        let screen_size = screen_size();
         BG_WINDOW = Some(Window::new(
-            frame_buffer_config_.horizontal_resolution as usize,
-            frame_buffer_config_.vertical_resolution as usize,
+            screen_size.x,
+            screen_size.y,
             frame_buffer_config().pixel_format,
         ))
     }
@@ -236,7 +249,7 @@ pub extern "C" fn KernelMainNewStack(
         let id = layer_manager()
             .new_layer()
             .set_window(mouse_cursor_window_ref())
-            .move_(Vector2D::new(200, 200))
+            .move_(mouse_position().to_i32_vec2d())
             .id();
         unsafe { MOUSE_LAYER_ID = id }
     }
@@ -292,12 +305,18 @@ fn alloc_error_handle(layout: alloc::alloc::Layout) -> ! {
 }
 
 extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
-    layer_manager().move_relative(
-        mouse_layer_id(),
-        Vector2D::new(displacement_x as i32, displacement_y as i32),
-    );
-    let time = measure_time(|| layer_manager().draw(screen_frame_buffer()));
-    printk!("mouse draw = {}\n", time);
+    let new_pos = mouse_position().to_i32_vec2d()
+        + Vector2D::new(displacement_x as i32, displacement_y as i32);
+    let new_pos = new_pos
+        .element_min(screen_size().to_i32_vec2d() + Vector2D::new(-1, -1))
+        .element_max(Vector2D::new(0, 0));
+
+    unsafe {
+        MOUSE_POSITION = Vector2D::new(new_pos.x as usize, new_pos.y as usize);
+    }
+
+    layer_manager().move_(mouse_layer_id(), new_pos);
+    layer_manager().draw(screen_frame_buffer());
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {

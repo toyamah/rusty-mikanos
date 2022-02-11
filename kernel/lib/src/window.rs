@@ -1,6 +1,7 @@
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{PixelColor, PixelWriter, Rectangle, Vector2D};
 use alloc::vec::Vec;
+use core::cmp::{max, min};
 use shared::{FrameBufferConfig, PixelFormat};
 
 pub struct Window {
@@ -37,13 +38,9 @@ impl Window {
             None => {
                 dst.copy(position, &self.shadow_buffer);
             }
-            Some(transparent) => self.on_each_pixel(move |x, y| {
-                let color = self.at(x, y);
-                if color != transparent {
-                    dst.writer()
-                        .write(position.x + x as i32, position.y + y as i32, &color);
-                }
-            }),
+            Some(transparent) => {
+                self.draw_with_transparent_to(dst, position, transparent);
+            }
         }
     }
 
@@ -60,13 +57,28 @@ impl Window {
         self
     }
 
-    fn on_each_pixel<F>(&self, mut f: F)
-    where
-        F: FnMut(usize, usize),
-    {
-        for y in 0..self.height {
-            for x in 0..self.width {
-                f(x, y);
+    fn draw_with_transparent_to(
+        &self,
+        dst: &mut FrameBuffer,
+        position: Vector2D<i32>,
+        transparent: PixelColor,
+    ) {
+        let writer = dst.writer();
+
+        let height = self.height as i32;
+        let y_start = max(0, 0 - position.y);
+        let y_end = min(height, writer.height() - position.y);
+        let width = self.width as i32;
+        let x_start = max(0, 0 - position.x);
+        let x_end = min(width, writer.width() - position.x);
+
+        for y in y_start..y_end {
+            for x in x_start..x_end {
+                let color = self.at(x as usize, y as usize);
+                if color != transparent {
+                    dst.writer()
+                        .write(position.x + x as i32, position.y + y as i32, &color);
+                }
             }
         }
     }

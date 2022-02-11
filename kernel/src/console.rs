@@ -6,7 +6,6 @@ use core::fmt::Write;
 use lib::graphics::{
     fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, DESKTOP_BG_COLOR,
 };
-use lib::timer::measure_time;
 
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;
@@ -130,8 +129,6 @@ pub fn _printk(args: fmt::Arguments) {
     // To draw text rapidly, avoid using write_fmt
     // because write_fmt calls write_str for every argument and then LayoutManager.draw() is called as many times as the argument's size.
     let text = format!("{}", args);
-    let time = measure_time(|| console().write_str(&text).unwrap());
-    let text = format!("{}", format_args!("[{:#09}]", time));
     console().write_str(&text).unwrap();
 }
 

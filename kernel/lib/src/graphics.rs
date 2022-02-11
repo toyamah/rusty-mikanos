@@ -31,8 +31,14 @@ pub struct Vector2D<T> {
 }
 
 impl<T> Vector2D<T> {
-    pub fn new(x: T, y: T) -> Vector2D<T> {
+    pub const fn new(x: T, y: T) -> Vector2D<T> {
         Self { x, y }
+    }
+}
+
+impl Vector2D<usize> {
+    pub fn to_i32_vec2d(&self) -> Vector2D<i32> {
+        Vector2D::new(self.x as i32, self.y as i32)
     }
 }
 
