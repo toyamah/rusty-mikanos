@@ -35,6 +35,10 @@ impl FrameBuffer {
         &mut self.writer
     }
 
+    pub fn config(&self) -> &FrameBufferConfig {
+        &self.config
+    }
+
     pub fn copy(&self, dst_pos: Vector2D<i32>, src: &FrameBuffer, src_area: Rectangle<i32>) {
         assert!(self.config.pixel_format == src.config.pixel_format);
 

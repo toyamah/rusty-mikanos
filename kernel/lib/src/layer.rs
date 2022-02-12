@@ -3,6 +3,7 @@ use crate::graphics::{Rectangle, Vector2D};
 use crate::window::Window;
 use alloc::vec;
 use alloc::vec::Vec;
+use shared::FrameBufferConfig;
 
 pub struct Layer<'a> {
     id: u32,
@@ -54,15 +55,23 @@ pub struct LayerManager<'a> {
     layers: Vec<Layer<'a>>,
     layer_id_stack: Vec<u32>,
     latest_id: u32,
+    back_buffer: FrameBuffer,
 }
 
 impl<'a> LayerManager<'a> {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> LayerManager<'a> {
+    pub fn new(screen_buffer_config: &FrameBufferConfig) -> LayerManager<'a> {
+        let back_buffer = FrameBuffer::new(FrameBufferConfig::new(
+            screen_buffer_config.horizontal_resolution,
+            screen_buffer_config.vertical_resolution,
+            screen_buffer_config.pixels_per_scan_line,
+            screen_buffer_config.pixel_format,
+        ));
+
         Self {
             layers: vec![],
             layer_id_stack: vec![],
             latest_id: 0,
+            back_buffer,
         }
     }
 
@@ -75,8 +84,9 @@ impl<'a> LayerManager<'a> {
     pub fn draw_on(&mut self, area: Rectangle<i32>, screen: &mut FrameBuffer) {
         for &layer_id in &self.layer_id_stack {
             let index = layer_id as usize;
-            self.layers[index].draw_to(screen, area);
+            self.layers[index].draw_to(&mut self.back_buffer, area);
         }
+        screen.copy(area.pos, &self.back_buffer, area);
     }
 
     pub fn draw_layer_of(&mut self, id: u32, screen: &mut FrameBuffer) {
@@ -93,9 +103,10 @@ impl<'a> LayerManager<'a> {
             }
 
             if draw {
-                layer.draw_to(screen, window_area);
+                layer.draw_to(&mut self.back_buffer, window_area);
             }
         }
+        screen.copy(window_area.pos, &self.back_buffer, window_area);
     }
 
     pub fn move_(&mut self, id: u32, new_position: Vector2D<i32>, screen: &mut FrameBuffer) {
@@ -185,7 +196,12 @@ mod tests {
     #[test]
     fn new_layer() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new();
+        let mut lm = LayerManager::new(&FrameBufferConfig::new(
+            1,
+            1,
+            1,
+            PixelFormat::KPixelBGRResv8BitPerColor,
+        ));
         let id1 = lm.new_layer().set_window(&window1).id();
         // verify layer's id equals to index of lm.layers
         assert_eq!(lm.layers[id1 as usize].id, id1);
@@ -194,7 +210,12 @@ mod tests {
     #[test]
     fn move_() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new();
+        let mut lm = LayerManager::new(&FrameBufferConfig::new(
+            1,
+            1,
+            1,
+            PixelFormat::KPixelBGRResv8BitPerColor,
+        ));
         let id1 = lm.new_layer().set_window(&window1).id();
 
         lm.move_(
@@ -215,7 +236,12 @@ mod tests {
     #[test]
     fn move_relative() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new();
+        let mut lm = LayerManager::new(&FrameBufferConfig::new(
+            1,
+            1,
+            1,
+            PixelFormat::KPixelBGRResv8BitPerColor,
+        ));
         let mut buffer = FrameBuffer::new(FrameBufferConfig::new(
             1,
             1,

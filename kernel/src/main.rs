@@ -263,7 +263,7 @@ pub extern "C" fn KernelMainNewStack(
     console().reset_mode(console::Mode::ConsoleWindow, console_window());
 
     unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
-    unsafe { LAYER_MANAGER = Some(LayerManager::new()) };
+    unsafe { LAYER_MANAGER = Some(LayerManager::new(screen_frame_buffer().config())) };
     let bg_layer_id = layer_manager()
         .new_layer()
         .set_window(bg_window_ref())
