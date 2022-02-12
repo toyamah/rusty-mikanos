@@ -6,6 +6,7 @@
 
 extern crate alloc;
 
+use crate::console::new_console_window;
 use alloc::format;
 use bit_field::BitField;
 use console::Console;
@@ -16,7 +17,7 @@ use lib::asm::{set_csss, set_ds_all};
 use lib::error::Error;
 use lib::frame_buffer::FrameBuffer;
 use lib::graphics::{
-    draw_desktop, fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Vector2D,
+    draw_desktop, fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Rectangle, Vector2D,
     COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
 use lib::interrupt::setup_idt;
@@ -103,6 +104,14 @@ fn main_window() -> &'static mut Window {
 }
 fn main_window_ref() -> &'static Window {
     unsafe { MAIN_WINDOW.as_ref().unwrap() }
+}
+
+static mut CONSOLE_WINDOW: Option<Window> = None;
+fn console_window() -> &'static mut Window {
+    unsafe { CONSOLE_WINDOW.as_mut().unwrap() }
+}
+fn console_window_ref() -> &'static Window {
+    unsafe { CONSOLE_WINDOW.as_ref().unwrap() }
 }
 
 static mut MOUSE_LAYER_ID: u32 = u32::MAX;
@@ -241,17 +250,17 @@ pub extern "C" fn KernelMainNewStack(
         ))
     }
     draw_desktop(bg_window().writer());
-    console().reset_mode(console::Mode::BgWindow, bg_window());
 
     unsafe {
         MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window(frame_buffer_config().pixel_format))
     }
     draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
 
-    unsafe {
-        MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format));
-    }
+    unsafe { MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) }
     main_window().draw_window("hello window");
+
+    unsafe { CONSOLE_WINDOW = Some(new_console_window(frame_buffer_config().pixel_format)) }
+    console().reset_mode(console::Mode::ConsoleWindow, console_window());
 
     unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
     unsafe { LAYER_MANAGER = Some(LayerManager::new()) };
@@ -266,7 +275,13 @@ pub extern "C" fn KernelMainNewStack(
         .set_window(main_window_ref())
         .move_(Vector2D::new(300, 100))
         .id();
-
+    console().set_layer_id(
+        layer_manager()
+            .new_layer()
+            .set_window(console_window_ref())
+            .move_(Vector2D::new(0, 0))
+            .id(),
+    );
     {
         let id = layer_manager()
             .new_layer()
@@ -277,9 +292,13 @@ pub extern "C" fn KernelMainNewStack(
     }
 
     layer_manager().up_down(bg_layer_id, 0);
-    layer_manager().up_down(mouse_layer_id(), 1);
-    layer_manager().up_down(main_window_layer_id, 1);
-    layer_manager().draw(screen_frame_buffer());
+    layer_manager().up_down(console().layer_id().unwrap(), 1);
+    layer_manager().up_down(main_window_layer_id, 2);
+    layer_manager().up_down(mouse_layer_id(), 3);
+    layer_manager().draw_on(
+        Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
+        screen_frame_buffer(),
+    );
 
     let mut count = 0;
     loop {
@@ -291,7 +310,7 @@ pub extern "C" fn KernelMainNewStack(
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
         main_window().write_string(24, 28, &format!("{:010}", count), &COLOR_WHITE);
-        layer_manager().draw(screen_frame_buffer());
+        layer_manager().draw_layer_of(main_window_layer_id, screen_frame_buffer());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
@@ -350,8 +369,7 @@ extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
         MOUSE_POSITION = Vector2D::new(new_pos.x as usize, new_pos.y as usize);
     }
 
-    layer_manager().move_(mouse_layer_id(), new_pos);
-    layer_manager().draw(screen_frame_buffer());
+    layer_manager().move_(mouse_layer_id(), new_pos, screen_frame_buffer());
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {

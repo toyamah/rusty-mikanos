@@ -1,6 +1,7 @@
 use crate::font;
 use core::cmp::{max, min};
-use core::ops::{Add, AddAssign};
+use core::fmt::Debug;
+use core::ops::{Add, AddAssign, BitAnd, Sub};
 use shared::{FrameBufferConfig, PixelFormat};
 
 pub const COLOR_BLACK: PixelColor = PixelColor {
@@ -91,6 +92,20 @@ where
     }
 }
 
+impl<T> Sub for Vector2D<T>
+where
+    T: Sub<Output = T> + Copy + Clone,
+{
+    type Output = Vector2D<T>;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Vector2D::<T> {
+            x: self.x - other.x,
+            y: self.y - other.y,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Rectangle<T> {
     pub pos: Vector2D<T>,
@@ -100,6 +115,43 @@ pub struct Rectangle<T> {
 impl<T> Rectangle<T> {
     pub fn new(pos: Vector2D<T>, size: Vector2D<T>) -> Rectangle<T> {
         Self { pos, size }
+    }
+}
+
+impl<T> Default for Rectangle<T>
+where
+    T: Default,
+{
+    fn default() -> Self {
+        Rectangle::new(
+            Vector2D::new(T::default(), T::default()),
+            Vector2D::new(T::default(), T::default()),
+        )
+    }
+}
+
+impl<T> BitAnd for Rectangle<T>
+where
+    T: Default + Copy + Ord + Add<Output = T> + Sub<Output = T>,
+{
+    type Output = Rectangle<T>;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let lhs = self;
+        let lhs_end = lhs.pos + lhs.size;
+        let rhs_end = rhs.pos + rhs.size;
+
+        if lhs_end.x < rhs.pos.x
+            || lhs_end.y < rhs.pos.y
+            || rhs_end.x < lhs.pos.x
+            || rhs_end.y < lhs.pos.y
+        {
+            return Rectangle::default();
+        }
+
+        let new_pos = lhs.pos.element_max(rhs.pos);
+        let new_size = lhs_end.element_min(rhs_end) - new_pos;
+        Rectangle::new(new_pos, new_size)
     }
 }
 
@@ -272,5 +324,20 @@ mod tests {
 
         let min = Vector2D::new(1, 2).element_min(Vector2D::new(1, 2));
         assert_eq!(Vector2D::new(1, 2), min);
+    }
+
+    #[test]
+    fn rectangle_bitand() {
+        let left = rect((0, 0), (100, 100));
+        let right = rect((90, 90), (10, 10));
+        assert_eq!(rect((90, 90), (10, 10)), left & right);
+
+        let left = rect((20, 20), (1, 1));
+        let right = rect((0, 0), (1, 1));
+        assert_eq!(rect((0, 0), (0, 0)), left & right);
+    }
+
+    fn rect<T>(pos: (T, T), size: (T, T)) -> Rectangle<T> {
+        Rectangle::new(Vector2D::new(pos.0, pos.1), Vector2D::new(size.0, size.1))
     }
 }

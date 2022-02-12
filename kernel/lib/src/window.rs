@@ -34,14 +34,24 @@ impl Window {
         }
     }
 
+    pub fn size(&self) -> Vector2D<usize> {
+        Vector2D::new(self.width, self.height)
+    }
+
     //TODO: change self to mutable reference if possible
-    pub fn draw_to(&self, dst: &mut FrameBuffer, position: Vector2D<i32>) {
+    pub fn draw_to(&self, dst: &mut FrameBuffer, pos: Vector2D<i32>, area: Rectangle<i32>) {
         match self.transparent_color {
             None => {
-                dst.copy(position, &self.shadow_buffer);
+                let window_area = Rectangle::new(pos, self.size().to_i32_vec2d());
+                let intersection = area & window_area;
+                dst.copy(
+                    intersection.pos,
+                    &self.shadow_buffer,
+                    Rectangle::new(intersection.pos - pos, intersection.size),
+                );
             }
             Some(transparent) => {
-                self.draw_with_transparent_to(dst, position, transparent);
+                self.draw_with_transparent_to(dst, pos, transparent);
             }
         }
     }
@@ -96,24 +106,24 @@ impl Window {
     fn draw_with_transparent_to(
         &self,
         dst: &mut FrameBuffer,
-        position: Vector2D<i32>,
+        pos: Vector2D<i32>,
         transparent: PixelColor,
     ) {
         let writer = dst.writer();
 
         let height = self.height as i32;
-        let y_start = max(0, 0 - position.y);
-        let y_end = min(height, writer.height() - position.y);
+        let y_start = max(0, 0 - pos.y);
+        let y_end = min(height, writer.height() - pos.y);
         let width = self.width as i32;
-        let x_start = max(0, 0 - position.x);
-        let x_end = min(width, writer.width() - position.x);
+        let x_start = max(0, 0 - pos.x);
+        let x_end = min(width, writer.width() - pos.x);
 
         for y in y_start..y_end {
             for x in x_start..x_end {
                 let color = self.at(x as usize, y as usize);
                 if color != transparent {
                     dst.writer()
-                        .write(position.x + x as i32, position.y + y as i32, &color);
+                        .write(pos.x + x as i32, pos.y + y as i32, &color);
                 }
             }
         }

@@ -35,25 +35,27 @@ impl FrameBuffer {
         &mut self.writer
     }
 
-    pub fn copy(&self, dst_pos: Vector2D<i32>, src: &FrameBuffer) {
+    pub fn copy(&self, dst_pos: Vector2D<i32>, src: &FrameBuffer, src_area: Rectangle<i32>) {
         assert!(self.config.pixel_format == src.config.pixel_format);
 
-        let dst_size = frame_buffer_size(&self.config);
-        let src_size = frame_buffer_size(&src.config);
-        let dst_start = dst_pos.element_max(Vector2D::new(0, 0));
-        let dst_end = dst_size.element_min(Vector2D::new(
-            dst_pos.x + src_size.x as i32,
-            dst_pos.y + src_size.y as i32,
-        ));
+        let src_area_shifted = Rectangle::new(dst_pos, src_area.size);
+        let src_outline = Rectangle::new(dst_pos - src_area.pos, frame_buffer_size(&self.config));
+        let dst_outline = Rectangle::new(Vector2D::new(0, 0), frame_buffer_size(&self.config));
+        let copy_area = dst_outline & src_outline & src_area_shifted;
+        let src_start_pos = copy_area.pos - (dst_pos - src_area.pos);
+
         let mut dst_buf = unsafe {
             self.config
-                .frame_addr_at(dst_start.x as usize, dst_start.y as usize)
+                .frame_addr_at(copy_area.pos.x as usize, copy_area.pos.y as usize)
         };
-        let mut src_buf = unsafe { src.config.frame_addr_at(0, 0) };
+        let mut src_buf = unsafe {
+            src.config
+                .frame_addr_at(src_start_pos.x as usize, src_start_pos.y as usize)
+        };
 
         let bytes_per_copy_line =
-            self.config.pixel_format.bytes_per_pixel() * (dst_end.x - dst_start.x) as usize;
-        for _ in dst_start.y..dst_end.y {
+            self.config.pixel_format.bytes_per_pixel() * copy_area.size.x as usize;
+        for _ in 0..copy_area.size.y {
             unsafe {
                 copy_nonoverlapping(src_buf, dst_buf, bytes_per_copy_line);
                 dst_buf = dst_buf.add(self.config.bytes_per_scan_line());
