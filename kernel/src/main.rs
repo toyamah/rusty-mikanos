@@ -358,18 +358,48 @@ fn alloc_error_handle(layout: alloc::alloc::Layout) -> ! {
     panic!("allocation error: {:?}", layout)
 }
 
-extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
+static mut MOUSE_DRAG_LAYER_ID: u32 = 0;
+fn mouse_drag_layer_id() -> u32 {
+    unsafe { MOUSE_DRAG_LAYER_ID }
+}
+
+static mut PREVIOUS_BUTTONS: u8 = 0;
+fn previous_buttons() -> u8 {
+    unsafe { PREVIOUS_BUTTONS }
+}
+
+extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8) {
     let new_pos = mouse_position().to_i32_vec2d()
         + Vector2D::new(displacement_x as i32, displacement_y as i32);
     let new_pos = new_pos
         .element_min(screen_size().to_i32_vec2d() + Vector2D::new(-1, -1))
         .element_max(Vector2D::new(0, 0));
 
-    unsafe {
-        MOUSE_POSITION = Vector2D::new(new_pos.x as usize, new_pos.y as usize);
+    let old_pos = mouse_position();
+    unsafe { MOUSE_POSITION = Vector2D::new(new_pos.x as usize, new_pos.y as usize) }
+    let pos_diff = mouse_position() - old_pos;
+    layer_manager().move_(mouse_layer_id(), new_pos, screen_frame_buffer());
+
+    let previous_left_pressed = (previous_buttons() & 0x01) != 0;
+    let left_pressed = (buttons & 0x01) != 0;
+    if !previous_left_pressed && left_pressed {
+        let layer_id = layer_manager().find_layer_id_by_position(new_pos, mouse_layer_id());
+        if let Some(id) = layer_id {
+            unsafe { MOUSE_DRAG_LAYER_ID = id }
+        }
+    } else if previous_left_pressed && left_pressed {
+        if mouse_drag_layer_id() > 0 {
+            layer_manager().move_relative(
+                mouse_drag_layer_id(),
+                pos_diff.to_i32_vec2d(),
+                screen_frame_buffer(),
+            );
+        }
+    } else if previous_left_pressed && !left_pressed {
+        unsafe { MOUSE_DRAG_LAYER_ID = 0 };
     }
 
-    layer_manager().move_(mouse_layer_id(), new_pos, screen_frame_buffer());
+    unsafe { PREVIOUS_BUTTONS = buttons };
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {

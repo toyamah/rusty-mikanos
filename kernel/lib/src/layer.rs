@@ -171,6 +171,27 @@ impl<'a> LayerManager<'a> {
         }
     }
 
+    pub fn find_layer_id_by_position(&self, pos: Vector2D<i32>, exclude_id: u32) -> Option<u32> {
+        self.layer_id_stack
+            .iter()
+            .rev()
+            .filter(|&&id| id != exclude_id)
+            .map(|&id| &self.layers[id as usize])
+            .find(|&layer| {
+                if let Some(win) = layer.get_window() {
+                    let win_pos = layer.position;
+                    let win_end_pos = win_pos + win.size().to_i32_vec2d();
+                    win_pos.x <= pos.x
+                        && pos.x < win_end_pos.x
+                        && win_pos.y <= pos.y
+                        && pos.y < win_end_pos.y
+                } else {
+                    false
+                }
+            })
+            .map(|l| l.id)
+    }
+
     fn hide(&mut self, id: u32) {
         if self.layers.is_empty() {
             return;
