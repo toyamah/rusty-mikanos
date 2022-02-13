@@ -1,4 +1,5 @@
 #![cfg_attr(not(test), no_std)]
+#![allow(dead_code)]
 
 extern crate alloc;
 
@@ -12,6 +13,7 @@ pub mod interrupt;
 pub mod layer;
 pub mod memory_manager;
 pub mod memory_map;
+pub mod message;
 pub mod mouse;
 pub mod paging;
 pub mod pci;

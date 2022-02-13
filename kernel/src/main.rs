@@ -7,6 +7,7 @@
 extern crate alloc;
 
 use crate::console::new_console_window;
+use alloc::collections::VecDeque;
 use alloc::format;
 use bit_field::BitField;
 use console::console;
@@ -20,14 +21,14 @@ use lib::graphics::{
     draw_desktop, fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Rectangle, Vector2D,
     COLOR_WHITE,
 };
-use lib::interrupt::setup_idt;
+use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
 use lib::layer::LayerManager;
 use lib::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use lib::memory_map::UEFI_PAGE_SIZE;
+use lib::message::{Message, MessageType};
 use lib::mouse::{draw_mouse_cursor, new_mouse_cursor_window};
 use lib::paging::setup_identity_page_table;
 use lib::pci::Device;
-use lib::queue::ArrayQueue;
 use lib::segment::set_up_segment;
 use lib::timer::initialize_api_timer;
 use lib::window::Window;
@@ -41,6 +42,11 @@ mod console;
 mod logger;
 mod memory_allocator;
 mod usb;
+
+static mut MAIN_QUEUE: Option<VecDeque<Message>> = None;
+pub fn main_queue() -> &'static mut VecDeque<Message> {
+    unsafe { MAIN_QUEUE.as_mut().unwrap() }
+}
 
 static mut LAYER_MANAGER: Option<LayerManager> = None;
 fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
@@ -130,25 +136,6 @@ struct KernelMainStack([u8; 1024 * 1024]);
 #[no_mangle]
 static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]);
 
-#[derive(Copy, Clone, Debug)]
-struct Message {
-    m_type: MessageType,
-}
-
-#[derive(Copy, Clone, Debug)]
-enum MessageType {
-    KInterruptXhci,
-}
-
-static mut MAIN_QUEUE: ArrayQueue<Message, 32> = ArrayQueue::new(
-    [Message {
-        m_type: MessageType::KInterruptXhci,
-    }; 32],
-);
-fn main_queue() -> &'static mut ArrayQueue<Message, 32> {
-    unsafe { &mut MAIN_QUEUE }
-}
-
 #[no_mangle] // disable name mangling
 pub extern "C" fn KernelMainNewStack(
     frame_buffer_config_: &'static FrameBufferConfig,
@@ -212,7 +199,7 @@ pub extern "C" fn KernelMainNewStack(
         loop_and_hlt()
     });
 
-    setup_idt(int_handler_xhci as usize, kernel_cs);
+    initialize_interrupt(int_handler_xhci as usize, kernel_cs);
 
     enable_to_interrupt_for_xhc(xhc_device).unwrap();
 
@@ -311,7 +298,7 @@ pub extern "C" fn KernelMainNewStack(
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
-        if main_queue().count() == 0 {
+        if main_queue().is_empty() {
             // next interruption event makes CPU get back from power save mode.
             unsafe {
                 asm!("sti");
@@ -320,12 +307,12 @@ pub extern "C" fn KernelMainNewStack(
             continue;
         }
 
-        let result = main_queue().pop();
+        let result = main_queue().pop_back();
         unsafe {
             asm!("sti"); // set CPU Interrupt Flag 1
         };
         match result {
-            Ok(Message {
+            Some(Message {
                 m_type: MessageType::KInterruptXhci,
             }) => {
                 while xhci_controller().primary_event_ring_has_front() {
@@ -334,9 +321,7 @@ pub extern "C" fn KernelMainNewStack(
                     }
                 }
             }
-            Err(error) => {
-                error!("failed to pop a message from MainQueue. {}", error)
-            }
+            None => error!("failed to pop a message from MainQueue."),
         }
     }
 }
@@ -401,19 +386,15 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
     unsafe { PREVIOUS_BUTTONS = buttons };
 }
 
-extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
-    main_queue()
-        .push(Message {
-            m_type: MessageType::KInterruptXhci,
-        })
-        .unwrap_or_else(|e| error!("failed to push a Message to main_queue {}", e));
-
-    interrupt::notify_end_of_interrupt();
+extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
+    main_queue().push_front(Message::new(MessageType::KInterruptXhci));
+    notify_end_of_interrupt();
 }
 
 fn initialize_global_vars(frame_buffer_config: FrameBufferConfig) {
     unsafe {
         PIXEL_WRITER = Some(FrameBufferWriter::new(frame_buffer_config));
+        MAIN_QUEUE = Some(VecDeque::new());
     }
 
     usb::register_mouse_observer(mouse_observer);
