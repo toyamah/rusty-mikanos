@@ -17,7 +17,6 @@ pub mod message;
 pub mod mouse;
 pub mod paging;
 pub mod pci;
-pub mod queue;
 pub mod segment;
 pub mod timer;
 pub mod window;
