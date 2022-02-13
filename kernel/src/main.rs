@@ -9,7 +9,7 @@ extern crate alloc;
 use crate::console::new_console_window;
 use alloc::format;
 use bit_field::BitField;
-use console::Console;
+use console::console;
 use core::arch::asm;
 use core::borrow::BorrowMut;
 use core::panic::PanicInfo;
@@ -18,7 +18,7 @@ use lib::error::Error;
 use lib::frame_buffer::FrameBuffer;
 use lib::graphics::{
     draw_desktop, fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Rectangle, Vector2D,
-    COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+    COLOR_WHITE,
 };
 use lib::interrupt::setup_idt;
 use lib::layer::LayerManager;
@@ -41,11 +41,6 @@ mod console;
 mod logger;
 mod memory_allocator;
 mod usb;
-
-static mut CONSOLE: Option<Console> = None;
-fn console() -> &'static mut Console {
-    unsafe { CONSOLE.as_mut().unwrap() }
-}
 
 static mut LAYER_MANAGER: Option<LayerManager> = None;
 fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
@@ -162,6 +157,7 @@ pub extern "C" fn KernelMainNewStack(
     unsafe { FRAME_BUFFER_CONFIG = Some(*frame_buffer_config_) }
     let memory_map = *memory_map;
     initialize_global_vars(*frame_buffer_config_);
+    console::initialize();
     draw_desktop(pixel_writer());
     printk!("Welcome to MikanOS!\n");
     initialize_api_timer();
@@ -418,8 +414,6 @@ extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) 
 fn initialize_global_vars(frame_buffer_config: FrameBufferConfig) {
     unsafe {
         PIXEL_WRITER = Some(FrameBufferWriter::new(frame_buffer_config));
-
-        CONSOLE = Some(Console::new(DESKTOP_FG_COLOR, DESKTOP_BG_COLOR));
     }
 
     usb::register_mouse_observer(mouse_observer);

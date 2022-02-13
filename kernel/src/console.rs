@@ -1,14 +1,26 @@
 use crate::console::Mode::{ConsoleWindow, Frame};
-use crate::{console, console_window, layer_manager_op, pixel_writer, screen_frame_buffer};
+use crate::{console_window, layer_manager_op, pixel_writer, screen_frame_buffer};
 use alloc::format;
 use core::fmt;
 use core::fmt::Write;
-use lib::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
+use lib::graphics::{
+    fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, DESKTOP_BG_COLOR,
+    DESKTOP_FG_COLOR,
+};
 use lib::window::Window;
 use shared::PixelFormat;
 
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;
+
+static mut CONSOLE: Option<Console> = None;
+pub fn console() -> &'static mut Console {
+    unsafe { CONSOLE.as_mut().unwrap() }
+}
+
+pub fn initialize() {
+    unsafe { CONSOLE = Some(Console::new(DESKTOP_FG_COLOR, DESKTOP_BG_COLOR)) }
+}
 
 pub struct Console {
     mode: Mode,
