@@ -1,13 +1,15 @@
 use crate::frame_buffer::FrameBuffer;
-use crate::graphics::Vector2D;
+use crate::graphics::{Rectangle, Vector2D};
 use crate::window::Window;
 use alloc::vec;
 use alloc::vec::Vec;
+use shared::FrameBufferConfig;
 
 pub struct Layer<'a> {
     id: u32,
     position: Vector2D<i32>,
     window: Option<&'a Window>,
+    draggable: bool,
 }
 
 impl<'a> Layer<'a> {
@@ -16,6 +18,7 @@ impl<'a> Layer<'a> {
             id,
             position: Vector2D::new(0, 0),
             window: None,
+            draggable: false,
         }
     }
 
@@ -32,6 +35,15 @@ impl<'a> Layer<'a> {
         self.window
     }
 
+    pub fn set_draggable(&mut self, draggable: bool) -> &mut Layer<'a> {
+        self.draggable = draggable;
+        self
+    }
+
+    pub fn is_draggable(&self) -> bool {
+        self.draggable
+    }
+
     pub fn move_(&mut self, pos: Vector2D<i32>) -> &mut Layer<'a> {
         self.position = pos;
         self
@@ -43,9 +55,9 @@ impl<'a> Layer<'a> {
         self.position = Vector2D::new(x, y)
     }
 
-    pub fn draw_to(&self, screen: &mut FrameBuffer) {
+    fn draw_to(&self, screen: &mut FrameBuffer, area: Rectangle<i32>) {
         if let Some(w) = self.window {
-            w.draw_to(screen, self.position)
+            w.draw_to(screen, self.position, area)
         }
     }
 }
@@ -54,43 +66,77 @@ pub struct LayerManager<'a> {
     layers: Vec<Layer<'a>>,
     layer_id_stack: Vec<u32>,
     latest_id: u32,
+    back_buffer: FrameBuffer,
 }
 
 impl<'a> LayerManager<'a> {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> LayerManager<'a> {
+    pub fn new(screen_buffer_config: &FrameBufferConfig) -> LayerManager<'a> {
+        let back_buffer = FrameBuffer::new(FrameBufferConfig::new(
+            screen_buffer_config.horizontal_resolution,
+            screen_buffer_config.vertical_resolution,
+            screen_buffer_config.pixels_per_scan_line,
+            screen_buffer_config.pixel_format,
+        ));
+
         Self {
             layers: vec![],
             layer_id_stack: vec![],
             latest_id: 0,
+            back_buffer,
         }
     }
 
     pub fn new_layer(&mut self) -> &mut Layer<'a> {
-        self.latest_id += 1;
         self.layers.push(Layer::new(self.latest_id));
+        self.latest_id += 1; // increment after layer.push to make layer_id and index of layers equal
         self.layers.iter_mut().last().unwrap()
     }
 
-    pub fn draw(&mut self, screen: &mut FrameBuffer) {
+    pub fn draw_on(&mut self, area: Rectangle<i32>, screen: &mut FrameBuffer) {
         for &layer_id in &self.layer_id_stack {
-            let index = self
-                .layers
-                .binary_search_by(|l| l.id.cmp(&layer_id))
-                .unwrap();
-            self.layers[index].draw_to(screen);
+            let index = layer_id as usize;
+            self.layers[index].draw_to(&mut self.back_buffer, area);
         }
+        screen.copy(area.pos, &self.back_buffer, area);
     }
 
-    pub fn move_(&mut self, id: u32, new_position: Vector2D<i32>) {
+    pub fn draw_layer_of(&mut self, id: u32, screen: &mut FrameBuffer) {
+        let mut draw = false;
+        let mut window_area: Rectangle<i32> = Rectangle::default();
+        for &layer_id in &self.layer_id_stack {
+            let index = layer_id as usize;
+            let layer = &self.layers[index];
+
+            if layer_id == id {
+                window_area.size = layer.window.unwrap().size().to_i32_vec2d();
+                window_area.pos = layer.position;
+                draw = true
+            }
+
+            if draw {
+                layer.draw_to(&mut self.back_buffer, window_area);
+            }
+        }
+        screen.copy(window_area.pos, &self.back_buffer, window_area);
+    }
+
+    pub fn move_(&mut self, id: u32, new_position: Vector2D<i32>, screen: &mut FrameBuffer) {
         if let Some(layer) = self.layers.iter_mut().find(|l| l.id == id) {
+            let window_size = layer.get_window().unwrap().size();
+            let old_pos = layer.position;
             layer.move_(new_position);
+            self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()), screen);
+            self.draw_layer_of(id, screen);
         }
     }
 
-    pub fn move_relative(&mut self, id: u32, pos_diff: Vector2D<i32>) {
+    pub fn move_relative(&mut self, id: u32, pos_diff: Vector2D<i32>, screen: &mut FrameBuffer) {
         if let Some(layer) = self.layers.iter_mut().find(|l| l.id == id) {
+            let window_size = layer.get_window().unwrap().size();
+            let old_pos = layer.position;
             layer.move_relative(pos_diff);
+            self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()), screen);
+            self.draw_layer_of(id, screen);
         }
     }
 
@@ -136,6 +182,31 @@ impl<'a> LayerManager<'a> {
         }
     }
 
+    //TODO: remove the lifetime annotation of self after Layer changes not to have a Window reference
+    pub fn find_layer_by_position(
+        &'a self,
+        pos: Vector2D<i32>,
+        exclude_id: u32,
+    ) -> Option<&Layer<'a>> {
+        self.layer_id_stack
+            .iter()
+            .rev()
+            .filter(|&&id| id != exclude_id)
+            .map(|&id| &self.layers[id as usize])
+            .find(|&layer| {
+                if let Some(win) = layer.get_window() {
+                    let win_pos = layer.position;
+                    let win_end_pos = win_pos + win.size().to_i32_vec2d();
+                    win_pos.x <= pos.x
+                        && pos.x < win_end_pos.x
+                        && win_pos.y <= pos.y
+                        && pos.y < win_end_pos.y
+                } else {
+                    false
+                }
+            })
+    }
+
     fn hide(&mut self, id: u32) {
         if self.layers.is_empty() {
             return;
@@ -156,15 +227,43 @@ impl<'a> LayerManager<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shared::PixelFormat;
+    use shared::{FrameBufferConfig, PixelFormat};
+
+    #[test]
+    fn new_layer() {
+        let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
+        let mut lm = LayerManager::new(&FrameBufferConfig::new(
+            1,
+            1,
+            1,
+            PixelFormat::KPixelBGRResv8BitPerColor,
+        ));
+        let id1 = lm.new_layer().set_window(&window1).id();
+        // verify layer's id equals to index of lm.layers
+        assert_eq!(lm.layers[id1 as usize].id, id1);
+    }
 
     #[test]
     fn move_() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new();
+        let mut lm = LayerManager::new(&FrameBufferConfig::new(
+            1,
+            1,
+            1,
+            PixelFormat::KPixelBGRResv8BitPerColor,
+        ));
         let id1 = lm.new_layer().set_window(&window1).id();
 
-        lm.move_(id1, Vector2D::new(100, 10));
+        lm.move_(
+            id1,
+            Vector2D::new(100, 10),
+            &mut FrameBuffer::new(FrameBufferConfig::new(
+                1,
+                1,
+                1,
+                PixelFormat::KPixelBGRResv8BitPerColor,
+            )),
+        );
 
         let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
         assert_eq!(l1.position, Vector2D::new(100, 10));
@@ -173,20 +272,31 @@ mod tests {
     #[test]
     fn move_relative() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new();
+        let mut lm = LayerManager::new(&FrameBufferConfig::new(
+            1,
+            1,
+            1,
+            PixelFormat::KPixelBGRResv8BitPerColor,
+        ));
+        let mut buffer = FrameBuffer::new(FrameBufferConfig::new(
+            1,
+            1,
+            1,
+            PixelFormat::KPixelBGRResv8BitPerColor,
+        ));
         let id1 = lm
             .new_layer()
             .set_window(&window1)
             .move_(Vector2D::new(100, 100))
             .id();
 
-        lm.move_relative(id1, Vector2D::new(-50, -30));
+        lm.move_relative(id1, Vector2D::new(-50, -30), &mut buffer);
         {
             let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
             assert_eq!(l1.position, Vector2D::new(50, 70));
         }
 
-        lm.move_relative(id1, Vector2D::new(-60, -60));
+        lm.move_relative(id1, Vector2D::new(-60, -60), &mut buffer);
         let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
         assert_eq!(l1.position, Vector2D::new(-10, 10));
     }

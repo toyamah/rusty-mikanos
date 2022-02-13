@@ -12,10 +12,14 @@ extern "C" {
     fn UsbXhciController_PrimaryEventRing_HasFront(c_impl: *mut XhciControllerImpl) -> bool;
 
     /// ref: https://doc.rust-lang.org/nomicon/ffi.html#targeting-callbacks-to-rust-objects
-    fn RegisterMouseObserver(cb: extern "C" fn(displacement_x: i8, displacement_y: i8));
+    fn RegisterMouseObserver(
+        cb: extern "C" fn(buttons: u8, displacement_x: i8, displacement_y: i8),
+    );
 }
 
-pub fn register_mouse_observer(cb: extern "C" fn(displacement_x: i8, displacement_y: i8)) {
+pub fn register_mouse_observer(
+    cb: extern "C" fn(buttons: u8, displacement_x: i8, displacement_y: i8),
+) {
     unsafe { RegisterMouseObserver(cb) };
 }
 

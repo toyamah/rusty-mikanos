@@ -1,6 +1,7 @@
 use crate::font;
 use core::cmp::{max, min};
-use core::ops::{Add, AddAssign};
+use core::fmt::Debug;
+use core::ops::{Add, AddAssign, BitAnd, Sub};
 use shared::{FrameBufferConfig, PixelFormat};
 
 pub const COLOR_BLACK: PixelColor = PixelColor {
@@ -24,6 +25,16 @@ pub struct PixelColor {
     b: u8,
 }
 
+impl From<u32> for PixelColor {
+    fn from(v: u32) -> Self {
+        PixelColor::new(
+            (v >> 16 & 0xff) as u8,
+            (v >> 8 & 0xff) as u8,
+            (v & 0xff) as u8,
+        )
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Vector2D<T> {
     pub x: T,
@@ -31,8 +42,14 @@ pub struct Vector2D<T> {
 }
 
 impl<T> Vector2D<T> {
-    pub fn new(x: T, y: T) -> Vector2D<T> {
+    pub const fn new(x: T, y: T) -> Vector2D<T> {
         Self { x, y }
+    }
+}
+
+impl Vector2D<usize> {
+    pub fn to_i32_vec2d(&self) -> Vector2D<i32> {
+        Vector2D::new(self.x as i32, self.y as i32)
     }
 }
 
@@ -75,6 +92,20 @@ where
     }
 }
 
+impl<T> Sub for Vector2D<T>
+where
+    T: Sub<Output = T> + Copy + Clone,
+{
+    type Output = Vector2D<T>;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Vector2D::<T> {
+            x: self.x - other.x,
+            y: self.y - other.y,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Rectangle<T> {
     pub pos: Vector2D<T>,
@@ -84,6 +115,43 @@ pub struct Rectangle<T> {
 impl<T> Rectangle<T> {
     pub fn new(pos: Vector2D<T>, size: Vector2D<T>) -> Rectangle<T> {
         Self { pos, size }
+    }
+}
+
+impl<T> Default for Rectangle<T>
+where
+    T: Default,
+{
+    fn default() -> Self {
+        Rectangle::new(
+            Vector2D::new(T::default(), T::default()),
+            Vector2D::new(T::default(), T::default()),
+        )
+    }
+}
+
+impl<T> BitAnd for Rectangle<T>
+where
+    T: Default + Copy + Ord + Add<Output = T> + Sub<Output = T>,
+{
+    type Output = Rectangle<T>;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let lhs = self;
+        let lhs_end = lhs.pos + lhs.size;
+        let rhs_end = rhs.pos + rhs.size;
+
+        if lhs_end.x < rhs.pos.x
+            || lhs_end.y < rhs.pos.y
+            || rhs_end.x < lhs.pos.x
+            || rhs_end.y < lhs.pos.y
+        {
+            return Rectangle::default();
+        }
+
+        let new_pos = lhs.pos.element_max(rhs.pos);
+        let new_size = lhs_end.element_min(rhs_end) - new_pos;
+        Rectangle::new(new_pos, new_size)
     }
 }
 
@@ -229,6 +297,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn pixel_color_from() {
+        let p = PixelColor::from(0x123456);
+        assert_eq!(p, PixelColor::new(0x12, 0x34, 0x56));
+    }
+
+    #[test]
     fn vector2d_element_max() {
         let max = Vector2D::new(100, 20).element_max(Vector2D::new(10, 200));
         assert_eq!(Vector2D::new(100, 200), max);
@@ -250,5 +324,20 @@ mod tests {
 
         let min = Vector2D::new(1, 2).element_min(Vector2D::new(1, 2));
         assert_eq!(Vector2D::new(1, 2), min);
+    }
+
+    #[test]
+    fn rectangle_bitand() {
+        let left = rect((0, 0), (100, 100));
+        let right = rect((90, 90), (10, 10));
+        assert_eq!(rect((90, 90), (10, 10)), left & right);
+
+        let left = rect((20, 20), (1, 1));
+        let right = rect((0, 0), (1, 1));
+        assert_eq!(rect((0, 0), (0, 0)), left & right);
+    }
+
+    fn rect<T>(pos: (T, T), size: (T, T)) -> Rectangle<T> {
+        Rectangle::new(Vector2D::new(pos.0, pos.1), Vector2D::new(size.0, size.1))
     }
 }

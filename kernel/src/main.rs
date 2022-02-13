@@ -6,6 +6,8 @@
 
 extern crate alloc;
 
+use crate::console::new_console_window;
+use alloc::format;
 use bit_field::BitField;
 use console::Console;
 use core::arch::asm;
@@ -15,7 +17,8 @@ use lib::asm::{set_csss, set_ds_all};
 use lib::error::Error;
 use lib::frame_buffer::FrameBuffer;
 use lib::graphics::{
-    draw_desktop, FrameBufferWriter, Vector2D, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
+    draw_desktop, fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Rectangle, Vector2D,
+    COLOR_WHITE, DESKTOP_BG_COLOR, DESKTOP_FG_COLOR,
 };
 use lib::interrupt::setup_idt;
 use lib::layer::LayerManager;
@@ -26,7 +29,7 @@ use lib::paging::setup_identity_page_table;
 use lib::pci::Device;
 use lib::queue::ArrayQueue;
 use lib::segment::set_up_segment;
-use lib::timer::{initialize_api_timer, measure_time};
+use lib::timer::initialize_api_timer;
 use lib::window::Window;
 use lib::{interrupt, pci};
 use log::{error, info};
@@ -66,6 +69,13 @@ static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
 fn frame_buffer_config() -> &'static mut FrameBufferConfig {
     unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
 }
+fn screen_size() -> Vector2D<usize> {
+    let c = frame_buffer_config();
+    Vector2D::new(
+        c.horizontal_resolution as usize,
+        c.vertical_resolution as usize,
+    )
+}
 
 static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
 fn memory_manager() -> &'static mut BitmapMemoryManager {
@@ -88,6 +98,22 @@ fn mouse_cursor_window_ref() -> &'static Window {
     unsafe { MOUSE_CURSOR_WINDOW.as_ref().unwrap() }
 }
 
+static mut MAIN_WINDOW: Option<Window> = None;
+fn main_window() -> &'static mut Window {
+    unsafe { MAIN_WINDOW.as_mut().unwrap() }
+}
+fn main_window_ref() -> &'static Window {
+    unsafe { MAIN_WINDOW.as_ref().unwrap() }
+}
+
+static mut CONSOLE_WINDOW: Option<Window> = None;
+fn console_window() -> &'static mut Window {
+    unsafe { CONSOLE_WINDOW.as_mut().unwrap() }
+}
+fn console_window_ref() -> &'static Window {
+    unsafe { CONSOLE_WINDOW.as_ref().unwrap() }
+}
+
 static mut MOUSE_LAYER_ID: u32 = u32::MAX;
 fn mouse_layer_id() -> u32 {
     unsafe { MOUSE_LAYER_ID }
@@ -96,6 +122,11 @@ fn mouse_layer_id() -> u32 {
 static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
 fn screen_frame_buffer() -> &'static mut FrameBuffer {
     unsafe { SCREEN_FRAME_BUFFER.as_mut().unwrap() }
+}
+
+static mut MOUSE_POSITION: Vector2D<usize> = Vector2D::new(200, 200);
+fn mouse_position() -> Vector2D<usize> {
+    unsafe { MOUSE_POSITION }
 }
 
 #[repr(align(16))]
@@ -211,47 +242,84 @@ pub extern "C" fn KernelMainNewStack(
     xhci_controller().configure_port();
 
     unsafe {
+        let screen_size = screen_size();
         BG_WINDOW = Some(Window::new(
-            frame_buffer_config_.horizontal_resolution as usize,
-            frame_buffer_config_.vertical_resolution as usize,
+            screen_size.x,
+            screen_size.y,
             frame_buffer_config().pixel_format,
         ))
     }
     draw_desktop(bg_window().writer());
-    console().reset_mode(console::Mode::BgWindow, bg_window());
 
     unsafe {
         MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window(frame_buffer_config().pixel_format))
     }
     draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
 
+    unsafe { MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) }
+    main_window().draw_window("hello window");
+
+    unsafe { CONSOLE_WINDOW = Some(new_console_window(frame_buffer_config().pixel_format)) }
+    console().reset_mode(console::Mode::ConsoleWindow, console_window());
+
     unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
-    unsafe { LAYER_MANAGER = Some(LayerManager::new()) };
+    unsafe { LAYER_MANAGER = Some(LayerManager::new(screen_frame_buffer().config())) };
     let bg_layer_id = layer_manager()
         .new_layer()
         .set_window(bg_window_ref())
         .move_(Vector2D::new(0, 0))
         .id();
+
+    let main_window_layer_id = layer_manager()
+        .new_layer()
+        .set_window(main_window_ref())
+        .set_draggable(true)
+        .move_(Vector2D::new(300, 100))
+        .id();
+    console().set_layer_id(
+        layer_manager()
+            .new_layer()
+            .set_window(console_window_ref())
+            .move_(Vector2D::new(0, 0))
+            .id(),
+    );
     {
         let id = layer_manager()
             .new_layer()
             .set_window(mouse_cursor_window_ref())
-            .move_(Vector2D::new(200, 200))
+            .move_(mouse_position().to_i32_vec2d())
             .id();
         unsafe { MOUSE_LAYER_ID = id }
     }
 
     layer_manager().up_down(bg_layer_id, 0);
-    layer_manager().up_down(mouse_layer_id(), 1);
-    layer_manager().draw(screen_frame_buffer());
+    layer_manager().up_down(console().layer_id().unwrap(), 1);
+    layer_manager().up_down(main_window_layer_id, 2);
+    layer_manager().up_down(mouse_layer_id(), 3);
+    layer_manager().draw_on(
+        Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
+        screen_frame_buffer(),
+    );
 
+    let mut count = 0;
     loop {
+        count += 1;
+        fill_rectangle(
+            main_window().writer(),
+            &Vector2D::new(24, 28),
+            &Vector2D::new(8 * 10, 16),
+            &PixelColor::new(0xc6, 0xc6, 0xc6),
+        );
+        main_window().write_string(24, 28, &format!("{:010}", count), &COLOR_WHITE);
+        layer_manager().draw_layer_of(main_window_layer_id, screen_frame_buffer());
+
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
         if main_queue().count() == 0 {
             // next interruption event makes CPU get back from power save mode.
             unsafe {
-                asm!("sti\n\thlt"); // execute sti and then hlt
+                asm!("sti");
+                // asm!("sti\n\thlt"); // execute sti and then hlt
             };
             continue;
         }
@@ -291,13 +359,50 @@ fn alloc_error_handle(layout: alloc::alloc::Layout) -> ! {
     panic!("allocation error: {:?}", layout)
 }
 
-extern "C" fn mouse_observer(displacement_x: i8, displacement_y: i8) {
-    layer_manager().move_relative(
-        mouse_layer_id(),
-        Vector2D::new(displacement_x as i32, displacement_y as i32),
-    );
-    let time = measure_time(|| layer_manager().draw(screen_frame_buffer()));
-    printk!("mouse draw = {}\n", time);
+static mut MOUSE_DRAG_LAYER_ID: u32 = 0;
+fn mouse_drag_layer_id() -> u32 {
+    unsafe { MOUSE_DRAG_LAYER_ID }
+}
+
+static mut PREVIOUS_BUTTONS: u8 = 0;
+fn previous_buttons() -> u8 {
+    unsafe { PREVIOUS_BUTTONS }
+}
+
+extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8) {
+    let new_pos = mouse_position().to_i32_vec2d()
+        + Vector2D::new(displacement_x as i32, displacement_y as i32);
+    let new_pos = new_pos
+        .element_min(screen_size().to_i32_vec2d() + Vector2D::new(-1, -1))
+        .element_max(Vector2D::new(0, 0));
+
+    let old_pos = mouse_position();
+    unsafe { MOUSE_POSITION = Vector2D::new(new_pos.x as usize, new_pos.y as usize) }
+    let pos_diff = mouse_position() - old_pos;
+    layer_manager().move_(mouse_layer_id(), new_pos, screen_frame_buffer());
+
+    let previous_left_pressed = (previous_buttons() & 0x01) != 0;
+    let left_pressed = (buttons & 0x01) != 0;
+    if !previous_left_pressed && left_pressed {
+        let draggable_layer = layer_manager()
+            .find_layer_by_position(new_pos, mouse_layer_id())
+            .filter(|l| l.is_draggable());
+        if let Some(l) = draggable_layer {
+            unsafe { MOUSE_DRAG_LAYER_ID = l.id() }
+        }
+    } else if previous_left_pressed && left_pressed {
+        if mouse_drag_layer_id() > 0 {
+            layer_manager().move_relative(
+                mouse_drag_layer_id(),
+                pos_diff.to_i32_vec2d(),
+                screen_frame_buffer(),
+            );
+        }
+    } else if previous_left_pressed && !left_pressed {
+        unsafe { MOUSE_DRAG_LAYER_ID = 0 };
+    }
+
+    unsafe { PREVIOUS_BUTTONS = buttons };
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const interrupt::InterruptFrame) {
