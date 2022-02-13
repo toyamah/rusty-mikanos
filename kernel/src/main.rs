@@ -273,6 +273,7 @@ pub extern "C" fn KernelMainNewStack(
     let main_window_layer_id = layer_manager()
         .new_layer()
         .set_window(main_window_ref())
+        .set_draggable(true)
         .move_(Vector2D::new(300, 100))
         .id();
     console().set_layer_id(
@@ -383,9 +384,11 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
     let previous_left_pressed = (previous_buttons() & 0x01) != 0;
     let left_pressed = (buttons & 0x01) != 0;
     if !previous_left_pressed && left_pressed {
-        let layer_id = layer_manager().find_layer_id_by_position(new_pos, mouse_layer_id());
-        if let Some(id) = layer_id {
-            unsafe { MOUSE_DRAG_LAYER_ID = id }
+        let draggable_layer = layer_manager()
+            .find_layer_by_position(new_pos, mouse_layer_id())
+            .filter(|l| l.is_draggable());
+        if let Some(l) = draggable_layer {
+            unsafe { MOUSE_DRAG_LAYER_ID = l.id() }
         }
     } else if previous_left_pressed && left_pressed {
         if mouse_drag_layer_id() > 0 {

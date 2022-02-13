@@ -9,6 +9,7 @@ pub struct Layer<'a> {
     id: u32,
     position: Vector2D<i32>,
     window: Option<&'a Window>,
+    draggable: bool,
 }
 
 impl<'a> Layer<'a> {
@@ -17,6 +18,7 @@ impl<'a> Layer<'a> {
             id,
             position: Vector2D::new(0, 0),
             window: None,
+            draggable: false,
         }
     }
 
@@ -31,6 +33,15 @@ impl<'a> Layer<'a> {
 
     pub fn get_window(&self) -> Option<&'a Window> {
         self.window
+    }
+
+    pub fn set_draggable(&mut self, draggable: bool) -> &mut Layer<'a> {
+        self.draggable = draggable;
+        self
+    }
+
+    pub fn is_draggable(&self) -> bool {
+        self.draggable
     }
 
     pub fn move_(&mut self, pos: Vector2D<i32>) -> &mut Layer<'a> {
@@ -171,7 +182,12 @@ impl<'a> LayerManager<'a> {
         }
     }
 
-    pub fn find_layer_id_by_position(&self, pos: Vector2D<i32>, exclude_id: u32) -> Option<u32> {
+    //TODO: remove the lifetime annotation of self after Layer changes not to have a Window reference
+    pub fn find_layer_by_position(
+        &'a self,
+        pos: Vector2D<i32>,
+        exclude_id: u32,
+    ) -> Option<&Layer<'a>> {
         self.layer_id_stack
             .iter()
             .rev()
@@ -189,7 +205,6 @@ impl<'a> LayerManager<'a> {
                     false
                 }
             })
-            .map(|l| l.id)
     }
 
     fn hide(&mut self, id: u32) {
