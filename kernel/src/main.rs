@@ -17,9 +17,9 @@ use core::panic::PanicInfo;
 use lib::asm::{set_csss, set_ds_all};
 use lib::error::Error;
 use lib::frame_buffer::FrameBuffer;
+use lib::graphics::global::{frame_buffer_config, pixel_writer, screen_size};
 use lib::graphics::{
-    draw_desktop, fill_rectangle, FrameBufferWriter, PixelColor, PixelWriter, Rectangle, Vector2D,
-    COLOR_WHITE,
+    draw_desktop, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE,
 };
 use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
 use lib::layer::LayerManager;
@@ -32,7 +32,7 @@ use lib::pci::Device;
 use lib::segment::set_up_segment;
 use lib::timer::initialize_api_timer;
 use lib::window::Window;
-use lib::{interrupt, pci};
+use lib::{graphics, interrupt, pci};
 use log::{error, info};
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap};
@@ -56,26 +56,9 @@ fn layer_manager() -> &'static mut LayerManager<'static> {
     unsafe { LAYER_MANAGER.as_mut().unwrap() }
 }
 
-static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
-fn pixel_writer() -> &'static mut FrameBufferWriter {
-    unsafe { PIXEL_WRITER.as_mut().unwrap() }
-}
-
 static mut XHCI_CONTROLLER: Option<XhciController> = None;
 fn xhci_controller() -> &'static mut XhciController {
     unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
-}
-
-static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
-fn frame_buffer_config() -> &'static mut FrameBufferConfig {
-    unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
-}
-fn screen_size() -> Vector2D<usize> {
-    let c = frame_buffer_config();
-    Vector2D::new(
-        c.horizontal_resolution as usize,
-        c.vertical_resolution as usize,
-    )
 }
 
 static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
@@ -141,9 +124,9 @@ pub extern "C" fn KernelMainNewStack(
     frame_buffer_config_: &'static FrameBufferConfig,
     memory_map: &'static MemoryMap,
 ) -> ! {
-    unsafe { FRAME_BUFFER_CONFIG = Some(*frame_buffer_config_) }
     let memory_map = *memory_map;
-    initialize_global_vars(*frame_buffer_config_);
+    graphics::global::initialize(*frame_buffer_config_);
+    initialize_global_vars();
     console::initialize();
     draw_desktop(pixel_writer());
     printk!("Welcome to MikanOS!\n");
@@ -391,9 +374,8 @@ extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
     notify_end_of_interrupt();
 }
 
-fn initialize_global_vars(frame_buffer_config: FrameBufferConfig) {
+fn initialize_global_vars() {
     unsafe {
-        PIXEL_WRITER = Some(FrameBufferWriter::new(frame_buffer_config));
         MAIN_QUEUE = Some(VecDeque::new());
     }
 
