@@ -5,6 +5,80 @@ use alloc::vec;
 use alloc::vec::Vec;
 use shared::FrameBufferConfig;
 
+pub mod global {
+    use crate::console::{console, new_console_window};
+    use crate::console::Mode::ConsoleWindow;
+    use super::LayerManager;
+    use crate::frame_buffer::FrameBuffer;
+    use crate::graphics::global::{frame_buffer_config, screen_size};
+    use crate::graphics::{draw_desktop, Vector2D};
+    use crate::Window;
+
+    static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
+    pub fn screen_frame_buffer() -> &'static mut FrameBuffer {
+        unsafe { SCREEN_FRAME_BUFFER.as_mut().unwrap() }
+    }
+
+    static mut LAYER_MANAGER: Option<LayerManager> = None;
+    pub fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
+        unsafe { LAYER_MANAGER.as_mut() }
+    }
+    pub fn layer_manager() -> &'static mut LayerManager<'static> {
+        unsafe { LAYER_MANAGER.as_mut().unwrap() }
+    }
+
+    static mut BG_WINDOW: Option<Window> = None;
+    pub fn bg_window() -> &'static mut Window {
+        unsafe { BG_WINDOW.as_mut().unwrap() }
+    }
+    pub fn bg_window_ref() -> &'static Window {
+        unsafe { BG_WINDOW.as_ref().unwrap() }
+    }
+
+    static mut CONSOLE_WINDOW: Option<Window> = None;
+    pub fn console_window() -> &'static mut Window {
+        unsafe { CONSOLE_WINDOW.as_mut().unwrap() }
+    }
+    pub fn console_window_ref() -> &'static Window {
+        unsafe { CONSOLE_WINDOW.as_ref().unwrap() }
+    }
+
+    pub fn initialize() {
+        let screen_size = screen_size();
+        unsafe {
+            BG_WINDOW = Some(Window::new(
+                screen_size.x,
+                screen_size.y,
+                frame_buffer_config().pixel_format,
+            ))
+        }
+        draw_desktop(bg_window().writer());
+
+        unsafe {
+            SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config()));
+            LAYER_MANAGER = Some(LayerManager::new(frame_buffer_config()));
+            CONSOLE_WINDOW = Some(new_console_window(frame_buffer_config().pixel_format));
+        };
+        console().reset_mode(ConsoleWindow, console_window());
+
+        let bg_layer_id = layer_manager()
+            .new_layer()
+            .set_window(bg_window_ref())
+            .move_(Vector2D::new(0, 0))
+            .id();
+        console().set_layer_id(
+            layer_manager()
+                .new_layer()
+                .set_window(console_window_ref())
+                .move_(Vector2D::new(0, 0))
+                .id(),
+        );
+
+        layer_manager().up_down(bg_layer_id, 0);
+        layer_manager().up_down(console().layer_id().unwrap(), 1);
+    }
+}
+
 pub struct Layer<'a> {
     id: u32,
     position: Vector2D<i32>,

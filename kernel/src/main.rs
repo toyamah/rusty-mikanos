@@ -6,23 +6,20 @@
 
 extern crate alloc;
 
-use crate::console::new_console_window;
 use alloc::collections::VecDeque;
 use alloc::format;
 use bit_field::BitField;
-use console::console;
 use core::arch::asm;
 use core::borrow::BorrowMut;
 use core::panic::PanicInfo;
 use lib::asm::{set_csss, set_ds_all};
 use lib::error::Error;
-use lib::frame_buffer::FrameBuffer;
 use lib::graphics::global::{frame_buffer_config, pixel_writer, screen_size};
 use lib::graphics::{
     draw_desktop, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE,
 };
 use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
-use lib::layer::LayerManager;
+use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use lib::memory_map::UEFI_PAGE_SIZE;
 use lib::message::{Message, MessageType};
@@ -32,13 +29,12 @@ use lib::pci::Device;
 use lib::segment::set_up_segment;
 use lib::timer::initialize_api_timer;
 use lib::window::Window;
-use lib::{graphics, interrupt, pci};
+use lib::{console, graphics, interrupt, layer, pci};
 use log::{error, info};
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap};
 use usb::XhciController;
 
-mod console;
 mod logger;
 mod memory_allocator;
 mod usb;
@@ -46,14 +42,6 @@ mod usb;
 static mut MAIN_QUEUE: Option<VecDeque<Message>> = None;
 pub fn main_queue() -> &'static mut VecDeque<Message> {
     unsafe { MAIN_QUEUE.as_mut().unwrap() }
-}
-
-static mut LAYER_MANAGER: Option<LayerManager> = None;
-fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
-    unsafe { LAYER_MANAGER.as_mut() }
-}
-fn layer_manager() -> &'static mut LayerManager<'static> {
-    unsafe { LAYER_MANAGER.as_mut().unwrap() }
 }
 
 static mut XHCI_CONTROLLER: Option<XhciController> = None;
@@ -64,14 +52,6 @@ fn xhci_controller() -> &'static mut XhciController {
 static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
 fn memory_manager() -> &'static mut BitmapMemoryManager {
     unsafe { MEMORY_MANAGER.borrow_mut() }
-}
-
-static mut BG_WINDOW: Option<Window> = None;
-fn bg_window() -> &'static mut Window {
-    unsafe { BG_WINDOW.as_mut().unwrap() }
-}
-fn bg_window_ref() -> &'static Window {
-    unsafe { BG_WINDOW.as_ref().unwrap() }
 }
 
 static mut MOUSE_CURSOR_WINDOW: Option<Window> = None;
@@ -90,22 +70,9 @@ fn main_window_ref() -> &'static Window {
     unsafe { MAIN_WINDOW.as_ref().unwrap() }
 }
 
-static mut CONSOLE_WINDOW: Option<Window> = None;
-fn console_window() -> &'static mut Window {
-    unsafe { CONSOLE_WINDOW.as_mut().unwrap() }
-}
-fn console_window_ref() -> &'static Window {
-    unsafe { CONSOLE_WINDOW.as_ref().unwrap() }
-}
-
 static mut MOUSE_LAYER_ID: u32 = u32::MAX;
 fn mouse_layer_id() -> u32 {
     unsafe { MOUSE_LAYER_ID }
-}
-
-static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
-fn screen_frame_buffer() -> &'static mut FrameBuffer {
-    unsafe { SCREEN_FRAME_BUFFER.as_mut().unwrap() }
 }
 
 static mut MOUSE_POSITION: Vector2D<usize> = Vector2D::new(200, 200);
@@ -207,15 +174,7 @@ pub extern "C" fn KernelMainNewStack(
 
     xhci_controller().configure_port();
 
-    unsafe {
-        let screen_size = screen_size();
-        BG_WINDOW = Some(Window::new(
-            screen_size.x,
-            screen_size.y,
-            frame_buffer_config().pixel_format,
-        ))
-    }
-    draw_desktop(bg_window().writer());
+    layer::global::initialize();
 
     unsafe {
         MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window(frame_buffer_config().pixel_format))
@@ -225,30 +184,12 @@ pub extern "C" fn KernelMainNewStack(
     unsafe { MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) }
     main_window().draw_window("hello window");
 
-    unsafe { CONSOLE_WINDOW = Some(new_console_window(frame_buffer_config().pixel_format)) }
-    console().reset_mode(console::Mode::ConsoleWindow, console_window());
-
-    unsafe { SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config())) };
-    unsafe { LAYER_MANAGER = Some(LayerManager::new(screen_frame_buffer().config())) };
-    let bg_layer_id = layer_manager()
-        .new_layer()
-        .set_window(bg_window_ref())
-        .move_(Vector2D::new(0, 0))
-        .id();
-
     let main_window_layer_id = layer_manager()
         .new_layer()
         .set_window(main_window_ref())
         .set_draggable(true)
         .move_(Vector2D::new(300, 100))
         .id();
-    console().set_layer_id(
-        layer_manager()
-            .new_layer()
-            .set_window(console_window_ref())
-            .move_(Vector2D::new(0, 0))
-            .id(),
-    );
     {
         let id = layer_manager()
             .new_layer()
@@ -258,8 +199,6 @@ pub extern "C" fn KernelMainNewStack(
         unsafe { MOUSE_LAYER_ID = id }
     }
 
-    layer_manager().up_down(bg_layer_id, 0);
-    layer_manager().up_down(console().layer_id().unwrap(), 1);
     layer_manager().up_down(main_window_layer_id, 2);
     layer_manager().up_down(mouse_layer_id(), 3);
     layer_manager().draw_on(
@@ -403,4 +342,9 @@ fn enable_to_interrupt_for_xhc(xhc_device: &Device) -> Result<(), Error> {
         interrupt::InterruptVectorNumber::XHCI as u8,
         0,
     )
+}
+
+#[macro_export]
+macro_rules! printk {
+    ($($arg:tt)*) => ($crate::console::_printk(format_args!($($arg)*)));
 }

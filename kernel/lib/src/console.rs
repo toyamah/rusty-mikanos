@@ -1,13 +1,14 @@
 use crate::console::Mode::{ConsoleWindow, Frame};
-use crate::{console_window, layer_manager_op, pixel_writer, screen_frame_buffer};
-use alloc::format;
-use core::fmt;
-use core::fmt::Write;
-use lib::graphics::{
+use crate::graphics::global::pixel_writer;
+use crate::graphics::{
     fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, DESKTOP_BG_COLOR,
     DESKTOP_FG_COLOR,
 };
-use lib::window::Window;
+use crate::layer::global::{console_window, layer_manager_op, screen_frame_buffer};
+use crate::Window;
+use alloc::format;
+use core::fmt;
+use core::fmt::Write;
 use shared::PixelFormat;
 
 const ROWS: usize = 25;
@@ -160,11 +161,6 @@ pub fn _printk(args: fmt::Arguments) {
     // because write_fmt calls write_str for every argument and then LayoutManager.draw() is called as many times as the argument's size.
     let text = format!("{}", args);
     console().write_str(&text).unwrap();
-}
-
-#[macro_export]
-macro_rules! printk {
-    ($($arg:tt)*) => ($crate::console::_printk(format_args!($($arg)*)));
 }
 
 pub fn new_console_window(format: PixelFormat) -> Window {

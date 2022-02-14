@@ -21,3 +21,4 @@ pub mod segment;
 pub mod timer;
 pub mod window;
 mod x86_descriptor;
+pub mod console;
