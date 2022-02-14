@@ -1,6 +1,6 @@
-use crate::memory_manager;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ptr::null_mut;
+use lib::memory_manager::global::memory_manager;
 use lib::memory_manager::{FrameID, BYTES_PER_FRAME};
 use log::error;
 

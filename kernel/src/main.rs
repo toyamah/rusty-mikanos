@@ -10,7 +10,6 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use bit_field::BitField;
 use core::arch::asm;
-use core::borrow::BorrowMut;
 use core::panic::PanicInfo;
 use lib::asm::{set_csss, set_ds_all};
 use lib::error::Error;
@@ -20,8 +19,6 @@ use lib::graphics::{
 };
 use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
 use lib::layer::global::{layer_manager, screen_frame_buffer};
-use lib::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
-use lib::memory_map::UEFI_PAGE_SIZE;
 use lib::message::{Message, MessageType};
 use lib::mouse::{draw_mouse_cursor, new_mouse_cursor_window};
 use lib::paging::setup_identity_page_table;
@@ -29,10 +26,10 @@ use lib::pci::Device;
 use lib::segment::set_up_segment;
 use lib::timer::initialize_api_timer;
 use lib::window::Window;
-use lib::{console, graphics, interrupt, layer, pci};
+use lib::{console, graphics, interrupt, layer, memory_manager, pci};
 use log::{error, info};
 use memory_allocator::MemoryAllocator;
-use shared::{FrameBufferConfig, MemoryDescriptor, MemoryMap};
+use shared::{FrameBufferConfig, MemoryMap};
 use usb::XhciController;
 
 mod logger;
@@ -47,11 +44,6 @@ pub fn main_queue() -> &'static mut VecDeque<Message> {
 static mut XHCI_CONTROLLER: Option<XhciController> = None;
 fn xhci_controller() -> &'static mut XhciController {
     unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
-}
-
-static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
-fn memory_manager() -> &'static mut BitmapMemoryManager {
-    unsafe { MEMORY_MANAGER.borrow_mut() }
 }
 
 static mut MOUSE_CURSOR_WINDOW: Option<Window> = None;
@@ -106,38 +98,7 @@ pub extern "C" fn KernelMainNewStack(
     set_csss(kernel_cs, kernel_ss);
     setup_identity_page_table();
 
-    let buffer = memory_map.buffer as usize;
-    let mut available_end = 0;
-    let mut iter = buffer;
-    while iter < buffer + memory_map.map_size as usize {
-        let desc = iter as *const MemoryDescriptor;
-        let physical_start = unsafe { (*desc).physical_start };
-        let number_of_pages = unsafe { (*desc).number_of_pages };
-        if available_end < physical_start {
-            memory_manager().mark_allocated(
-                FrameID::new(available_end / BYTES_PER_FRAME),
-                (physical_start - available_end) / BYTES_PER_FRAME,
-            );
-        }
-
-        let type_ = unsafe { &(*desc).type_ };
-        let byte_count = (number_of_pages * UEFI_PAGE_SIZE as u64) as usize;
-        let physical_end = physical_start + byte_count;
-        if type_.is_available() {
-            available_end = physical_end;
-        } else {
-            memory_manager().mark_allocated(
-                FrameID::new(physical_start / BYTES_PER_FRAME),
-                byte_count / BYTES_PER_FRAME as usize,
-            )
-        }
-        iter += memory_map.descriptor_size as usize;
-    }
-    memory_manager().set_memory_range(
-        FrameID::new(1),
-        FrameID::new(available_end / BYTES_PER_FRAME),
-    );
-
+    memory_manager::global::initialize(&memory_map);
     pci::scan_all_bus().unwrap();
 
     // for device in pci::devices() {
