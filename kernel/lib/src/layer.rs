@@ -320,23 +320,13 @@ mod tests {
     #[test]
     fn move_() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new(&FrameBufferConfig::new(
-            1,
-            1,
-            1,
-            PixelFormat::KPixelBGRResv8BitPerColor,
-        ));
+        let mut lm = LayerManager::new(&frame_buffer_config());
         let id1 = lm.new_layer().set_window(&window1).id();
 
         lm.move_(
             id1,
             Vector2D::new(100, 10),
-            &mut FrameBuffer::new(FrameBufferConfig::new(
-                1,
-                1,
-                1,
-                PixelFormat::KPixelBGRResv8BitPerColor,
-            )),
+            &mut FrameBuffer::new(frame_buffer_config()),
         );
 
         let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
@@ -346,18 +336,8 @@ mod tests {
     #[test]
     fn move_relative() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new(&FrameBufferConfig::new(
-            1,
-            1,
-            1,
-            PixelFormat::KPixelBGRResv8BitPerColor,
-        ));
-        let mut buffer = FrameBuffer::new(FrameBufferConfig::new(
-            1,
-            1,
-            1,
-            PixelFormat::KPixelBGRResv8BitPerColor,
-        ));
+        let mut lm = LayerManager::new(&frame_buffer_config());
+        let mut buffer = FrameBuffer::new(frame_buffer_config());
         let id1 = lm
             .new_layer()
             .set_window(&window1)
@@ -403,5 +383,9 @@ mod tests {
 
         lm.up_down(id1, -1);
         assert_eq!(vec![id2, id3, id0], lm.layer_id_stack);
+    }
+
+    fn frame_buffer_config() -> FrameBufferConfig {
+        FrameBufferConfig::new(1, 1, 1, PixelFormat::KPixelBGRResv8BitPerColor)
     }
 }
