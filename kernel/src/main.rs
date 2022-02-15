@@ -17,7 +17,6 @@ use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFra
 use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
-use lib::timer::initialize_api_timer;
 use lib::window::Window;
 use lib::{console, graphics, layer, memory_manager, mouse, paging, pci, segment};
 use log::error;
@@ -64,7 +63,6 @@ pub extern "C" fn KernelMainNewStack(
     printk!("Welcome to MikanOS!\n");
     logger::init(log::LevelFilter::Trace).unwrap();
 
-    initialize_api_timer();
     segment::global::initialize();
     paging::global::initialize();
     memory_manager::global::initialize(&memory_map);

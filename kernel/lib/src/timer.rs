@@ -1,6 +1,6 @@
 const COUNT_MAX: u32 = 0xffffffff;
 
-pub fn initialize_api_timer() {
+pub fn initialize_lapic_timer() {
     unsafe {
         divide_config().write_volatile(0b1011);
         ltv_time().write_volatile((0b001 << 16) | 32);
