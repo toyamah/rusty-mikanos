@@ -11,7 +11,6 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
-use lib::asm::{set_csss, set_ds_all};
 use lib::graphics::global::{frame_buffer_config, pixel_writer, screen_size};
 use lib::graphics::{
     draw_desktop, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE,
@@ -21,10 +20,9 @@ use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::paging::setup_identity_page_table;
-use lib::segment::set_up_segment;
 use lib::timer::initialize_api_timer;
 use lib::window::Window;
-use lib::{console, graphics, layer, memory_manager, mouse, pci};
+use lib::{console, graphics, layer, memory_manager, mouse, pci, segment};
 use log::error;
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
@@ -65,15 +63,11 @@ pub extern "C" fn KernelMainNewStack(
     printk!("Welcome to MikanOS!\n");
     initialize_api_timer();
 
-    let kernel_cs: u16 = 1 << 3;
-    let kernel_ss: u16 = 2 << 3;
-    set_up_segment();
-    set_ds_all(0);
-    set_csss(kernel_cs, kernel_ss);
+    segment::global::initialize();
     setup_identity_page_table();
 
     memory_manager::global::initialize(&memory_map);
-    initialize_interrupt(int_handler_xhci as usize, kernel_cs);
+    initialize_interrupt(int_handler_xhci as usize);
 
     pci::initialize();
     usb::global::initialize();

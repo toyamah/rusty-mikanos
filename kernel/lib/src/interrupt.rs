@@ -1,4 +1,5 @@
 use crate::asm::load_interrupt_descriptor_table;
+use crate::segment::KERNEL_CS;
 use crate::x86_descriptor::SystemDescriptorType;
 use bit_field::BitField;
 
@@ -26,12 +27,12 @@ pub fn notify_end_of_interrupt() {
     }
 }
 
-pub fn initialize_interrupt(offset: usize, code_segment: u16) {
+pub fn initialize_interrupt(offset: usize) {
     let idt = idt();
     idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(
         InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
         offset as u64,
-        code_segment,
+        KERNEL_CS,
     );
     load_interrupt_descriptor_table(
         core::mem::size_of_val(idt) as u16,
