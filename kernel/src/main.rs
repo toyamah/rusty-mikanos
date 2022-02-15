@@ -6,13 +6,12 @@
 
 extern crate alloc;
 
+use crate::usb::global::xhci_controller;
 use alloc::collections::VecDeque;
 use alloc::format;
-use bit_field::BitField;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::asm::{set_csss, set_ds_all};
-use lib::error::Error;
 use lib::graphics::global::{frame_buffer_config, pixel_writer, screen_size};
 use lib::graphics::{
     draw_desktop, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE,
@@ -22,15 +21,13 @@ use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::paging::setup_identity_page_table;
-use lib::pci::Device;
 use lib::segment::set_up_segment;
 use lib::timer::initialize_api_timer;
 use lib::window::Window;
-use lib::{console, graphics, interrupt, layer, memory_manager, mouse, pci};
-use log::{error, info};
+use lib::{console, graphics, layer, memory_manager, mouse, pci};
+use log::error;
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
-use usb::XhciController;
 
 mod logger;
 mod memory_allocator;
@@ -39,11 +36,6 @@ mod usb;
 static mut MAIN_QUEUE: Option<VecDeque<Message>> = None;
 pub fn main_queue() -> &'static mut VecDeque<Message> {
     unsafe { MAIN_QUEUE.as_mut().unwrap() }
-}
-
-static mut XHCI_CONTROLLER: Option<XhciController> = None;
-fn xhci_controller() -> &'static mut XhciController {
-    unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
 }
 
 static mut MAIN_WINDOW: Option<Window> = None;
@@ -84,32 +76,8 @@ pub extern "C" fn KernelMainNewStack(
     initialize_interrupt(int_handler_xhci as usize, kernel_cs);
 
     pci::initialize();
-    let xhc_device = pci::find_xhc_device().unwrap_or_else(|| {
-        info!("no xHC has been found");
-        loop_and_hlt()
-    });
-    enable_to_interrupt_for_xhc(xhc_device).unwrap();
-
-    let xhc_bar = pci::read_bar(xhc_device, 0).unwrap_or_else(|e| {
-        info!("cannot read base address#0: {}", e);
-        loop_and_hlt()
-    });
-    let xhc_mmio_base = xhc_bar & !(0x0f_u64);
-    // debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
-
-    let controller = XhciController::new(xhc_mmio_base);
-    if xhc_device.is_intel_device() {
-        xhc_device.switch_ehci_to_xhci();
-    }
-    controller.initialize().unwrap();
-    controller.run().unwrap();
-
-    unsafe {
-        XHCI_CONTROLLER = Some(controller);
-        asm!("sti");
-    };
-
-    xhci_controller().configure_port();
+    usb::global::initialize();
+    usb::register_mouse_observer(mouse_observer);
 
     layer::global::initialize();
     unsafe { MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) }
@@ -158,13 +126,7 @@ pub extern "C" fn KernelMainNewStack(
         match result {
             Some(Message {
                 m_type: MessageType::KInterruptXhci,
-            }) => {
-                while xhci_controller().primary_event_ring_has_front() {
-                    if let Err(code) = xhci_controller().process_event() {
-                        error!("Error while ProcessEvent: {}", code)
-                    }
-                }
-            }
+            }) => xhci_controller().process_events(),
             None => error!("failed to pop a message from MainQueue."),
         }
     }
@@ -205,8 +167,6 @@ fn initialize_global_vars() {
         MAIN_QUEUE = Some(VecDeque::new());
     }
 
-    usb::register_mouse_observer(mouse_observer);
-
     logger::init(log::LevelFilter::Trace).unwrap();
 }
 
@@ -214,21 +174,6 @@ fn loop_and_hlt() -> ! {
     loop {
         unsafe { asm!("hlt") }
     }
-}
-
-fn enable_to_interrupt_for_xhc(xhc_device: &Device) -> Result<(), Error> {
-    // bsp is bootstrap processor which is the only core running when the power is turned on.
-    let bsp_local_apic_id_addr = 0xfee00020 as *const u32;
-    let bsp_local_apic_id = unsafe { (*bsp_local_apic_id_addr).get_bits(24..=31) as u8 };
-
-    pci::configure_msi_fixed_destination(
-        xhc_device,
-        bsp_local_apic_id,
-        pci::MsiTriggerMode::Level,
-        pci::MsiDeliveryMode::Fixed,
-        interrupt::InterruptVectorNumber::XHCI as u8,
-        0,
-    )
 }
 
 #[macro_export]
