@@ -11,10 +11,8 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
-use lib::graphics::global::{frame_buffer_config, pixel_writer, screen_size};
-use lib::graphics::{
-    draw_desktop, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE,
-};
+use lib::graphics::global::{frame_buffer_config, screen_size};
+use lib::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE};
 use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
 use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Message, MessageType};
@@ -62,16 +60,16 @@ pub extern "C" fn KernelMainNewStack(
 ) -> ! {
     let memory_map = *memory_map;
     graphics::global::initialize(*frame_buffer_config_);
-    initialize_global_vars();
     console::initialize();
-    draw_desktop(pixel_writer());
-    printk!("Welcome to MikanOS!\n");
-    initialize_api_timer();
 
+    printk!("Welcome to MikanOS!\n");
+    logger::init(log::LevelFilter::Trace).unwrap();
+
+    initialize_api_timer();
     segment::global::initialize();
     setup_identity_page_table();
-
     memory_manager::global::initialize(&memory_map);
+    unsafe { MAIN_QUEUE = Some(VecDeque::new()) }
     initialize_interrupt(int_handler_xhci as usize);
 
     pci::initialize();
@@ -102,17 +100,12 @@ pub extern "C" fn KernelMainNewStack(
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
         if main_queue().is_empty() {
             // next interruption event makes CPU get back from power save mode.
-            unsafe {
-                asm!("sti");
-                // asm!("sti\n\thlt"); // execute sti and then hlt
-            };
+            unsafe { asm!("sti") };
             continue;
         }
 
         let result = main_queue().pop_back();
-        unsafe {
-            asm!("sti"); // set CPU Interrupt Flag 1
-        };
+        unsafe { asm!("sti") }; // set CPU Interrupt Flag 1
         match result {
             Some(Message {
                 m_type: MessageType::KInterruptXhci,
@@ -150,12 +143,6 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
 extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
     main_queue().push_front(Message::new(MessageType::KInterruptXhci));
     notify_end_of_interrupt();
-}
-
-fn initialize_global_vars() {
-    unsafe { MAIN_QUEUE = Some(VecDeque::new()) }
-
-    logger::init(log::LevelFilter::Trace).unwrap();
 }
 
 fn initialize_main_window() {
