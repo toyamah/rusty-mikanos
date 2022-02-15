@@ -7,8 +7,9 @@ use shared::FrameBufferConfig;
 
 pub mod global {
     use super::LayerManager;
+    use crate::console::global::console;
+    use crate::console::new_console_window;
     use crate::console::Mode::ConsoleWindow;
-    use crate::console::{console, new_console_window};
     use crate::frame_buffer::FrameBuffer;
     use crate::graphics::global::{frame_buffer_config, screen_size};
     use crate::graphics::{draw_desktop, Vector2D};

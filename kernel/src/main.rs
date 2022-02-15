@@ -60,7 +60,7 @@ pub extern "C" fn KernelMainNewStack(
 ) -> ! {
     let memory_map = *memory_map;
     graphics::global::initialize(*frame_buffer_config_);
-    console::initialize();
+    console::global::initialize();
 
     printk!("Welcome to MikanOS!\n");
     logger::init(log::LevelFilter::Trace).unwrap();
@@ -167,5 +167,5 @@ fn loop_and_hlt() -> ! {
 
 #[macro_export]
 macro_rules! printk {
-    ($($arg:tt)*) => ($crate::console::_printk(format_args!($($arg)*)));
+    ($($arg:tt)*) => ($crate::console::global::_printk(format_args!($($arg)*)));
 }
