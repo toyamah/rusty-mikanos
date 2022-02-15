@@ -27,6 +27,10 @@ static mut DEVICES: [Device; 32] = [Device {
     },
 }; 32];
 
+pub fn initialize() {
+    scan_all_bus().unwrap();
+}
+
 pub fn devices() -> &'static [Device] {
     unsafe { &DEVICES[..NUM_DEVICE] }
 }

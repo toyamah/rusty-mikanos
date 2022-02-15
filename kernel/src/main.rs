@@ -81,19 +81,13 @@ pub extern "C" fn KernelMainNewStack(
     setup_identity_page_table();
 
     memory_manager::global::initialize(&memory_map);
-    pci::scan_all_bus().unwrap();
+    initialize_interrupt(int_handler_xhci as usize, kernel_cs);
 
-    // for device in pci::devices() {
-    //     printk!("{}\n", device);
-    // }
-
+    pci::initialize();
     let xhc_device = pci::find_xhc_device().unwrap_or_else(|| {
         info!("no xHC has been found");
         loop_and_hlt()
     });
-
-    initialize_interrupt(int_handler_xhci as usize, kernel_cs);
-
     enable_to_interrupt_for_xhc(xhc_device).unwrap();
 
     let xhc_bar = pci::read_bar(xhc_device, 0).unwrap_or_else(|e| {
