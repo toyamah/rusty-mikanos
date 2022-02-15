@@ -6,9 +6,9 @@ use alloc::vec::Vec;
 use shared::FrameBufferConfig;
 
 pub mod global {
-    use crate::console::{console, new_console_window};
-    use crate::console::Mode::ConsoleWindow;
     use super::LayerManager;
+    use crate::console::Mode::ConsoleWindow;
+    use crate::console::{console, new_console_window};
     use crate::frame_buffer::FrameBuffer;
     use crate::graphics::global::{frame_buffer_config, screen_size};
     use crate::graphics::{draw_desktop, Vector2D};
@@ -214,7 +214,7 @@ impl<'a> LayerManager<'a> {
         }
     }
 
-    pub fn up_down(&'a mut self, id: u32, new_height: i32) {
+    pub fn up_down(&mut self, id: u32, new_height: i32) {
         if self.layers.is_empty() {
             return;
         }
@@ -233,16 +233,16 @@ impl<'a> LayerManager<'a> {
             }
         };
 
-        match self
+        let showing_layer_id = self
             .layer_id_stack
             .iter()
             .enumerate()
-            .find(|(_, &layer_id)| layer_id == id)
-        {
+            .find(|(_, &layer_id)| layer_id == id);
+        match showing_layer_id {
             None => {
                 // in case of the layer doesn't show yet
-                let layer = self.layers.iter().find(|l| l.id == id).unwrap();
-                self.layer_id_stack.push(layer.id);
+                self.layers.iter().find(|l| l.id == id).unwrap(); // check the layer exists
+                self.layer_id_stack.insert(new_height, id);
             }
             Some((old_index, &layer_id)) => {
                 let height = if new_height == self.layer_id_stack.len() - 1 {
@@ -373,5 +373,35 @@ mod tests {
         lm.move_relative(id1, Vector2D::new(-60, -60), &mut buffer);
         let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
         assert_eq!(l1.position, Vector2D::new(-10, 10));
+    }
+
+    #[test]
+    fn up_down() {
+        let mut lm = LayerManager::new(&FrameBufferConfig::new(
+            1,
+            1,
+            1,
+            PixelFormat::KPixelBGRResv8BitPerColor,
+        ));
+        let id0 = lm.new_layer().id;
+        let id1 = lm.new_layer().id;
+        let id2 = lm.new_layer().id;
+        let id3 = lm.new_layer().id;
+
+        lm.up_down(id0, 0);
+        lm.up_down(id1, 100);
+        assert_eq!(vec![id0, id1], lm.layer_id_stack);
+
+        lm.up_down(id2, 0);
+        assert_eq!(vec![id2, id0, id1], lm.layer_id_stack);
+
+        lm.up_down(id3, 100);
+        assert_eq!(vec![id2, id0, id1, id3], lm.layer_id_stack);
+
+        lm.up_down(id0, i32::MAX);
+        assert_eq!(vec![id2, id1, id3, id0], lm.layer_id_stack);
+
+        lm.up_down(id1, -1);
+        assert_eq!(vec![id2, id3, id0], lm.layer_id_stack);
     }
 }
