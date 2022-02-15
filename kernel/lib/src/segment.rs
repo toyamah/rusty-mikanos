@@ -2,22 +2,38 @@ use crate::asm::load_gdt;
 use crate::x86_descriptor::SegmentDescriptorType;
 use bit_field::BitField;
 
-static mut GDT: [SegmentDescriptor; 3] = [SegmentDescriptor::new(); 3];
+pub const KERNEL_CS: u16 = 1 << 3;
+const KERNEL_SS: u16 = 2 << 3;
+const KERNEL_DS: u16 = 0;
+
+pub mod global {
+    use super::{load_gdt, SegmentDescriptor, KERNEL_CS, KERNEL_DS, KERNEL_SS};
+    use crate::asm::{set_csss, set_ds_all};
+    use crate::x86_descriptor::SegmentDescriptorType;
+
+    static mut GDT: [SegmentDescriptor; 3] = [SegmentDescriptor::new(); 3];
+
+    pub fn initialize() {
+        set_up_segment();
+        set_ds_all(KERNEL_DS);
+        set_csss(KERNEL_CS, KERNEL_SS);
+    }
+
+    fn set_up_segment() {
+        unsafe {
+            GDT[1].set_code_segment(SegmentDescriptorType::ExecuteRead, 0, 0, 0xfffff);
+            GDT[2].set_data_segment(SegmentDescriptorType::ReadWrite, 0, 0, 0xfffff);
+            load_gdt(
+                (core::mem::size_of_val(&GDT) - 1) as u16,
+                &GDT[0] as *const _ as u64,
+            );
+        }
+    }
+}
 
 #[derive(Copy, Clone)]
 #[repr(transparent)]
 pub struct SegmentDescriptor(u64);
-
-pub fn set_up_segment() {
-    unsafe {
-        GDT[1].set_code_segment(SegmentDescriptorType::ExecuteRead, 0, 0, 0xfffff);
-        GDT[2].set_data_segment(SegmentDescriptorType::ReadWrite, 0, 0, 0xfffff);
-        load_gdt(
-            (core::mem::size_of_val(&GDT) - 1) as u16,
-            &GDT[0] as *const _ as u64,
-        );
-    }
-}
 
 impl SegmentDescriptor {
     const fn new() -> Self {

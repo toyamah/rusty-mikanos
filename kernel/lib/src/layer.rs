@@ -5,6 +5,81 @@ use alloc::vec;
 use alloc::vec::Vec;
 use shared::FrameBufferConfig;
 
+pub mod global {
+    use super::LayerManager;
+    use crate::console::global::console;
+    use crate::console::new_console_window;
+    use crate::console::Mode::ConsoleWindow;
+    use crate::frame_buffer::FrameBuffer;
+    use crate::graphics::global::{frame_buffer_config, screen_size};
+    use crate::graphics::{draw_desktop, Vector2D};
+    use crate::Window;
+
+    static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
+    pub fn screen_frame_buffer() -> &'static mut FrameBuffer {
+        unsafe { SCREEN_FRAME_BUFFER.as_mut().unwrap() }
+    }
+
+    static mut LAYER_MANAGER: Option<LayerManager> = None;
+    pub fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
+        unsafe { LAYER_MANAGER.as_mut() }
+    }
+    pub fn layer_manager() -> &'static mut LayerManager<'static> {
+        unsafe { LAYER_MANAGER.as_mut().unwrap() }
+    }
+
+    static mut BG_WINDOW: Option<Window> = None;
+    pub fn bg_window() -> &'static mut Window {
+        unsafe { BG_WINDOW.as_mut().unwrap() }
+    }
+    pub fn bg_window_ref() -> &'static Window {
+        unsafe { BG_WINDOW.as_ref().unwrap() }
+    }
+
+    static mut CONSOLE_WINDOW: Option<Window> = None;
+    pub fn console_window() -> &'static mut Window {
+        unsafe { CONSOLE_WINDOW.as_mut().unwrap() }
+    }
+    pub fn console_window_ref() -> &'static Window {
+        unsafe { CONSOLE_WINDOW.as_ref().unwrap() }
+    }
+
+    pub fn initialize() {
+        let screen_size = screen_size();
+        unsafe {
+            BG_WINDOW = Some(Window::new(
+                screen_size.x,
+                screen_size.y,
+                frame_buffer_config().pixel_format,
+            ))
+        }
+        draw_desktop(bg_window().writer());
+
+        unsafe {
+            SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config()));
+            LAYER_MANAGER = Some(LayerManager::new(frame_buffer_config()));
+            CONSOLE_WINDOW = Some(new_console_window(frame_buffer_config().pixel_format));
+        };
+        console().reset_mode(ConsoleWindow, console_window());
+
+        let bg_layer_id = layer_manager()
+            .new_layer()
+            .set_window(bg_window_ref())
+            .move_(Vector2D::new(0, 0))
+            .id();
+        console().set_layer_id(
+            layer_manager()
+                .new_layer()
+                .set_window(console_window_ref())
+                .move_(Vector2D::new(0, 0))
+                .id(),
+        );
+
+        layer_manager().up_down(bg_layer_id, 0);
+        layer_manager().up_down(console().layer_id().unwrap(), 1);
+    }
+}
+
 pub struct Layer<'a> {
     id: u32,
     position: Vector2D<i32>,
@@ -140,7 +215,7 @@ impl<'a> LayerManager<'a> {
         }
     }
 
-    pub fn up_down(&'a mut self, id: u32, new_height: i32) {
+    pub fn up_down(&mut self, id: u32, new_height: i32) {
         if self.layers.is_empty() {
             return;
         }
@@ -159,16 +234,16 @@ impl<'a> LayerManager<'a> {
             }
         };
 
-        match self
+        let showing_layer_id = self
             .layer_id_stack
             .iter()
             .enumerate()
-            .find(|(_, &layer_id)| layer_id == id)
-        {
+            .find(|(_, &layer_id)| layer_id == id);
+        match showing_layer_id {
             None => {
                 // in case of the layer doesn't show yet
-                let layer = self.layers.iter().find(|l| l.id == id).unwrap();
-                self.layer_id_stack.push(layer.id);
+                self.layers.iter().find(|l| l.id == id).unwrap(); // check the layer exists
+                self.layer_id_stack.insert(new_height, id);
             }
             Some((old_index, &layer_id)) => {
                 let height = if new_height == self.layer_id_stack.len() - 1 {
@@ -246,23 +321,13 @@ mod tests {
     #[test]
     fn move_() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new(&FrameBufferConfig::new(
-            1,
-            1,
-            1,
-            PixelFormat::KPixelBGRResv8BitPerColor,
-        ));
+        let mut lm = LayerManager::new(&frame_buffer_config());
         let id1 = lm.new_layer().set_window(&window1).id();
 
         lm.move_(
             id1,
             Vector2D::new(100, 10),
-            &mut FrameBuffer::new(FrameBufferConfig::new(
-                1,
-                1,
-                1,
-                PixelFormat::KPixelBGRResv8BitPerColor,
-            )),
+            &mut FrameBuffer::new(frame_buffer_config()),
         );
 
         let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
@@ -272,18 +337,8 @@ mod tests {
     #[test]
     fn move_relative() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
-        let mut lm = LayerManager::new(&FrameBufferConfig::new(
-            1,
-            1,
-            1,
-            PixelFormat::KPixelBGRResv8BitPerColor,
-        ));
-        let mut buffer = FrameBuffer::new(FrameBufferConfig::new(
-            1,
-            1,
-            1,
-            PixelFormat::KPixelBGRResv8BitPerColor,
-        ));
+        let mut lm = LayerManager::new(&frame_buffer_config());
+        let mut buffer = FrameBuffer::new(frame_buffer_config());
         let id1 = lm
             .new_layer()
             .set_window(&window1)
@@ -299,5 +354,39 @@ mod tests {
         lm.move_relative(id1, Vector2D::new(-60, -60), &mut buffer);
         let l1 = lm.layers.iter().find(|l| l.id == id1).unwrap();
         assert_eq!(l1.position, Vector2D::new(-10, 10));
+    }
+
+    #[test]
+    fn up_down() {
+        let mut lm = LayerManager::new(&FrameBufferConfig::new(
+            1,
+            1,
+            1,
+            PixelFormat::KPixelBGRResv8BitPerColor,
+        ));
+        let id0 = lm.new_layer().id;
+        let id1 = lm.new_layer().id;
+        let id2 = lm.new_layer().id;
+        let id3 = lm.new_layer().id;
+
+        lm.up_down(id0, 0);
+        lm.up_down(id1, 100);
+        assert_eq!(vec![id0, id1], lm.layer_id_stack);
+
+        lm.up_down(id2, 0);
+        assert_eq!(vec![id2, id0, id1], lm.layer_id_stack);
+
+        lm.up_down(id3, 100);
+        assert_eq!(vec![id2, id0, id1, id3], lm.layer_id_stack);
+
+        lm.up_down(id0, i32::MAX);
+        assert_eq!(vec![id2, id1, id3, id0], lm.layer_id_stack);
+
+        lm.up_down(id1, -1);
+        assert_eq!(vec![id2, id3, id0], lm.layer_id_stack);
+    }
+
+    fn frame_buffer_config() -> FrameBufferConfig {
+        FrameBufferConfig::new(1, 1, 1, PixelFormat::KPixelBGRResv8BitPerColor)
     }
 }

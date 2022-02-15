@@ -18,6 +18,35 @@ pub const DESKTOP_BG_COLOR: PixelColor = PixelColor {
 };
 pub const DESKTOP_FG_COLOR: PixelColor = COLOR_BLACK;
 
+pub mod global {
+    use super::{draw_desktop, FrameBufferWriter, Vector2D};
+    use shared::FrameBufferConfig;
+
+    static mut FRAME_BUFFER_CONFIG: Option<FrameBufferConfig> = None;
+    pub fn frame_buffer_config() -> &'static mut FrameBufferConfig {
+        unsafe { FRAME_BUFFER_CONFIG.as_mut().unwrap() }
+    }
+    pub fn screen_size() -> Vector2D<usize> {
+        let c = frame_buffer_config();
+        Vector2D::new(
+            c.horizontal_resolution as usize,
+            c.vertical_resolution as usize,
+        )
+    }
+    static mut PIXEL_WRITER: Option<FrameBufferWriter> = None;
+    pub fn pixel_writer() -> &'static mut FrameBufferWriter {
+        unsafe { PIXEL_WRITER.as_mut().unwrap() }
+    }
+
+    pub fn initialize(screen_config: FrameBufferConfig) {
+        unsafe {
+            FRAME_BUFFER_CONFIG = Some(screen_config);
+            PIXEL_WRITER = Some(FrameBufferWriter::new(screen_config));
+        };
+        draw_desktop(pixel_writer());
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct PixelColor {
     r: u8,

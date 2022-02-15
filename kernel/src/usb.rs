@@ -17,6 +17,55 @@ extern "C" {
     );
 }
 
+pub mod global {
+    use super::XhciController;
+    use bit_field::BitField;
+    use lib::error::Error;
+    use lib::pci::Device;
+    use lib::{interrupt, pci};
+
+    static mut XHCI_CONTROLLER: Option<XhciController> = None;
+    pub fn xhci_controller() -> &'static mut XhciController {
+        unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
+    }
+
+    pub fn initialize() {
+        let xhc_device = pci::find_xhc_device().expect("no xHC has been found");
+        enable_to_interrupt_for_xhc(xhc_device).unwrap();
+
+        let xhc_bar = pci::read_bar(xhc_device, 0).expect("cannot read base address#0");
+        let xhc_mmio_base = xhc_bar & !(0x0f_u64);
+        // debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
+
+        let controller = XhciController::new(xhc_mmio_base);
+        if xhc_device.is_intel_device() {
+            xhc_device.switch_ehci_to_xhci();
+        }
+
+        controller.initialize().unwrap();
+        controller.run().unwrap();
+
+        unsafe { XHCI_CONTROLLER = Some(controller) };
+
+        xhci_controller().configure_port();
+    }
+
+    fn enable_to_interrupt_for_xhc(xhc_device: &Device) -> Result<(), Error> {
+        // bsp is bootstrap processor which is the only core running when the power is turned on.
+        let bsp_local_apic_id_addr = 0xfee00020 as *const u32;
+        let bsp_local_apic_id = unsafe { (*bsp_local_apic_id_addr).get_bits(24..=31) as u8 };
+
+        pci::configure_msi_fixed_destination(
+            xhc_device,
+            bsp_local_apic_id,
+            pci::MsiTriggerMode::Level,
+            pci::MsiDeliveryMode::Fixed,
+            interrupt::InterruptVectorNumber::XHCI as u8,
+            0,
+        )
+    }
+}
+
 pub fn register_mouse_observer(
     cb: extern "C" fn(buttons: u8, displacement_x: i8, displacement_y: i8),
 ) {
@@ -61,7 +110,15 @@ impl XhciController {
         trace!("XchiController.configure_port finished");
     }
 
-    pub fn process_event(&self) -> Result<(), Error> {
+    pub fn process_events(&self) {
+        while self.primary_event_ring_has_front() {
+            if let Err(code) = self.process_event() {
+                error!("Error while ProcessEvent: {}", code)
+            }
+        }
+    }
+
+    fn process_event(&self) -> Result<(), Error> {
         let error = unsafe { UsbXhciController_ProcessXhcEvent(self.c_impl) };
         // trace!("XchiController.process_event finished. code = {}", error);
         match convert_to_code(error) {
@@ -70,7 +127,7 @@ impl XhciController {
         }
     }
 
-    pub fn primary_event_ring_has_front(&self) -> bool {
+    fn primary_event_ring_has_front(&self) -> bool {
         unsafe { UsbXhciController_PrimaryEventRing_HasFront(self.c_impl) }
     }
 }

@@ -27,6 +27,11 @@ static mut DEVICES: [Device; 32] = [Device {
     },
 }; 32];
 
+/// it isn't put in a global module because this module itself works globally and to fix makes a lot of diffs.
+pub fn initialize() {
+    scan_all_bus().unwrap();
+}
+
 pub fn devices() -> &'static [Device] {
     unsafe { &DEVICES[..NUM_DEVICE] }
 }

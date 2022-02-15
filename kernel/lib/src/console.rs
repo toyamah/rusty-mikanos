@@ -1,14 +1,40 @@
 use crate::console::Mode::{ConsoleWindow, Frame};
-use crate::{console, console_window, layer_manager_op, pixel_writer, screen_frame_buffer};
-use alloc::format;
+use crate::graphics::global::pixel_writer;
+use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
+use crate::layer::global::{console_window, layer_manager_op, screen_frame_buffer};
+use crate::Window;
 use core::fmt;
-use core::fmt::Write;
-use lib::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
-use lib::window::Window;
 use shared::PixelFormat;
 
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;
+
+pub mod global {
+    use super::Console;
+    use crate::graphics::{DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
+    use alloc::format;
+    use core::fmt;
+    use core::fmt::Write;
+
+    static mut CONSOLE: Option<Console> = None;
+    pub fn console() -> &'static mut Console {
+        unsafe { CONSOLE.as_mut().unwrap() }
+    }
+
+    pub fn initialize() {
+        unsafe { CONSOLE = Some(Console::new(DESKTOP_FG_COLOR, DESKTOP_BG_COLOR)) }
+    }
+
+    pub fn _printk(args: fmt::Arguments) {
+        // let time = measure_time(|| console().write_fmt(args).unwrap());
+        // console().write_fmt(format_args!("[{:#09}]", time)).unwrap();
+
+        // To draw text rapidly, avoid using write_fmt
+        // because write_fmt calls write_str for every argument and then LayoutManager.draw() is called as many times as the argument's size.
+        let text = format!("{}", args);
+        console().write_str(&text).unwrap();
+    }
+}
 
 pub struct Console {
     mode: Mode,
@@ -138,21 +164,6 @@ impl fmt::Write for Console {
         }
         Ok(())
     }
-}
-
-pub fn _printk(args: fmt::Arguments) {
-    // let time = measure_time(|| console().write_fmt(args).unwrap());
-    // console().write_fmt(format_args!("[{:#09}]", time)).unwrap();
-
-    // To draw text rapidly, avoid using write_fmt
-    // because write_fmt calls write_str for every argument and then LayoutManager.draw() is called as many times as the argument's size.
-    let text = format!("{}", args);
-    console().write_str(&text).unwrap();
-}
-
-#[macro_export]
-macro_rules! printk {
-    ($($arg:tt)*) => ($crate::console::_printk(format_args!($($arg)*)));
 }
 
 pub fn new_console_window(format: PixelFormat) -> Window {

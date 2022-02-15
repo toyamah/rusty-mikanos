@@ -2,6 +2,51 @@ use crate::error::{Code, Error};
 use crate::make_error;
 use core::ffi::c_void;
 
+pub mod global {
+    use super::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
+    use crate::memory_map::UEFI_PAGE_SIZE;
+    use shared::{MemoryDescriptor, MemoryMap};
+
+    static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
+    pub fn memory_manager() -> &'static mut BitmapMemoryManager {
+        unsafe { &mut MEMORY_MANAGER }
+    }
+
+    pub fn initialize(memory_map: &MemoryMap) {
+        let buffer = memory_map.buffer as usize;
+        let mut available_end = 0;
+        let mut iter = buffer;
+        while iter < buffer + memory_map.map_size as usize {
+            let desc = iter as *const MemoryDescriptor;
+            let physical_start = unsafe { (*desc).physical_start };
+            let number_of_pages = unsafe { (*desc).number_of_pages };
+            if available_end < physical_start {
+                memory_manager().mark_allocated(
+                    FrameID::new(available_end / BYTES_PER_FRAME),
+                    (physical_start - available_end) / BYTES_PER_FRAME,
+                );
+            }
+
+            let type_ = unsafe { &(*desc).type_ };
+            let byte_count = (number_of_pages * UEFI_PAGE_SIZE as u64) as usize;
+            let physical_end = physical_start + byte_count;
+            if type_.is_available() {
+                available_end = physical_end;
+            } else {
+                memory_manager().mark_allocated(
+                    FrameID::new(physical_start / BYTES_PER_FRAME),
+                    byte_count / BYTES_PER_FRAME as usize,
+                )
+            }
+            iter += memory_map.descriptor_size as usize;
+        }
+        memory_manager().set_memory_range(
+            FrameID::new(1),
+            FrameID::new(available_end / BYTES_PER_FRAME),
+        );
+    }
+}
+
 const fn kib(kib: u64) -> u64 {
     kib * 1024
 }
