@@ -5,6 +5,7 @@ extern crate alloc;
 
 use crate::window::Window;
 pub mod asm;
+pub mod console;
 pub mod error;
 mod font;
 pub mod frame_buffer;
@@ -21,4 +22,3 @@ pub mod segment;
 pub mod timer;
 pub mod window;
 mod x86_descriptor;
-pub mod console;
