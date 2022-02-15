@@ -17,10 +17,9 @@ use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFra
 use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
-use lib::paging::setup_identity_page_table;
 use lib::timer::initialize_api_timer;
 use lib::window::Window;
-use lib::{console, graphics, layer, memory_manager, mouse, pci, segment};
+use lib::{console, graphics, layer, memory_manager, mouse, paging, pci, segment};
 use log::error;
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
@@ -67,9 +66,9 @@ pub extern "C" fn KernelMainNewStack(
 
     initialize_api_timer();
     segment::global::initialize();
-    setup_identity_page_table();
+    paging::global::initialize();
     memory_manager::global::initialize(&memory_map);
-    unsafe { MAIN_QUEUE = Some(VecDeque::new()) }
+    unsafe { MAIN_QUEUE = Some(VecDeque::new()) };
     initialize_interrupt(int_handler_xhci as usize);
 
     pci::initialize();
