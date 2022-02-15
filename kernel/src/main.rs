@@ -44,6 +44,11 @@ fn main_window_ref() -> &'static Window {
     unsafe { MAIN_WINDOW.as_ref().unwrap() }
 }
 
+static mut MAIN_WINDOW_LAYER_ID: Option<u32> = None;
+fn main_window_layer_id() -> u32 {
+    unsafe { MAIN_WINDOW_LAYER_ID.unwrap() }
+}
+
 #[repr(align(16))]
 struct KernelMainStack([u8; 1024 * 1024]);
 
@@ -74,17 +79,8 @@ pub extern "C" fn KernelMainNewStack(
     usb::register_mouse_observer(mouse_observer);
 
     layer::global::initialize();
-    unsafe { MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) }
-    main_window().draw_window("hello window");
-    let main_window_layer_id = layer_manager()
-        .new_layer()
-        .set_window(main_window_ref())
-        .set_draggable(true)
-        .move_(Vector2D::new(300, 100))
-        .id();
+    initialize_main_window();
     mouse::global::initialize();
-
-    layer_manager().up_down(main_window_layer_id, 2);
     layer_manager().draw_on(
         Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
         screen_frame_buffer(),
@@ -100,7 +96,7 @@ pub extern "C" fn KernelMainNewStack(
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
         main_window().write_string(24, 28, &format!("{:010}", count), &COLOR_WHITE);
-        layer_manager().draw_layer_of(main_window_layer_id, screen_frame_buffer());
+        layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
@@ -157,11 +153,23 @@ extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
 }
 
 fn initialize_global_vars() {
-    unsafe {
-        MAIN_QUEUE = Some(VecDeque::new());
-    }
+    unsafe { MAIN_QUEUE = Some(VecDeque::new()) }
 
     logger::init(log::LevelFilter::Trace).unwrap();
+}
+
+fn initialize_main_window() {
+    unsafe { MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) }
+    main_window().draw_window("hello window");
+    let main_window_layer_id = layer_manager()
+        .new_layer()
+        .set_window(main_window_ref())
+        .set_draggable(true)
+        .move_(Vector2D::new(300, 100))
+        .id();
+    layer_manager().up_down(main_window_layer_id, 2);
+
+    unsafe { MAIN_WINDOW_LAYER_ID = Some(main_window_layer_id) };
 }
 
 fn loop_and_hlt() -> ! {
