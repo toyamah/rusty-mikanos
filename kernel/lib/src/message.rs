@@ -11,5 +11,6 @@ impl Message {
 
 #[derive(Copy, Clone, Debug)]
 pub enum MessageType {
-    KInterruptXhci,
+    InterruptXhci,
+    InterruptLAPICTimer,
 }

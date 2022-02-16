@@ -1,9 +1,15 @@
 const COUNT_MAX: u32 = 0xffffffff;
 
-pub fn initialize_lapic_timer() {
-    unsafe {
-        divide_config().write_volatile(0b1011);
-        ltv_time().write_volatile((0b001 << 16) | 32);
+pub mod global {
+    use super::{divide_config, initial_count, lvt_timer, COUNT_MAX};
+    use crate::interrupt::InterruptVectorNumber;
+
+    pub fn initialize_lapic_timer() {
+        unsafe {
+            divide_config().write_volatile(0b1011);
+            lvt_timer().write_volatile((0b010 << 16) | InterruptVectorNumber::LAPICTimer as u32);
+            initial_count().write_volatile(COUNT_MAX)
+        }
     }
 }
 
@@ -30,7 +36,7 @@ fn stop_lapic_timer() {
     unsafe { initial_count().write_volatile(0) }
 }
 
-fn ltv_time() -> *mut u32 {
+fn lvt_timer() -> *mut u32 {
     0xfee00320 as *mut u32
 }
 

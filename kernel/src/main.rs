@@ -18,7 +18,7 @@ use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::window::Window;
-use lib::{console, graphics, layer, memory_manager, mouse, paging, pci, segment};
+use lib::{console, graphics, layer, memory_manager, mouse, paging, pci, segment, timer};
 use log::error;
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
@@ -67,7 +67,7 @@ pub extern "C" fn KernelMainNewStack(
     paging::global::initialize();
     memory_manager::global::initialize(&memory_map);
     unsafe { MAIN_QUEUE = Some(VecDeque::new()) };
-    initialize_interrupt(int_handler_xhci as usize);
+    initialize_interrupt(int_handler_xhci as usize, int_handler_lapic_timer as usize);
 
     pci::initialize();
     usb::global::initialize();
@@ -80,6 +80,8 @@ pub extern "C" fn KernelMainNewStack(
         Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
         screen_frame_buffer(),
     );
+
+    timer::global::initialize_lapic_timer();
 
     let mut count = 0;
     loop {
@@ -104,10 +106,11 @@ pub extern "C" fn KernelMainNewStack(
         let result = main_queue().pop_back();
         unsafe { asm!("sti") }; // set CPU Interrupt Flag 1
         match result {
-            Some(Message {
-                m_type: MessageType::KInterruptXhci,
-            }) => xhci_controller().process_events(),
             None => error!("failed to pop a message from MainQueue."),
+            Some(message) => match message.m_type {
+                MessageType::InterruptXhci => xhci_controller().process_events(),
+                MessageType::InterruptLAPICTimer => printk!("Timer interrupt\n"),
+            },
         }
     }
 }
@@ -138,7 +141,12 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
-    main_queue().push_front(Message::new(MessageType::KInterruptXhci));
+    main_queue().push_front(Message::new(MessageType::InterruptXhci));
+    notify_end_of_interrupt();
+}
+
+extern "x86-interrupt" fn int_handler_lapic_timer(_: *const InterruptFrame) {
+    main_queue().push_front(Message::new(MessageType::InterruptLAPICTimer));
     notify_end_of_interrupt();
 }
 
