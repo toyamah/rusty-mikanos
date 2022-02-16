@@ -17,6 +17,7 @@ use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFra
 use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
+use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
 use lib::window::Window;
 use lib::{console, graphics, layer, memory_manager, mouse, paging, pci, segment, timer};
 use log::error;
@@ -83,23 +84,22 @@ pub extern "C" fn KernelMainNewStack(
 
     timer::global::initialize_lapic_timer();
 
-    let mut count = 0;
     loop {
-        count += 1;
         fill_rectangle(
             main_window().writer(),
             &Vector2D::new(24, 28),
             &Vector2D::new(8 * 10, 16),
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
-        main_window().write_string(24, 28, &format!("{:010}", count), &COLOR_WHITE);
+        let tick = unsafe { timer_manager().current_tick_with_lock() };
+        main_window().write_string(24, 28, &format!("{:010}", tick), &COLOR_WHITE);
         layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
         if main_queue().is_empty() {
             // next interruption event makes CPU get back from power save mode.
-            unsafe { asm!("sti") };
+            unsafe { asm!("sti\n\thlt") };
             continue;
         }
 
@@ -146,7 +146,7 @@ extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
 }
 
 extern "x86-interrupt" fn int_handler_lapic_timer(_: *const InterruptFrame) {
-    main_queue().push_front(Message::new(MessageType::InterruptLAPICTimer));
+    lapic_timer_on_interrupt();
     notify_end_of_interrupt();
 }
 
