@@ -15,9 +15,10 @@ use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE};
 use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
 use lib::layer::global::{layer_manager, screen_frame_buffer};
-use lib::message::{Message, MessageType};
+use lib::message::{Arg, Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
+use lib::timer::Timer;
 use lib::window::Window;
 use lib::{console, graphics, layer, memory_manager, mouse, paging, pci, segment, timer};
 use log::error;
@@ -83,6 +84,8 @@ pub extern "C" fn KernelMainNewStack(
     );
 
     timer::global::initialize_lapic_timer();
+    timer_manager().add_timer(Timer::new(200, 2));
+    timer_manager().add_timer(Timer::new(600, -1));
 
     loop {
         fill_rectangle(
@@ -109,7 +112,13 @@ pub extern "C" fn KernelMainNewStack(
             None => error!("failed to pop a message from MainQueue."),
             Some(message) => match message.m_type {
                 MessageType::InterruptXhci => xhci_controller().process_events(),
-                MessageType::InterruptLAPICTimer => printk!("Timer interrupt\n"),
+                MessageType::TimerTimeout => {
+                    let timer = unsafe { message.arg.timer };
+                    printk!("{:?}\n", timer);
+                    if timer.value > 0 {
+                        timer_manager().add_timer(Timer::new(timer.timeout + 100, timer.value + 1))
+                    }
+                }
             },
         }
     }
@@ -141,12 +150,12 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
-    main_queue().push_front(Message::new(MessageType::InterruptXhci));
+    main_queue().push_front(Message::new(MessageType::InterruptXhci, Arg::NONE));
     notify_end_of_interrupt();
 }
 
 extern "x86-interrupt" fn int_handler_lapic_timer(_: *const InterruptFrame) {
-    lapic_timer_on_interrupt();
+    lapic_timer_on_interrupt(main_queue());
     notify_end_of_interrupt();
 }
 
