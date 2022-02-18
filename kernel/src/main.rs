@@ -11,6 +11,7 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
+use lib::acpi::RSDP;
 use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE};
 use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
@@ -20,7 +21,7 @@ use lib::mouse::global::mouse;
 use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
 use lib::timer::Timer;
 use lib::window::Window;
-use lib::{console, graphics, layer, memory_manager, mouse, paging, pci, segment, timer};
+use lib::{acpi, console, graphics, layer, memory_manager, mouse, paging, pci, segment, timer};
 use log::error;
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
@@ -57,6 +58,7 @@ static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]
 pub extern "C" fn KernelMainNewStack(
     frame_buffer_config_: &'static FrameBufferConfig,
     memory_map: &'static MemoryMap,
+    acpi_table: &'static RSDP,
 ) -> ! {
     let memory_map = *memory_map;
     graphics::global::initialize(*frame_buffer_config_);
@@ -83,6 +85,7 @@ pub extern "C" fn KernelMainNewStack(
         screen_frame_buffer(),
     );
 
+    acpi::initialize(acpi_table);
     timer::global::initialize_lapic_timer();
     timer_manager().add_timer(Timer::new(200, 2));
     timer_manager().add_timer(Timer::new(600, -1));

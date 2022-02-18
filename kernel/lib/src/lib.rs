@@ -4,6 +4,7 @@
 extern crate alloc;
 
 use crate::window::Window;
+pub mod acpi;
 pub mod asm;
 pub mod console;
 pub mod error;
