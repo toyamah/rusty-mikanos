@@ -1,8 +1,37 @@
 use alloc::format;
 use alloc::string::String;
-use core::slice;
+use core::{mem, slice};
 
-#[repr(packed)]
+pub mod global {
+    use crate::acpi::{DescriptionHeader, FADT, RSDP, XSDT};
+    use log::info;
+
+    static mut FADT: Option<&'static FADT> = None;
+
+    pub fn initialize(rsdp: &'static RSDP) {
+        rsdp.validate().expect("RDSP is not valid.");
+
+        let xsdt = unsafe { (rsdp.xsdt_address as *const XSDT).as_ref().unwrap() };
+        xsdt.header.validate(b"XSDT").expect("XSDT is not valid.");
+
+        let fadt = xsdt
+            .entries()
+            .find(|&header| {
+                header.validate(b"FACP").map(|_| true).unwrap_or_else(|m| {
+                    info!("{}", m);
+                    false
+                })
+            })
+            .and_then(|entry| unsafe {
+                (entry as *const DescriptionHeader as *const FADT).as_ref()
+            })
+            .expect("FADT is not found");
+
+        unsafe { FADT = Some(fadt) };
+    }
+}
+
+#[repr(C, packed)]
 pub struct RSDP {
     pub signature: [u8; 8],
     pub checksum: u8,
@@ -15,12 +44,9 @@ pub struct RSDP {
     pub reserved: [u8; 3],
 }
 
-pub fn initialize(rsdp: &RSDP) {
-    rsdp.validate().expect("RDSP is not valid.");
-}
-
 impl RSDP {
-    pub fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), String> {
+        //
         if &self.signature != b"RSD PTR " {
             return Err(format!("invalid signature {:?}\n", self.signature));
         }
@@ -40,7 +66,69 @@ impl RSDP {
     }
 
     fn sum_bytes(&self, length: usize) -> u8 {
-        let bytes = unsafe { slice::from_raw_parts(self as *const RSDP as *const u8, length) };
-        bytes.iter().fold(0u8, |sum, &byte| sum.wrapping_add(byte))
+        unsafe { sum_bytes(self, length) }
     }
+}
+
+#[repr(C, packed)]
+struct XSDT {
+    pub header: DescriptionHeader,
+}
+
+impl XSDT {
+    pub fn count(&self) -> usize {
+        self.header.length as usize - mem::size_of::<DescriptionHeader>() / mem::size_of::<u64>()
+    }
+
+    fn entries(&self) -> impl Iterator<Item = &DescriptionHeader> {
+        let entries = unsafe { (&self.header as *const DescriptionHeader).add(1) as *const u64 };
+        (0..self.count())
+            .map(move |i| unsafe { entries.add(i).read() })
+            .filter_map(|x| unsafe { (x as *const DescriptionHeader).as_ref() })
+    }
+}
+
+#[derive(Debug)]
+#[repr(C, packed)]
+struct DescriptionHeader {
+    pub signature: [u8; 4],
+    pub length: u32,
+    pub revision: u8,
+    pub checksum: u8,
+    pub oem_id: [u8; 6],
+    pub oem_table_id: [u8; 8],
+    pub oem_revision: u32,
+    pub creator_id: u32,
+    pub pubcreator_revision: u32,
+}
+
+impl DescriptionHeader {
+    fn validate(&self, expected_signature: &[u8]) -> Result<(), String> {
+        if self.signature != expected_signature {
+            return Err(format!("invalid signature: {:?}", self.signature));
+        }
+
+        let sum = unsafe { sum_bytes(self, self.length as usize) };
+        if sum != 0 {
+            return Err(format!("sum of {} bytes must be 0: {}", self.length, sum));
+        }
+
+        return Ok(());
+    }
+}
+
+#[derive(Debug)]
+#[repr(C, packed)]
+struct FADT {
+    header: DescriptionHeader,
+    pub reserved1: [u8; 76 - mem::size_of::<DescriptionHeader>()],
+    pub pm_tmr_blk: u32,
+    pub reserved2: [u8; 112 - 80],
+    pub flags: u32,
+    pub reserved3: [u8; 276 - 116],
+}
+
+unsafe fn sum_bytes<T>(data: &T, length: usize) -> u8 {
+    let bytes = unsafe { slice::from_raw_parts(data as *const _ as *const u8, length) };
+    bytes.iter().fold(0u8, |sum, &byte| sum.wrapping_add(byte))
 }

@@ -85,7 +85,7 @@ pub extern "C" fn KernelMainNewStack(
         screen_frame_buffer(),
     );
 
-    acpi::initialize(acpi_table);
+    acpi::global::initialize(acpi_table);
     timer::global::initialize_lapic_timer();
     timer_manager().add_timer(Timer::new(200, 2));
     timer_manager().add_timer(Timer::new(600, -1));
