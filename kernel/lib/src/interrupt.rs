@@ -27,11 +27,16 @@ pub fn notify_end_of_interrupt() {
     }
 }
 
-pub fn initialize_interrupt(offset: usize) {
+pub fn initialize_interrupt(xhci_offset: usize, timer_offset: usize) {
     let idt = idt();
     idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(
         InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
-        offset as u64,
+        xhci_offset as u64,
+        KERNEL_CS,
+    );
+    idt[InterruptVectorNumber::LAPICTimer as usize].set_idt_entry(
+        InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
+        timer_offset as u64,
         KERNEL_CS,
     );
     load_interrupt_descriptor_table(
@@ -98,4 +103,5 @@ impl InterruptDescriptorAttribute {
 
 pub enum InterruptVectorNumber {
     XHCI = 0x40,
+    LAPICTimer = 0x41,
 }

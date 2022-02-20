@@ -11,14 +11,17 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
+use lib::acpi::RSDP;
 use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE};
 use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
 use lib::layer::global::{layer_manager, screen_frame_buffer};
-use lib::message::{Message, MessageType};
+use lib::message::{Arg, Message, MessageType};
 use lib::mouse::global::mouse;
+use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
+use lib::timer::Timer;
 use lib::window::Window;
-use lib::{console, graphics, layer, memory_manager, mouse, paging, pci, segment};
+use lib::{acpi, console, graphics, layer, memory_manager, mouse, paging, pci, segment, timer};
 use log::error;
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
@@ -55,6 +58,7 @@ static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]
 pub extern "C" fn KernelMainNewStack(
     frame_buffer_config_: &'static FrameBufferConfig,
     memory_map: &'static MemoryMap,
+    acpi_table: &'static RSDP,
 ) -> ! {
     let memory_map = *memory_map;
     graphics::global::initialize(*frame_buffer_config_);
@@ -67,7 +71,7 @@ pub extern "C" fn KernelMainNewStack(
     paging::global::initialize();
     memory_manager::global::initialize(&memory_map);
     unsafe { MAIN_QUEUE = Some(VecDeque::new()) };
-    initialize_interrupt(int_handler_xhci as usize);
+    initialize_interrupt(int_handler_xhci as usize, int_handler_lapic_timer as usize);
 
     pci::initialize();
     usb::global::initialize();
@@ -81,33 +85,44 @@ pub extern "C" fn KernelMainNewStack(
         screen_frame_buffer(),
     );
 
-    let mut count = 0;
+    acpi::initialize(acpi_table);
+    timer::global::initialize_lapic_timer();
+    timer_manager().add_timer(Timer::new(200, 2));
+    timer_manager().add_timer(Timer::new(600, -1));
+
     loop {
-        count += 1;
         fill_rectangle(
             main_window().writer(),
             &Vector2D::new(24, 28),
             &Vector2D::new(8 * 10, 16),
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
-        main_window().write_string(24, 28, &format!("{:010}", count), &COLOR_WHITE);
+        let tick = unsafe { timer_manager().current_tick_with_lock() };
+        main_window().write_string(24, 28, &format!("{:010}", tick), &COLOR_WHITE);
         layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
         if main_queue().is_empty() {
             // next interruption event makes CPU get back from power save mode.
-            unsafe { asm!("sti") };
+            unsafe { asm!("sti\n\thlt") };
             continue;
         }
 
         let result = main_queue().pop_back();
         unsafe { asm!("sti") }; // set CPU Interrupt Flag 1
         match result {
-            Some(Message {
-                m_type: MessageType::KInterruptXhci,
-            }) => xhci_controller().process_events(),
             None => error!("failed to pop a message from MainQueue."),
+            Some(message) => match message.m_type {
+                MessageType::InterruptXhci => xhci_controller().process_events(),
+                MessageType::TimerTimeout => {
+                    let timer = unsafe { message.arg.timer };
+                    printk!("{:?}\n", timer);
+                    if timer.value > 0 {
+                        timer_manager().add_timer(Timer::new(timer.timeout + 100, timer.value + 1))
+                    }
+                }
+            },
         }
     }
 }
@@ -138,7 +153,12 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
-    main_queue().push_front(Message::new(MessageType::KInterruptXhci));
+    main_queue().push_front(Message::new(MessageType::InterruptXhci, Arg::NONE));
+    notify_end_of_interrupt();
+}
+
+extern "x86-interrupt" fn int_handler_lapic_timer(_: *const InterruptFrame) {
+    lapic_timer_on_interrupt(main_queue());
     notify_end_of_interrupt();
 }
 
