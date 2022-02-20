@@ -48,14 +48,8 @@ impl FrameBuffer {
         let copy_area = dst_outline & src_outline & src_area_shifted;
         let src_start_pos = copy_area.pos - (dst_pos - src_area.pos);
 
-        let mut dst_buf = unsafe {
-            self.config
-                .frame_addr_at(copy_area.pos.x as usize, copy_area.pos.y as usize)
-        };
-        let mut src_buf = unsafe {
-            src.config
-                .frame_addr_at(src_start_pos.x as usize, src_start_pos.y as usize)
-        };
+        let mut dst_buf = unsafe { self.config.frame_addr_at(copy_area.pos.x, copy_area.pos.y) };
+        let mut src_buf = unsafe { src.config.frame_addr_at(src_start_pos.x, src_start_pos.y) };
 
         let bytes_per_copy_line =
             self.config.pixel_format.bytes_per_pixel() * copy_area.size.x as usize;
@@ -74,14 +68,8 @@ impl FrameBuffer {
 
         if dst_pos.y < src.pos.y {
             // move up
-            let mut dst_buf = unsafe {
-                self.config
-                    .frame_addr_at(dst_pos.x as usize, dst_pos.y as usize)
-            };
-            let mut src_buf = unsafe {
-                self.config
-                    .frame_addr_at(src.pos.x as usize, src.pos.y as usize)
-            };
+            let mut dst_buf = unsafe { self.config.frame_addr_at(dst_pos.x, dst_pos.y) };
+            let mut src_buf = unsafe { self.config.frame_addr_at(src.pos.x, src.pos.y) };
             for _ in 0..src.size.y {
                 unsafe {
                     copy_nonoverlapping(src_buf, dst_buf, bytes_per_pixel * src.size.x as usize);
@@ -93,11 +81,11 @@ impl FrameBuffer {
             // // move down
             let mut dst_buf = unsafe {
                 self.config
-                    .frame_addr_at(dst_pos.x as usize, (dst_pos.y + src.size.y - 1) as usize)
+                    .frame_addr_at(dst_pos.x, dst_pos.y + src.size.y - 1)
             };
             let mut src_buf = unsafe {
                 self.config
-                    .frame_addr_at(src.pos.x as usize, (src.pos.y + src.size.y - 1) as usize)
+                    .frame_addr_at(src.pos.x, src.pos.y + src.size.y - 1)
             };
             for _ in 0..src.size.y {
                 unsafe {
