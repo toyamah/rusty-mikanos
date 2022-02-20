@@ -54,13 +54,14 @@ impl FrameBufferConfig {
         self.pixel_format.bytes_per_pixel() * self.pixels_per_scan_line as usize
     }
 
-    pub fn pixel_position_at(&self, x: usize, y: usize) -> usize {
-        self.pixel_format.bytes_per_pixel() * (self.pixels_per_scan_line as usize * y + x)
+    pub fn pixel_position_at(&self, x: isize, y: isize) -> isize {
+        self.pixel_format.bytes_per_pixel() as isize * (self.pixels_per_scan_line as isize * y + x)
     }
 
     /// # Safety
-    pub unsafe fn frame_addr_at(&self, x: usize, y: usize) -> *mut u8 {
-        self.frame_buffer.add(self.pixel_position_at(x, y))
+    pub unsafe fn frame_addr_at(&self, x: i32, y: i32) -> *mut u8 {
+        self.frame_buffer
+            .offset(self.pixel_position_at(x as isize, y as isize))
     }
 }
 

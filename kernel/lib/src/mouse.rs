@@ -75,7 +75,7 @@ const MOUSE_CURSOR_SHAPE: [&str; 24] = [
 
 pub struct Mouse {
     layer_id: u32,
-    position: Vector2D<usize>,
+    position: Vector2D<i32>,
     drag_layer_id: Option<u32>,
     previous_buttons: u8,
 }
@@ -92,12 +92,12 @@ impl Mouse {
 
     fn set_position(
         &mut self,
-        position: Vector2D<usize>,
+        position: Vector2D<i32>,
         layout_manager: &mut LayerManager,
         screen_buffer: &mut FrameBuffer,
     ) {
         self.position = position;
-        layout_manager.move_(self.layer_id, self.position.to_i32_vec2d(), screen_buffer)
+        layout_manager.move_(self.layer_id, self.position, screen_buffer)
     }
 
     pub fn on_interrupt(
@@ -109,16 +109,15 @@ impl Mouse {
         layout_manager: &mut LayerManager,
         screen_frame_buffer: &mut FrameBuffer,
     ) {
-        let new_pos = self.position.to_i32_vec2d()
-            + Vector2D::new(displacement_x as i32, displacement_y as i32);
+        let new_pos = self.position + Vector2D::new(displacement_x as i32, displacement_y as i32);
         let new_pos = new_pos
             .element_min(screen_size + Vector2D::new(-1, -1))
             .element_max(Vector2D::new(0, 0));
 
         let old_pos = self.position;
-        self.position = Vector2D::new(new_pos.x as usize, new_pos.y as usize);
+        self.position = new_pos;
         let pos_diff = self.position - old_pos;
-        layout_manager.move_(self.layer_id, new_pos, screen_frame_buffer);
+        layout_manager.move_(self.layer_id, self.position, screen_frame_buffer);
 
         let previous_left_pressed = (self.previous_buttons & 0x01) != 0;
         let left_pressed = (buttons & 0x01) != 0;
@@ -131,11 +130,7 @@ impl Mouse {
             }
         } else if previous_left_pressed && left_pressed {
             if let Some(drag_layer_id) = self.drag_layer_id {
-                layout_manager.move_relative(
-                    drag_layer_id,
-                    pos_diff.to_i32_vec2d(),
-                    screen_frame_buffer,
-                );
+                layout_manager.move_relative(drag_layer_id, pos_diff, screen_frame_buffer);
             }
         } else if previous_left_pressed && !left_pressed {
             self.drag_layer_id = None;
