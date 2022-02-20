@@ -4,7 +4,10 @@ use core::{mem, slice};
 
 pub mod global {
     use crate::acpi::{DescriptionHeader, Fadt, Rsdp, Xsdt};
+    use crate::asm::io_in_32;
     use log::info;
+
+    const PM_TIMER_FREQ: u32 = 3579545;
 
     static mut FADT: Option<&'static Fadt> = None;
 
@@ -28,6 +31,22 @@ pub mod global {
             .expect("FADT is not found");
 
         unsafe { FADT = Some(fadt) };
+    }
+
+    pub fn wait_milliseconds(msec: u32) {
+        let fadt = unsafe { FADT.unwrap() };
+        let pm_timer_32 = ((fadt.flags >> 8) & 1) != 0;
+
+        let start = io_in_32(fadt.pm_tmr_blk as u16);
+        let mut end = start + PM_TIMER_FREQ * msec / 1000;
+        if !pm_timer_32 {
+            end &= 0x00ffffff;
+        }
+
+        if end < start {
+            while io_in_32(fadt.pm_tmr_blk as u16) >= start {}
+        }
+        while io_in_32(fadt.pm_tmr_blk as u16) < end {}
     }
 }
 

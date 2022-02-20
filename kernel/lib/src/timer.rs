@@ -6,9 +6,11 @@ use core::cmp::Ordering;
 use core::ptr::read_volatile;
 
 const COUNT_MAX: u32 = 0xffffffff;
+const TIMER_FREQ: u64 = 100;
 
 pub mod global {
-    use super::{divide_config, initial_count, lvt_timer, TimerManager};
+    use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
+    use crate::acpi;
     use crate::interrupt::InterruptVectorNumber;
     use crate::message::Message;
     use alloc::collections::VecDeque;
@@ -18,12 +20,23 @@ pub mod global {
         unsafe { TIMER_MANAGER.as_mut().unwrap() }
     }
 
+    static mut LAPIC_TIMER_FREQ: Option<u64> = None;
+
     pub fn initialize_lapic_timer() {
         unsafe {
             TIMER_MANAGER = Some(TimerManager::new());
+            divide_config().write_volatile(0b1011); // divide 1:1
+            lvt_timer().write_volatile(0b001 << 16); // masked, one-shot
+        };
+
+        let elapsed = measure_time(|| acpi::global::wait_milliseconds(100));
+        let lapic_timer_freq = (elapsed as u64) * 10;
+        unsafe { LAPIC_TIMER_FREQ = Some(lapic_timer_freq) };
+
+        unsafe {
             divide_config().write_volatile(0b1011);
             lvt_timer().write_volatile((0b010 << 16) | InterruptVectorNumber::LAPICTimer as u32);
-            initial_count().write_volatile(0x1000000)
+            initial_count().write_volatile((lapic_timer_freq / TIMER_FREQ) as u32);
         }
     }
 
