@@ -3,15 +3,15 @@ use alloc::string::String;
 use core::{mem, slice};
 
 pub mod global {
-    use crate::acpi::{DescriptionHeader, FADT, RSDP, XSDT};
+    use crate::acpi::{DescriptionHeader, Fadt, Rsdp, Xsdt};
     use log::info;
 
-    static mut FADT: Option<&'static FADT> = None;
+    static mut FADT: Option<&'static Fadt> = None;
 
-    pub fn initialize(rsdp: &'static RSDP) {
+    pub fn initialize(rsdp: &'static Rsdp) {
         rsdp.validate().expect("RDSP is not valid.");
 
-        let xsdt = unsafe { (rsdp.xsdt_address as *const XSDT).as_ref().unwrap() };
+        let xsdt = unsafe { (rsdp.xsdt_address as *const Xsdt).as_ref().unwrap() };
         xsdt.header.validate(b"XSDT").expect("XSDT is not valid.");
 
         let fadt = xsdt
@@ -23,7 +23,7 @@ pub mod global {
                 })
             })
             .and_then(|entry| unsafe {
-                (entry as *const DescriptionHeader as *const FADT).as_ref()
+                (entry as *const DescriptionHeader as *const Fadt).as_ref()
             })
             .expect("FADT is not found");
 
@@ -32,7 +32,7 @@ pub mod global {
 }
 
 #[repr(C, packed)]
-pub struct RSDP {
+pub struct Rsdp {
     pub signature: [u8; 8],
     pub checksum: u8,
     pub oem_id: [u8; 6],
@@ -44,9 +44,8 @@ pub struct RSDP {
     pub reserved: [u8; 3],
 }
 
-impl RSDP {
+impl Rsdp {
     fn validate(&self) -> Result<(), String> {
-        //
         if &self.signature != b"RSD PTR " {
             return Err(format!("invalid signature {:?}\n", self.signature));
         }
@@ -71,11 +70,11 @@ impl RSDP {
 }
 
 #[repr(C, packed)]
-struct XSDT {
+struct Xsdt {
     pub header: DescriptionHeader,
 }
 
-impl XSDT {
+impl Xsdt {
     pub fn count(&self) -> usize {
         self.header.length as usize - mem::size_of::<DescriptionHeader>() / mem::size_of::<u64>()
     }
@@ -88,7 +87,6 @@ impl XSDT {
     }
 }
 
-#[derive(Debug)]
 #[repr(C, packed)]
 struct DescriptionHeader {
     pub signature: [u8; 4],
@@ -110,16 +108,16 @@ impl DescriptionHeader {
 
         let sum = unsafe { sum_bytes(self, self.length as usize) };
         if sum != 0 {
-            return Err(format!("sum of {} bytes must be 0: {}", self.length, sum));
+            let length = self.length; // assign to a value to suppress a clippy error
+            return Err(format!("sum of {} bytes must be 0: {}", length, sum));
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 
-#[derive(Debug)]
 #[repr(C, packed)]
-struct FADT {
+struct Fadt {
     header: DescriptionHeader,
     pub reserved1: [u8; 76 - mem::size_of::<DescriptionHeader>()],
     pub pm_tmr_blk: u32,
@@ -129,6 +127,6 @@ struct FADT {
 }
 
 unsafe fn sum_bytes<T>(data: &T, length: usize) -> u8 {
-    let bytes = unsafe { slice::from_raw_parts(data as *const _ as *const u8, length) };
+    let bytes = slice::from_raw_parts(data as *const _ as *const u8, length);
     bytes.iter().fold(0u8, |sum, &byte| sum.wrapping_add(byte))
 }

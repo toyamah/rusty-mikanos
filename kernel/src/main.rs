@@ -11,7 +11,7 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
-use lib::acpi::RSDP;
+use lib::acpi::Rsdp;
 use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE};
 use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
@@ -58,7 +58,7 @@ static mut KERNEL_MAIN_STACK: KernelMainStack = KernelMainStack([0; 1024 * 1024]
 pub extern "C" fn KernelMainNewStack(
     frame_buffer_config_: &'static FrameBufferConfig,
     memory_map: &'static MemoryMap,
-    acpi_table: &'static RSDP,
+    acpi_table: &'static Rsdp,
 ) -> ! {
     let memory_map = *memory_map;
     graphics::global::initialize(*frame_buffer_config_);
