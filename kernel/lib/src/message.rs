@@ -14,12 +14,14 @@ impl Message {
 pub enum MessageType {
     InterruptXhci,
     TimerTimeout,
+    KeyPush,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union Arg {
     pub timer: TimerMessage,
+    pub keyboard: Keyboard,
     none: (),
 }
 
@@ -36,5 +38,17 @@ pub struct TimerMessage {
 impl TimerMessage {
     pub fn new(timeout: u64, value: i32) -> TimerMessage {
         Self { timeout, value }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct Keyboard {
+    pub keycode: u8,
+    pub ascii: char,
+}
+
+impl Keyboard {
+    pub fn new(keycode: u8, ascii: char) -> Keyboard {
+        Self { keycode, ascii }
     }
 }
