@@ -3,6 +3,7 @@ OBJS = lib.o \
        logger.o \
        libcxx_support.o \
        newlib_support.o \
+       pci.o \
        usb/memory.o \
        usb/device.o \
        usb/xhci/ring.o \
