@@ -6,8 +6,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RELEASE_CHANNEL: nightly
-  TARGET: x86_64-unknown-linux-gnu
 
 jobs:
   build:
@@ -21,20 +19,16 @@ jobs:
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup-init.sh
         sh rustup-init.sh -y --default-toolchain none
-        rustup target add $TARGET
-        
+
     - name: setup
       run: |
         git submodule update --init --recursive
         ./kernel/usb/setup.sh
-        rustup toolchain install $RELEASE_CHANNEL
-        rustup override set $RELEASE_CHANNEL
-        rustup component add rust-src --toolchain ${RELEASE_CHANNEL}-${TARGET}
         sudo apt-get install nasm
 
     - name: fmt
       run: cargo fmt -- --check
 
     - name: run tests
-      run: cargo test --target ${TARGET} -Z build-std --verbose
+      run: cargo test --target x86_64-unknown-linux-gnu -Z build-std --verbose
       working-directory: ./kernel/lib/
