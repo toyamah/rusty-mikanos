@@ -43,12 +43,17 @@ impl TimerMessage {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Keyboard {
+    pub modifier: u8,
     pub keycode: u8,
     pub ascii: char,
 }
 
 impl Keyboard {
-    pub fn new(keycode: u8, ascii: char) -> Keyboard {
-        Self { keycode, ascii }
+    pub fn new(modifier: u8, keycode: u8, ascii: char) -> Keyboard {
+        Self {
+            modifier,
+            keycode,
+            ascii,
+        }
     }
 }
