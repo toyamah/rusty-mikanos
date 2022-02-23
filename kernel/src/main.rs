@@ -49,6 +49,24 @@ fn main_window_layer_id() -> u32 {
     unsafe { MAIN_WINDOW_LAYER_ID.unwrap() }
 }
 
+static mut TEXT_WINDOW: Option<Window> = None;
+fn text_window() -> &'static mut Window {
+    unsafe { TEXT_WINDOW.as_mut().unwrap() }
+}
+fn text_window_ref() -> &'static Window {
+    unsafe { TEXT_WINDOW.as_ref().unwrap() }
+}
+
+static mut TEXT_WINDOW_LAYER_ID: Option<u32> = None;
+fn text_window_layer_id() -> u32 {
+    unsafe { TEXT_WINDOW_LAYER_ID.unwrap() }
+}
+
+static mut TEXT_WINDOW_INDEX: i32 = 0;
+fn text_window_index() -> i32 {
+    unsafe { TEXT_WINDOW_INDEX }
+}
+
 #[repr(align(16))]
 struct KernelMainStack([u8; 1024 * 1024]);
 
@@ -80,6 +98,7 @@ pub extern "C" fn KernelMainNewStack(
 
     layer::global::initialize();
     initialize_main_window();
+    initialize_text_window();
     mouse::global::initialize();
     layer_manager().draw_on(
         Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
@@ -119,9 +138,7 @@ pub extern "C" fn KernelMainNewStack(
                 MessageType::TimerTimeout => {}
                 MessageType::KeyPush => {
                     let keyboard = unsafe { message.arg.keyboard };
-                    if keyboard.ascii != '\0' {
-                        printk!("{}", keyboard.ascii);
-                    }
+                    input_text_window(keyboard.ascii);
                 }
             },
         }
@@ -179,6 +196,64 @@ fn initialize_main_window() {
     layer_manager().up_down(main_window_layer_id, 2);
 
     unsafe { MAIN_WINDOW_LAYER_ID = Some(main_window_layer_id) };
+}
+
+fn initialize_text_window() {
+    let win_w = 160;
+    let win_h = 52;
+
+    unsafe {
+        TEXT_WINDOW = Some(Window::new(
+            win_w,
+            win_h,
+            frame_buffer_config().pixel_format,
+        ))
+    }
+
+    text_window().draw_window("Text Box Test");
+    text_window().draw_text_box(
+        Vector2D::new(4, 24),
+        Vector2D::new(win_w as i32 - 8, win_h as i32 - 24 - 4),
+    );
+
+    let id = layer_manager()
+        .new_layer()
+        .set_window(text_window())
+        .set_draggable(true)
+        .move_(Vector2D::new(350, 200))
+        .id();
+    unsafe { TEXT_WINDOW_LAYER_ID = Some(id) };
+
+    layer_manager().up_down(id, i32::MAX);
+}
+
+fn input_text_window(c: char) {
+    if c == '\0' {
+        return;
+    }
+
+    fn pos() -> Vector2D<i32> {
+        Vector2D::new(8 + 8 * text_window_index(), 24 + 6)
+    }
+
+    let max_chars = (text_window_ref().width() - 16) / 8;
+    if c == '\x08' && text_window_index() > 0 {
+        unsafe { TEXT_WINDOW_INDEX -= 1 };
+        fill_rectangle(
+            text_window().writer(),
+            &pos(),
+            &Vector2D::new(8, 16),
+            &PixelColor::from(0xffffff),
+        )
+    } else if c >= ' ' && text_window_index() < max_chars {
+        let pos = pos();
+        text_window()
+            .writer()
+            .write_ascii(pos.x, pos.y, c, &COLOR_WHITE);
+        unsafe { TEXT_WINDOW_INDEX += 1 };
+    }
+
+    layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
 }
 
 fn loop_and_hlt() -> ! {
