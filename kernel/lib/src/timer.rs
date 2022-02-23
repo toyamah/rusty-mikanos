@@ -6,7 +6,7 @@ use core::cmp::Ordering;
 use core::ptr::read_volatile;
 
 const COUNT_MAX: u32 = 0xffffffff;
-const TIMER_FREQ: u64 = 100;
+pub const TIMER_FREQ: u64 = 100;
 
 pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};

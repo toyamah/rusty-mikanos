@@ -13,12 +13,15 @@ use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
 use lib::graphics::global::{frame_buffer_config, screen_size};
-use lib::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_WHITE};
+use lib::graphics::{
+    fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
+};
 use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
 use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Arg, Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
+use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
 use lib::{
     acpi, console, graphics, keyboard, layer, memory_manager, mouse, paging, pci, segment, timer,
@@ -110,6 +113,13 @@ pub extern "C" fn KernelMainNewStack(
 
     usb::register_keyboard_observer(keyboard_observer);
 
+    let text_box_cursor_timer = 1;
+    let timer_05_sec = TIMER_FREQ / 2;
+    unsafe { asm!("cli") };
+    timer_manager().add_timer(Timer::new(timer_05_sec, text_box_cursor_timer));
+    unsafe { asm!("sti") };
+    let mut text_box_cursor_visible = false;
+
     loop {
         fill_rectangle(
             main_window().writer(),
@@ -135,7 +145,21 @@ pub extern "C" fn KernelMainNewStack(
             None => error!("failed to pop a message from MainQueue."),
             Some(message) => match message.m_type {
                 MessageType::InterruptXhci => xhci_controller().process_events(),
-                MessageType::TimerTimeout => {}
+                MessageType::TimerTimeout => {
+                    let timer = unsafe { message.arg.timer };
+                    if timer.value == text_box_cursor_timer {
+                        unsafe { asm!("cli") };
+                        timer_manager().add_timer(Timer::new(
+                            timer.timeout + timer_05_sec,
+                            text_box_cursor_timer,
+                        ));
+                        unsafe { asm!("sti") };
+                        text_box_cursor_visible = !text_box_cursor_visible;
+                        draw_text_cursor(text_box_cursor_visible);
+                        layer_manager()
+                            .draw_layer_of(text_window_layer_id(), screen_frame_buffer());
+                    }
+                }
                 MessageType::KeyPush => {
                     let keyboard = unsafe { message.arg.keyboard };
                     input_text_window(keyboard.ascii);
@@ -236,24 +260,34 @@ fn input_text_window(c: char) {
         Vector2D::new(8 + 8 * text_window_index(), 24 + 6)
     }
 
-    let max_chars = (text_window_ref().width() - 16) / 8;
+    let max_chars = (text_window_ref().width() - 16) / 8 - 1;
     if c == '\x08' && text_window_index() > 0 {
+        draw_text_cursor(false);
         unsafe { TEXT_WINDOW_INDEX -= 1 };
         fill_rectangle(
             text_window().writer(),
             &pos(),
             &Vector2D::new(8, 16),
             &PixelColor::from(0xffffff),
-        )
+        );
+        draw_text_cursor(true);
     } else if c >= ' ' && text_window_index() < max_chars {
+        draw_text_cursor(false);
         let pos = pos();
         text_window()
             .writer()
             .write_ascii(pos.x, pos.y, c, &COLOR_WHITE);
         unsafe { TEXT_WINDOW_INDEX += 1 };
+        draw_text_cursor(true);
     }
 
     layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
+}
+
+fn draw_text_cursor(visible: bool) {
+    let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
+    let pos = Vector2D::new(8 + 8 * text_window_index(), 24 + 5);
+    fill_rectangle(text_window().writer(), &pos, &Vector2D::new(7, 15), color);
 }
 
 fn loop_and_hlt() -> ! {
