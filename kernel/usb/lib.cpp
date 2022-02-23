@@ -9,7 +9,7 @@ usb::xhci::Controller* xhc;
 
 // ref: https://doc.rust-lang.org/nomicon/ffi.html#targeting-callbacks-to-rust-objects
 typedef void (*mouse_observer)(uint8_t, int8_t, int8_t);
-typedef void (*keyboard_observer)(uint8_t);
+typedef void (*keyboard_observer)(uint8_t, uint8_t);
 
 extern "C" {
     typedef struct {

@@ -153,8 +153,8 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
     );
 }
 
-extern "C" fn keyboard_observer(keycode: u8) {
-    keyboard::on_input(keycode, main_queue());
+extern "C" fn keyboard_observer(modifier: u8, keycode: u8) {
+    keyboard::on_input(modifier, keycode, main_queue());
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
