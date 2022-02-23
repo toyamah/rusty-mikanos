@@ -103,6 +103,17 @@ impl Window {
         }
     }
 
+    pub fn draw_text_box(&mut self, pos: Vector2D<i32>, size: Vector2D<i32>) {
+        // fill main box
+        self.fill_rect((pos.x + 1, pos.y + 1), (size.x - 2, size.y - 2), 0xffffff);
+
+        // draw border lines
+        self.fill_rect((pos.x, pos.y), (size.x, 1), 0x848484);
+        self.fill_rect((pos.x, pos.y), (1, size.y), 0x848484);
+        self.fill_rect((pos.x, pos.y + size.y), (size.x, 1), 0xc6c6c6);
+        self.fill_rect((pos.x + size.x, pos.y), (1, size.y), 0xc6c6c6);
+    }
+
     fn draw_with_transparent_to(
         &self,
         dst: &mut FrameBuffer,
