@@ -9,7 +9,13 @@ mkdir -p usb/xhci
 mkdir -p test
 
 cd "$script_dir"/../../official/kernel
-files=$(\find . -maxdepth 3 -name "*.cpp" -o -name "*.hpp" -o -name "*.c"  | sed -e 's/\.\///g')
+files=$(\find . -maxdepth 3 \
+  -name "*.cpp" \
+  -o -name "*.hpp" \
+  -o -name "*.c" \
+  -o -name "*.h" \
+  -o -name "*.asm" \
+  | sed -e 's/\.\///g')
 
 parse_params() {
   clear=0

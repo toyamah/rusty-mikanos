@@ -15,6 +15,11 @@ fn main() {
 fn build_usb(out_dir: &str, current_dir: &Path) {
     let usb_dir = Path::new(current_dir).join("usb");
 
+    Command::new("make")
+        .arg("clean")
+        .current_dir(&usb_dir)
+        .status()
+        .unwrap();
     Command::new("make").current_dir(&usb_dir).status().unwrap();
 
     fs::copy(

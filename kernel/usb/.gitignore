@@ -4,8 +4,9 @@
 *.c
 *.o
 *.a
+*.h
+*.asm
 
 !lib.cpp
 !logger.cpp
-!usb
 test

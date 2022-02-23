@@ -1,5 +1,6 @@
 #include "usb/xhci/xhci.hpp"
 #include "usb/classdriver/mouse.hpp"
+#include "usb/classdriver/keyboard.hpp"
 #include "error.hpp"
 #include "logger.hpp"
 
@@ -8,6 +9,7 @@ usb::xhci::Controller* xhc;
 
 // ref: https://doc.rust-lang.org/nomicon/ffi.html#targeting-callbacks-to-rust-objects
 typedef void (*mouse_observer)(uint8_t, int8_t, int8_t);
+typedef void (*keyboard_observer)(uint8_t);
 
 extern "C" {
     typedef struct {
@@ -59,6 +61,10 @@ extern "C" {
 
     void RegisterMouseObserver(mouse_observer mouse_observer) {
         usb::HIDMouseDriver::default_observer = mouse_observer;
+    }
+
+    void RegisterKeyboardObserver(keyboard_observer keyboard_observer) {
+        usb::HIDKeyboardDriver::default_observer = keyboard_observer;
     }
 }
 

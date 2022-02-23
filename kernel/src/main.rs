@@ -19,9 +19,10 @@ use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Arg, Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
-use lib::timer::Timer;
 use lib::window::Window;
-use lib::{acpi, console, graphics, layer, memory_manager, mouse, paging, pci, segment, timer};
+use lib::{
+    acpi, console, graphics, keyboard, layer, memory_manager, mouse, paging, pci, segment, timer,
+};
 use log::error;
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
@@ -87,8 +88,8 @@ pub extern "C" fn KernelMainNewStack(
 
     acpi::global::initialize(acpi_table);
     timer::global::initialize_lapic_timer();
-    timer_manager().add_timer(Timer::new(200, 2));
-    timer_manager().add_timer(Timer::new(600, -1));
+
+    usb::register_keyboard_observer(keyboard_observer);
 
     loop {
         fill_rectangle(
@@ -115,11 +116,11 @@ pub extern "C" fn KernelMainNewStack(
             None => error!("failed to pop a message from MainQueue."),
             Some(message) => match message.m_type {
                 MessageType::InterruptXhci => xhci_controller().process_events(),
-                MessageType::TimerTimeout => {
-                    let timer = unsafe { message.arg.timer };
-                    printk!("{:?}\n", timer);
-                    if timer.value > 0 {
-                        timer_manager().add_timer(Timer::new(timer.timeout + 100, timer.value + 1))
+                MessageType::TimerTimeout => {}
+                MessageType::KeyPush => {
+                    let keyboard = unsafe { message.arg.keyboard };
+                    if keyboard.ascii != '\0' {
+                        printk!("{}", keyboard.ascii);
                     }
                 }
             },
@@ -150,6 +151,10 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
         layer_manager(),
         screen_frame_buffer(),
     );
+}
+
+extern "C" fn keyboard_observer(keycode: u8) {
+    keyboard::on_input(keycode, main_queue());
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
