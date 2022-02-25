@@ -8,10 +8,11 @@ extern crate alloc;
 
 use crate::usb::global::xhci_controller;
 use alloc::collections::VecDeque;
-use alloc::format;
+use alloc::{format, vec};
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
+use lib::asm::{get_cr3, switch_context};
 use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{
     fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
@@ -20,6 +21,7 @@ use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFra
 use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Arg, Message, MessageType};
 use lib::mouse::global::mouse;
+use lib::segment::{KERNEL_CS, KERNEL_SS};
 use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
 use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
@@ -70,6 +72,29 @@ fn text_window_index() -> i32 {
     unsafe { TEXT_WINDOW_INDEX }
 }
 
+static mut TASK_B_WINDOW: Option<Window> = None;
+fn task_b_window() -> &'static mut Window {
+    unsafe { TASK_B_WINDOW.as_mut().unwrap() }
+}
+fn task_b_window_ref() -> &'static Window {
+    unsafe { TASK_B_WINDOW.as_ref().unwrap() }
+}
+
+static mut TASK_B_WINDOW_LAYER_ID: Option<u32> = None;
+fn task_b_window_layer_id() -> u32 {
+    unsafe { TASK_B_WINDOW_LAYER_ID.unwrap() }
+}
+
+static mut TASK_A_CTX: TaskContext = TaskContext::default_();
+fn task_a_ctx() -> &'static mut TaskContext {
+    unsafe { &mut TASK_A_CTX }
+}
+
+static mut TASK_B_CTX: TaskContext = TaskContext::default_();
+fn task_b_ctx() -> &'static mut TaskContext {
+    unsafe { &mut TASK_B_CTX }
+}
+
 #[repr(align(16))]
 struct KernelMainStack([u8; 1024 * 1024]);
 
@@ -102,6 +127,7 @@ pub extern "C" fn KernelMainNewStack(
     layer::global::initialize();
     initialize_main_window();
     initialize_text_window();
+    initialize_task_b_window();
     mouse::global::initialize();
     layer_manager().draw_on(
         Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
@@ -120,6 +146,20 @@ pub extern "C" fn KernelMainNewStack(
     unsafe { asm!("sti") };
     let mut text_box_cursor_visible = false;
 
+    let task_b_stack = vec![1u64; 1024];
+    let task_b_stack_end = task_b_stack.last().unwrap() as *const _ as u64;
+
+    task_b_ctx().rip = task_b as u64;
+    task_b_ctx().rdi = 1;
+    task_b_ctx().rsi = 42;
+
+    task_b_ctx().cr3 = get_cr3();
+    task_b_ctx().rflags = 0x202;
+    task_b_ctx().cs = KERNEL_CS as u64;
+    task_b_ctx().ss = KERNEL_SS as u64;
+    task_b_ctx().rsp = (task_b_stack_end & !0xf) - 8;
+    task_b_ctx().fxsave_area[24..][..4].copy_from_slice(&0x1f80u32.to_le_bytes());
+
     loop {
         fill_rectangle(
             main_window().writer(),
@@ -134,8 +174,8 @@ pub extern "C" fn KernelMainNewStack(
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
         if main_queue().is_empty() {
-            // next interruption event makes CPU get back from power save mode.
-            unsafe { asm!("sti\n\thlt") };
+            unsafe { asm!("sti") }; // next interruption event makes CPU get back from power save mode.
+            unsafe { switch_context(task_b_ctx(), task_a_ctx()) };
             continue;
         }
 
@@ -282,6 +322,106 @@ fn input_text_window(c: char) {
     }
 
     layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
+}
+
+fn initialize_task_b_window() {
+    unsafe { TASK_B_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) };
+    task_b_window().draw_window("TaskB Window");
+
+    let layer_id = layer_manager()
+        .new_layer()
+        .set_window(task_b_window_ref())
+        .set_draggable(true)
+        .move_(Vector2D::new(100, 100))
+        .id();
+    unsafe { TASK_B_WINDOW_LAYER_ID = Some(layer_id) };
+
+    layer_manager().up_down(layer_id, i32::MAX);
+}
+
+#[derive(Debug)]
+#[repr(C, align(16))]
+struct TaskContext {
+    // offset : 0x00
+    cr3: u64,
+    rip: u64,
+    rflags: u64,
+    reserved1: u64,
+    // offset : 0x20
+    cs: u64,
+    ss: u64,
+    fs: u64,
+    gs: u64,
+    // offset : 0x40
+    rax: u64,
+    rbx: u64,
+    rcx: u64,
+    rdx: u64,
+    rdi: u64,
+    rsi: u64,
+    rsp: u64,
+    rbp: u64,
+    // offset : 0x80
+    r8: u64,
+    r9: u64,
+    r10: u64,
+    r11: u64,
+    r12: u64,
+    r13: u64,
+    r14: u64,
+    r15: u64,
+    // offset : 0xc0
+    fxsave_area: [u8; 512],
+}
+
+impl TaskContext {
+    const fn default_() -> Self {
+        Self {
+            cr3: 0,
+            rip: 0,
+            rflags: 0,
+            reserved1: 0,
+            cs: 0,
+            ss: 0,
+            fs: 0,
+            gs: 0,
+            rax: 0,
+            rbx: 0,
+            rcx: 0,
+            rdx: 0,
+            rdi: 0,
+            rsi: 0,
+            rsp: 0,
+            rbp: 0,
+            r8: 0,
+            r9: 0,
+            r10: 0,
+            r11: 0,
+            r12: 0,
+            r13: 0,
+            r14: 0,
+            r15: 0,
+            fxsave_area: [0; 512],
+        }
+    }
+}
+
+fn task_b(task_id: i32, data: i32) {
+    printk!("TaskB: task_id ={}, data={}\n", task_id, data);
+    for i in 0.. {
+        fill_rectangle(
+            task_b_window().writer(),
+            &Vector2D::new(24, 28),
+            &Vector2D::new(8 * 10, 16),
+            &PixelColor::new(0xc6, 0xc6, 0xc6),
+        );
+        task_b_window()
+            .writer()
+            .write_string(24, 28, format!("{:010}", i).as_str(), &COLOR_WHITE);
+        layer_manager().draw_layer_of(task_b_window_layer_id(), screen_frame_buffer());
+
+        unsafe { switch_context(task_a_ctx(), task_b_ctx()) };
+    }
 }
 
 fn draw_text_cursor(visible: bool) {

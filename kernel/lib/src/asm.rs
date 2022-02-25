@@ -1,3 +1,5 @@
+use core::ffi::c_void;
+
 extern "C" {
     fn IoOut32(addr: u16, data: u32);
     fn IoIn32(addr: u16) -> u32;
@@ -7,6 +9,8 @@ extern "C" {
     fn SetDSAll(value: u16);
     fn SetCSSS(cs: u16, ss: u16);
     fn SetCR3(value: u64);
+    fn GetCR3() -> u64;
+    fn SwitchContext(next_ctx: *const c_void, current_ctx: *const c_void);
 }
 
 pub fn io_out_32(addr: u16, data: u32) {
@@ -39,4 +43,16 @@ pub fn set_csss(cs: u16, ss: u16) {
 
 pub fn set_cr3(value: u64) {
     unsafe { SetCR3(value) }
+}
+
+pub fn get_cr3() -> u64 {
+    unsafe { GetCR3() }
+}
+
+/// # Safety
+pub unsafe fn switch_context<T>(next_ctx: &T, current_ctx: &T) {
+    SwitchContext(
+        next_ctx as *const _ as *const c_void,
+        current_ctx as *const _ as *const c_void,
+    );
 }
