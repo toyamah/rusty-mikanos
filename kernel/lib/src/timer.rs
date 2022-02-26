@@ -7,7 +7,7 @@ use core::ptr::read_volatile;
 const COUNT_MAX: u32 = 0xffffffff;
 pub const TIMER_FREQ: u64 = 100;
 
-pub const TASK_TIMER_PERIOD: u64 = TIMER_FREQ / 50;
+pub const TASK_TIMER_PERIOD: u64 = TIMER_FREQ;
 pub const TASK_TIMER_VALUE: i32 = i32::MIN;
 
 pub mod global {
