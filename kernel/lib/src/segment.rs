@@ -3,7 +3,7 @@ use crate::x86_descriptor::SegmentDescriptorType;
 use bit_field::BitField;
 
 pub const KERNEL_CS: u16 = 1 << 3;
-const KERNEL_SS: u16 = 2 << 3;
+pub const KERNEL_SS: u16 = 2 << 3;
 const KERNEL_DS: u16 = 0;
 
 pub mod global {
