@@ -1,25 +1,23 @@
+use crate::asm::{get_cr3, switch_context};
+use crate::segment::{KERNEL_CS, KERNEL_SS};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::mem;
+
 pub mod global {
-    use crate::asm::{get_cr3, switch_context};
-    use crate::segment::{KERNEL_CS, KERNEL_SS};
-    use crate::task::TaskContext;
+    use crate::task::TaskManager;
     use crate::timer::global::timer_manager;
     use crate::timer::{Timer, TASK_TIMER_PERIOD, TASK_TIMER_VALUE};
     use core::arch::asm;
-    use core::ptr;
 
-    static mut TASK_A_CTX: TaskContext = TaskContext::default_();
-    fn task_a_ctx() -> &'static mut TaskContext {
-        unsafe { &mut TASK_A_CTX }
+    static mut TASK_MANAGER: TaskManager = TaskManager::new();
+    pub fn task_manager() -> &'static mut TaskManager {
+        unsafe { &mut TASK_MANAGER }
     }
-
-    static mut TASK_B_CTX: TaskContext = TaskContext::default_();
-    pub fn task_b_ctx() -> &'static mut TaskContext {
-        unsafe { &mut TASK_B_CTX }
-    }
-
-    static mut CURRENT_TASK: &TaskContext = unsafe { &TASK_A_CTX };
 
     pub fn initialize() {
+        unsafe { TASK_MANAGER.new_task() };
+
         unsafe { asm!("cli") };
         timer_manager().add_timer(Timer::new(
             timer_manager().current_tick() + TASK_TIMER_PERIOD,
@@ -27,31 +25,76 @@ pub mod global {
         ));
         unsafe { asm!("sti") };
     }
+}
 
-    pub fn initialize_task_b(rip: usize, task_b_stack_end: u64) {
-        task_b_ctx().rip = rip as u64;
-        task_b_ctx().rdi = 1;
-        task_b_ctx().rsi = 43;
+pub struct Task {
+    id: u64,
+    stack: Vec<u64>,
+    context: TaskContext,
+}
 
-        task_b_ctx().cr3 = get_cr3();
-        task_b_ctx().rflags = 0x202;
-        task_b_ctx().cs = KERNEL_CS as u64;
-        task_b_ctx().ss = KERNEL_SS as u64;
-        task_b_ctx().rsp = (task_b_stack_end & !0xf) - 8;
-        task_b_ctx().fxsave_area[24..][..4].copy_from_slice(&0x1f80u32.to_le_bytes());
+impl Task {
+    const DEFAULT_STACK_BYTES: usize = 4096;
+    pub fn new(id: u64) -> Task {
+        Self {
+            id,
+            stack: vec![],
+            context: TaskContext::default_(),
+        }
     }
 
-    pub fn switch_task() {
-        unsafe {
-            let old_current_task = CURRENT_TASK;
-            let current_task = if ptr::eq(old_current_task as *const _, task_a_ctx() as *const _) {
-                &TASK_B_CTX
-            } else {
-                &TASK_A_CTX
-            };
-            CURRENT_TASK = current_task;
-            switch_context(current_task, old_current_task);
+    pub fn init_context(&mut self, task_func: fn(u64, usize) -> (), data: u64) {
+        let stack_size = Task::DEFAULT_STACK_BYTES / mem::size_of::<u64>();
+        self.stack.resize(stack_size, 0);
+        let stack_end = self.stack.last().unwrap() as *const _ as u64;
+
+        let context = &mut self.context;
+        context.cr3 = get_cr3();
+        context.rflags = 0x202;
+        context.cs = KERNEL_CS as u64;
+        context.ss = KERNEL_SS as u64;
+        context.rsp = (stack_end & !0xf) - 8;
+
+        context.rip = task_func as usize as u64;
+        context.rdi = self.id;
+        context.rsi = data;
+
+        context.fxsave_area[24..][..4].copy_from_slice(&0x1f80u32.to_le_bytes());
+    }
+}
+
+pub struct TaskManager {
+    tasks: Vec<Task>,
+    lasted_id: u64,
+    current_task_index: usize,
+}
+
+impl TaskManager {
+    const fn new() -> TaskManager {
+        Self {
+            tasks: vec![],
+            lasted_id: 0,
+            current_task_index: 0,
         }
+    }
+
+    pub fn new_task(&mut self) -> &mut Task {
+        self.lasted_id += 1;
+        self.tasks.push(Task::new(self.lasted_id));
+        self.tasks.iter_mut().last().unwrap()
+    }
+
+    pub fn switch_task(&mut self) {
+        let mut next_stack_index = self.current_task_index + 1;
+        if next_stack_index >= self.tasks.len() {
+            next_stack_index = 0;
+        }
+
+        let current_task = self.tasks.get(self.current_task_index).unwrap();
+        let next_task = self.tasks.get(next_stack_index).unwrap();
+        self.current_task_index = next_stack_index;
+
+        unsafe { switch_context(next_task, current_task) };
     }
 }
 

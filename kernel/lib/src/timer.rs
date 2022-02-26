@@ -7,14 +7,15 @@ use core::ptr::read_volatile;
 const COUNT_MAX: u32 = 0xffffffff;
 pub const TIMER_FREQ: u64 = 100;
 
-pub const TASK_TIMER_PERIOD: u64 = TIMER_FREQ;
+pub const TASK_TIMER_PERIOD: u64 = TIMER_FREQ / 50;
 pub const TASK_TIMER_VALUE: i32 = i32::MIN;
 
 pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
+    use crate::acpi;
     use crate::interrupt::{notify_end_of_interrupt, InterruptVectorNumber};
     use crate::message::Message;
-    use crate::{acpi, task};
+    use crate::task::global::task_manager;
     use alloc::collections::VecDeque;
 
     static mut TIMER_MANAGER: Option<TimerManager> = None;
@@ -46,7 +47,7 @@ pub mod global {
         let task_timer_timeout = timer_manager().tick(msg_queue);
         notify_end_of_interrupt();
         if task_timer_timeout {
-            task::global::switch_task();
+            task_manager().switch_task();
         }
     }
 }

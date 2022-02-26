@@ -8,7 +8,7 @@ extern crate alloc;
 
 use crate::usb::global::xhci_controller;
 use alloc::collections::VecDeque;
-use alloc::{format, vec};
+use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
@@ -20,6 +20,7 @@ use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFra
 use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Arg, Message, MessageType};
 use lib::mouse::global::mouse;
+use lib::task::global::task_manager;
 use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
 use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
@@ -135,11 +136,14 @@ pub extern "C" fn KernelMainNewStack(
     unsafe { asm!("sti") };
     let mut text_box_cursor_visible = false;
 
-    let task_b_stack = vec![1u64; 1024];
-    let task_b_stack_end = task_b_stack.last().unwrap() as *const _ as u64;
-
-    task::global::initialize_task_b(task_b as usize, task_b_stack_end);
     task::global::initialize();
+    task_manager().new_task().init_context(task_b, 45);
+    task_manager()
+        .new_task()
+        .init_context(task_idle, 0xdeadbeef);
+    task_manager()
+        .new_task()
+        .init_context(task_idle, 0xcafebabe);
 
     loop {
         fill_rectangle(
@@ -319,7 +323,7 @@ fn initialize_task_b_window() {
     layer_manager().up_down(layer_id, i32::MAX);
 }
 
-fn task_b(task_id: i32, data: i32) {
+fn task_b(task_id: u64, data: usize) {
     printk!("TaskB: task_id ={}, data={}\n", task_id, data);
     for i in 0.. {
         fill_rectangle(
@@ -332,6 +336,13 @@ fn task_b(task_id: i32, data: i32) {
             .writer()
             .write_string(24, 28, format!("{:010}", i).as_str(), &COLOR_WHITE);
         layer_manager().draw_layer_of(task_b_window_layer_id(), screen_frame_buffer());
+    }
+}
+
+fn task_idle(task_id: u64, data: usize) {
+    printk!("TaskIdle: task_id = {}, data = {}\n", task_id, data);
+    loop {
+        unsafe { asm!("hlt") };
     }
 }
 
