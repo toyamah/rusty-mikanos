@@ -1,5 +1,4 @@
-use crate::message;
-use crate::message::{Arg, Message, MessageType};
+use crate::message::{Arg, Message, MessageType, TimerMessage};
 use alloc::collections::{BinaryHeap, VecDeque};
 use core::arch::asm;
 use core::cmp::Ordering;
@@ -8,11 +7,14 @@ use core::ptr::read_volatile;
 const COUNT_MAX: u32 = 0xffffffff;
 pub const TIMER_FREQ: u64 = 100;
 
+pub const TASK_TIMER_PERIOD: u64 = TIMER_FREQ / 50;
+pub const TASK_TIMER_VALUE: i32 = i32::MIN;
+
 pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
-    use crate::acpi;
-    use crate::interrupt::InterruptVectorNumber;
+    use crate::interrupt::{notify_end_of_interrupt, InterruptVectorNumber};
     use crate::message::Message;
+    use crate::{acpi, task};
     use alloc::collections::VecDeque;
 
     static mut TIMER_MANAGER: Option<TimerManager> = None;
@@ -41,7 +43,11 @@ pub mod global {
     }
 
     pub fn lapic_timer_on_interrupt(msg_queue: &mut VecDeque<Message>) {
-        timer_manager().tick(msg_queue);
+        let task_timer_timeout = timer_manager().tick(msg_queue);
+        notify_end_of_interrupt();
+        if task_timer_timeout {
+            task::global::switch_task();
+        }
     }
 }
 
@@ -129,25 +135,36 @@ impl TimerManager {
         Self { tick: 0, timers }
     }
 
-    pub fn tick(&mut self, msg_queue: &mut VecDeque<Message>) {
+    pub fn tick(&mut self, msg_queue: &mut VecDeque<Message>) -> bool {
         // unsafe { write_volatile(&mut self.tick as *mut u64, self.tick + 1) };
         self.tick += 1;
 
+        let mut task_timer_timeout = false;
         loop {
             let t = self.timers.peek().unwrap();
             if t.timeout > self.tick {
                 break;
             }
 
+            if t.value == TASK_TIMER_VALUE {
+                task_timer_timeout = true;
+                self.timers.pop();
+                self.timers
+                    .push(Timer::new(self.tick + TASK_TIMER_PERIOD, TASK_TIMER_VALUE));
+                continue;
+            }
+
             let m = Message::new(
                 MessageType::TimerTimeout,
                 Arg {
-                    timer: message::TimerMessage::new(t.timeout, t.value),
+                    timer: TimerMessage::new(t.timeout, t.value),
                 },
             );
             msg_queue.push_back(m);
             self.timers.pop();
         }
+
+        task_timer_timeout
     }
 
     pub fn current_tick(&self) -> u64 {
