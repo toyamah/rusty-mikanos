@@ -166,7 +166,8 @@ fn convert_to_code(code: i32) -> Option<Code> {
         17 => InvalidPhase,
         18 => UnknownXHCISpeedID,
         19 => NoWaiter,
-        20 => LastOfCode,
+        20 => NoSuchTask,
+        21 => LastOfCode,
         _ => {
             panic!("unexpected code {}", code);
         }

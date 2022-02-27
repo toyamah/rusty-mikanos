@@ -48,6 +48,7 @@ pub enum Code {
     UnknownXHCISpeedID,
     NoWaiter,
     NoPCIMSI,
+    NoSuchTask,
     LastOfCode,
 }
 
