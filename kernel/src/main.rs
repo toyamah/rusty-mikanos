@@ -9,6 +9,7 @@ extern crate alloc;
 use crate::usb::global::xhci_controller;
 use alloc::collections::VecDeque;
 use alloc::format;
+use alloc::string::ToString;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
@@ -137,13 +138,24 @@ pub extern "C" fn KernelMainNewStack(
     let mut text_box_cursor_visible = false;
 
     task::global::initialize();
-    task_manager().new_task().init_context(task_b, 45);
+    let task_b_id = task_manager().new_task().init_context(task_b, 45).id();
+    task_manager().wake_up(task_b_id).unwrap();
     task_manager()
-        .new_task()
-        .init_context(task_idle, 0xdeadbeef);
+        .wake_up(
+            task_manager()
+                .new_task()
+                .init_context(task_idle, 0xdeadbeef)
+                .id(),
+        )
+        .unwrap();
     task_manager()
-        .new_task()
-        .init_context(task_idle, 0xcafebabe);
+        .wake_up(
+            task_manager()
+                .new_task()
+                .init_context(task_idle, 0xcafebabe)
+                .id(),
+        )
+        .unwrap();
 
     loop {
         fill_rectangle(
@@ -187,6 +199,19 @@ pub extern "C" fn KernelMainNewStack(
                 MessageType::KeyPush => {
                     let keyboard = unsafe { message.arg.keyboard };
                     input_text_window(keyboard.ascii);
+                    if keyboard.ascii == 's' {
+                        let str = task_manager()
+                            .sleep(task_b_id)
+                            .map(|_| "Success".to_string())
+                            .unwrap_or_else(|e| e.to_string());
+                        printk!("sleep taskB: {}\n", str)
+                    } else if keyboard.ascii == 'w' {
+                        let str = task_manager()
+                            .wake_up(task_b_id)
+                            .map(|_| "Success".to_string())
+                            .unwrap_or_else(|e| e.to_string());
+                        printk!("wake up taskB: {}\n", str)
+                    }
                 }
             },
         }

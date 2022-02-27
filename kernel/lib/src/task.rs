@@ -1,5 +1,8 @@
 use crate::asm::{get_cr3, switch_context};
+use crate::error::{Code, Error};
+use crate::make_error;
 use crate::segment::{KERNEL_CS, KERNEL_SS};
+use alloc::collections::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::mem;
@@ -10,13 +13,15 @@ pub mod global {
     use crate::timer::{Timer, TASK_TIMER_PERIOD, TASK_TIMER_VALUE};
     use core::arch::asm;
 
-    static mut TASK_MANAGER: TaskManager = TaskManager::new();
+    static mut TASK_MANAGER: Option<TaskManager> = None;
     pub fn task_manager() -> &'static mut TaskManager {
-        unsafe { &mut TASK_MANAGER }
+        unsafe { TASK_MANAGER.as_mut().unwrap() }
     }
 
     pub fn initialize() {
-        unsafe { TASK_MANAGER.new_task() };
+        unsafe { TASK_MANAGER = Some(TaskManager::new()) };
+        let id = task_manager().new_task().id;
+        task_manager().running_task_ids.push_back(id);
 
         unsafe { asm!("cli") };
         timer_manager().add_timer(Timer::new(
@@ -43,7 +48,7 @@ impl Task {
         }
     }
 
-    pub fn init_context(&mut self, task_func: fn(u64, usize) -> (), data: u64) {
+    pub fn init_context(&mut self, task_func: fn(u64, usize) -> (), data: u64) -> &mut Task {
         let stack_size = Task::DEFAULT_STACK_BYTES / mem::size_of::<u64>();
         self.stack.resize(stack_size, 0);
         let stack_end = self.stack.last().unwrap() as *const _ as u64;
@@ -60,41 +65,88 @@ impl Task {
         context.rsi = data;
 
         context.fxsave_area[24..][..4].copy_from_slice(&0x1f80u32.to_le_bytes());
+        self
+    }
+
+    pub fn id(&self) -> u64 {
+        self.id
     }
 }
 
 pub struct TaskManager {
     tasks: Vec<Task>,
-    lasted_id: u64,
+    next_id: u64,
     current_task_index: usize,
+    running_task_ids: VecDeque<u64>,
 }
 
 impl TaskManager {
-    const fn new() -> TaskManager {
+    fn new() -> TaskManager {
         Self {
             tasks: vec![],
-            lasted_id: 0,
+            next_id: 0,
             current_task_index: 0,
+            running_task_ids: VecDeque::new(),
         }
     }
 
     pub fn new_task(&mut self) -> &mut Task {
-        self.lasted_id += 1;
-        self.tasks.push(Task::new(self.lasted_id));
+        self.tasks.push(Task::new(self.next_id));
+        self.next_id += 1;
         self.tasks.iter_mut().last().unwrap()
     }
 
     pub fn switch_task(&mut self) {
-        let mut next_stack_index = self.current_task_index + 1;
-        if next_stack_index >= self.tasks.len() {
-            next_stack_index = 0;
+        self._switch_task(false);
+    }
+
+    fn _switch_task(&mut self, current_sleep: bool) {
+        let current_task_id = self.running_task_ids.pop_front().unwrap();
+        let current_task = self.tasks.get(current_task_id as usize).unwrap();
+        if !current_sleep {
+            self.running_task_ids.push_back(current_task_id);
         }
 
-        let current_task = self.tasks.get(self.current_task_index).unwrap();
-        let next_task = self.tasks.get(next_stack_index).unwrap();
-        self.current_task_index = next_stack_index;
+        let next_task_id = *self.running_task_ids.front().unwrap();
+        let next_task = self.tasks.get(next_task_id as usize).unwrap();
+        unsafe { switch_context(&next_task.context, &current_task.context) }
+    }
 
-        unsafe { switch_context(next_task, current_task) };
+    pub fn sleep(&mut self, task_id: u64) -> Result<(), Error> {
+        let no_such_task = self.tasks.get(task_id as usize).is_none();
+        if no_such_task {
+            return Err(make_error!(Code::NoSuchTask));
+        }
+
+        let index = self
+            .running_task_ids
+            .iter()
+            .enumerate()
+            .find(|(_, &id)| id == task_id)
+            .map(|(index, _)| index);
+
+        if let Some(i) = index {
+            if i == 0 {
+                self.switch_task();
+            } else {
+                self.running_task_ids.remove(i);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn wake_up(&mut self, task_id: u64) -> Result<(), Error> {
+        let no_such_task = self.tasks.get(task_id as usize).is_none();
+        if no_such_task {
+            return Err(make_error!(Code::NoSuchTask));
+        }
+
+        let is_not_running = !self.running_task_ids.iter().any(|&id| id == task_id);
+
+        if is_not_running {
+            self.running_task_ids.push_back(task_id)
+        }
+        Ok(())
     }
 }
 
