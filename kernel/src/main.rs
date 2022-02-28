@@ -7,7 +7,6 @@
 extern crate alloc;
 
 use crate::usb::global::xhci_controller;
-use alloc::collections::VecDeque;
 use alloc::format;
 use alloc::string::ToString;
 use core::arch::asm;
@@ -29,18 +28,12 @@ use lib::{
     acpi, console, graphics, keyboard, layer, memory_manager, mouse, paging, pci, segment, task,
     timer,
 };
-use log::error;
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
 
 mod logger;
 mod memory_allocator;
 mod usb;
-
-static mut MAIN_QUEUE: Option<VecDeque<Message>> = None;
-pub fn main_queue() -> &'static mut VecDeque<Message> {
-    unsafe { MAIN_QUEUE.as_mut().unwrap() }
-}
 
 static mut MAIN_WINDOW: Option<Window> = None;
 fn main_window() -> &'static mut Window {
@@ -108,18 +101,15 @@ pub extern "C" fn KernelMainNewStack(
     segment::global::initialize();
     paging::global::initialize();
     memory_manager::global::initialize(&memory_map);
-    unsafe { MAIN_QUEUE = Some(VecDeque::new()) };
     initialize_interrupt(int_handler_xhci as usize, int_handler_lapic_timer as usize);
 
     pci::initialize();
-    usb::global::initialize();
     usb::register_mouse_observer(mouse_observer);
 
     layer::global::initialize();
     initialize_main_window();
     initialize_text_window();
     initialize_task_b_window();
-    mouse::global::initialize();
     layer_manager().draw_on(
         Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
         screen_frame_buffer(),
@@ -127,8 +117,6 @@ pub extern "C" fn KernelMainNewStack(
 
     acpi::global::initialize(acpi_table);
     timer::global::initialize_lapic_timer();
-
-    usb::register_keyboard_observer(keyboard_observer);
 
     let text_box_cursor_timer = 1;
     let timer_05_sec = TIMER_FREQ / 2;
@@ -138,6 +126,7 @@ pub extern "C" fn KernelMainNewStack(
     let mut text_box_cursor_visible = false;
 
     task::global::initialize();
+    let main_task_id = task_manager().main_task_mut().id();
     let task_b_id = task_manager().new_task().init_context(task_b, 45).id();
     task_manager().wake_up(task_b_id).unwrap();
     task_manager()
@@ -157,6 +146,10 @@ pub extern "C" fn KernelMainNewStack(
         )
         .unwrap();
 
+    usb::global::initialize();
+    usb::register_keyboard_observer(keyboard_observer);
+    mouse::global::initialize();
+
     loop {
         fill_rectangle(
             main_window().writer(),
@@ -170,50 +163,48 @@ pub extern "C" fn KernelMainNewStack(
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
-        if main_queue().is_empty() {
-            unsafe { asm!("sti\n\thlt") }; // next interruption event makes CPU get back from power save mode.
+        let message = task_manager().main_task_mut().receive_message();
+        if message.is_none() {
+            task_manager().sleep(main_task_id).unwrap();
+            unsafe { asm!("sti") }; // next interruption event makes CPU get back from power save mode.
             continue;
         }
+        let message = message.unwrap();
 
-        let result = main_queue().pop_back();
         unsafe { asm!("sti") }; // set CPU Interrupt Flag 1
-        match result {
-            None => error!("failed to pop a message from MainQueue."),
-            Some(message) => match message.m_type {
-                MessageType::InterruptXhci => xhci_controller().process_events(),
-                MessageType::TimerTimeout => {
-                    let timer = unsafe { message.arg.timer };
-                    if timer.value == text_box_cursor_timer {
-                        unsafe { asm!("cli") };
-                        timer_manager().add_timer(Timer::new(
-                            timer.timeout + timer_05_sec,
-                            text_box_cursor_timer,
-                        ));
-                        unsafe { asm!("sti") };
-                        text_box_cursor_visible = !text_box_cursor_visible;
-                        draw_text_cursor(text_box_cursor_visible);
-                        layer_manager()
-                            .draw_layer_of(text_window_layer_id(), screen_frame_buffer());
-                    }
+        match message.m_type {
+            MessageType::InterruptXhci => xhci_controller().process_events(),
+            MessageType::TimerTimeout => {
+                let timer = unsafe { message.arg.timer };
+                if timer.value == text_box_cursor_timer {
+                    unsafe { asm!("cli") };
+                    timer_manager().add_timer(Timer::new(
+                        timer.timeout + timer_05_sec,
+                        text_box_cursor_timer,
+                    ));
+                    unsafe { asm!("sti") };
+                    text_box_cursor_visible = !text_box_cursor_visible;
+                    draw_text_cursor(text_box_cursor_visible);
+                    layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
                 }
-                MessageType::KeyPush => {
-                    let keyboard = unsafe { message.arg.keyboard };
-                    input_text_window(keyboard.ascii);
-                    if keyboard.ascii == 's' {
-                        let str = task_manager()
-                            .sleep(task_b_id)
-                            .map(|_| "Success".to_string())
-                            .unwrap_or_else(|e| e.to_string());
-                        printk!("sleep taskB: {}\n", str)
-                    } else if keyboard.ascii == 'w' {
-                        let str = task_manager()
-                            .wake_up(task_b_id)
-                            .map(|_| "Success".to_string())
-                            .unwrap_or_else(|e| e.to_string());
-                        printk!("wake up taskB: {}\n", str)
-                    }
+            }
+            MessageType::KeyPush => {
+                let keyboard = unsafe { message.arg.keyboard };
+                input_text_window(keyboard.ascii);
+                if keyboard.ascii == 's' {
+                    let str = task_manager()
+                        .sleep(task_b_id)
+                        .map(|_| "Success".to_string())
+                        .unwrap_or_else(|e| e.to_string());
+                    printk!("sleep taskB: {}\n", str)
+                } else if keyboard.ascii == 'w' {
+                    let str = task_manager()
+                        .wake_up(task_b_id)
+                        .map(|_| "Success".to_string())
+                        .unwrap_or_else(|e| e.to_string());
+                    printk!("wake up taskB: {}\n", str)
                 }
-            },
+            }
         }
     }
 }
@@ -244,16 +235,21 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
 }
 
 extern "C" fn keyboard_observer(modifier: u8, keycode: u8) {
-    keyboard::on_input(modifier, keycode, main_queue());
+    keyboard::on_input(modifier, keycode, task_manager());
 }
 
 extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
-    main_queue().push_front(Message::new(MessageType::InterruptXhci, Arg::NONE));
+    task_manager()
+        .send_message(
+            task_manager().main_task().id(),
+            Message::new(MessageType::InterruptXhci, Arg::NONE),
+        )
+        .unwrap();
     notify_end_of_interrupt();
 }
 
 extern "x86-interrupt" fn int_handler_lapic_timer(_: *const InterruptFrame) {
-    lapic_timer_on_interrupt(main_queue());
+    lapic_timer_on_interrupt(task_manager());
     notify_end_of_interrupt();
 }
 

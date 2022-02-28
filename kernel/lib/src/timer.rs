@@ -1,5 +1,6 @@
 use crate::message::{Arg, Message, MessageType, TimerMessage};
-use alloc::collections::{BinaryHeap, VecDeque};
+use crate::task::TaskManager;
+use alloc::collections::BinaryHeap;
 use core::arch::asm;
 use core::cmp::Ordering;
 use core::ptr::read_volatile;
@@ -14,9 +15,7 @@ pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
     use crate::acpi;
     use crate::interrupt::{notify_end_of_interrupt, InterruptVectorNumber};
-    use crate::message::Message;
-    use crate::task::global::task_manager;
-    use alloc::collections::VecDeque;
+    use crate::task::TaskManager;
 
     static mut TIMER_MANAGER: Option<TimerManager> = None;
     pub fn timer_manager() -> &'static mut TimerManager {
@@ -43,11 +42,11 @@ pub mod global {
         }
     }
 
-    pub fn lapic_timer_on_interrupt(msg_queue: &mut VecDeque<Message>) {
-        let task_timer_timeout = timer_manager().tick(msg_queue);
+    pub fn lapic_timer_on_interrupt(task_manager: &mut TaskManager) {
+        let task_timer_timeout = timer_manager().tick(task_manager);
         notify_end_of_interrupt();
         if task_timer_timeout {
-            task_manager().switch_task();
+            task_manager.switch_task();
         }
     }
 }
@@ -136,7 +135,7 @@ impl TimerManager {
         Self { tick: 0, timers }
     }
 
-    pub fn tick(&mut self, msg_queue: &mut VecDeque<Message>) -> bool {
+    pub fn tick(&mut self, task_manager: &mut TaskManager) -> bool {
         // unsafe { write_volatile(&mut self.tick as *mut u64, self.tick + 1) };
         self.tick += 1;
 
@@ -161,7 +160,9 @@ impl TimerManager {
                     timer: TimerMessage::new(t.timeout, t.value),
                 },
             );
-            msg_queue.push_back(m);
+            task_manager
+                .send_message(task_manager.main_task().id(), m)
+                .unwrap();
             self.timers.pop();
         }
 

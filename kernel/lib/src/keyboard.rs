@@ -1,5 +1,5 @@
 use crate::message::{Arg, Keyboard, Message, MessageType};
-use alloc::collections::VecDeque;
+use crate::task::TaskManager;
 
 const KEYCODE_MAP: [char; 256] = [
     '\0', '\0', '\0', '\0', 'a', 'b', 'c', 'd', // 0
@@ -80,17 +80,22 @@ const R_SHIFT_BIT_MASK: u8 = 0b00100000;
 const R_ALT_BIT_MASK: u8 = 0b01000000;
 const R_GUIBIT_MASK: u8 = 0b10000000;
 
-pub fn on_input(modifier: u8, keycode: u8, msg_queue: &mut VecDeque<Message>) {
+pub fn on_input(modifier: u8, keycode: u8, task_manager: &mut TaskManager) {
     let shift_inputted = (modifier & (L_SHIFT_BIT_MASK | R_SHIFT_BIT_MASK)) != 0;
     let ascii = if shift_inputted {
         KEYCODE_MAP_SHIFT[keycode as usize]
     } else {
         KEYCODE_MAP[keycode as usize]
     };
-    msg_queue.push_back(Message::new(
-        MessageType::KeyPush,
-        Arg {
-            keyboard: Keyboard::new(modifier, keycode, ascii),
-        },
-    ))
+    task_manager
+        .send_message(
+            task_manager.main_task().id(),
+            Message::new(
+                MessageType::KeyPush,
+                Arg {
+                    keyboard: Keyboard::new(modifier, keycode, ascii),
+                },
+            ),
+        )
+        .unwrap();
 }
