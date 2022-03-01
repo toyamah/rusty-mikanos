@@ -93,7 +93,7 @@ pub struct TaskManager {
 }
 
 impl TaskManager {
-    fn new() -> TaskManager {
+    pub fn new() -> TaskManager {
         Self {
             tasks: vec![],
             next_id: 0,
@@ -103,7 +103,7 @@ impl TaskManager {
         }
     }
 
-    fn initialize_main_task(&mut self) {
+    pub fn initialize_main_task(&mut self) {
         assert!(self.tasks.is_empty());
         self.main_task_id = self.new_task().id;
         self.running_task_ids.push_back(self.main_task_id);
