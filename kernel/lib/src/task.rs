@@ -1,6 +1,7 @@
 use crate::asm::{get_cr3, switch_context};
 use crate::error::{Code, Error};
 use crate::make_error;
+use crate::message::Message;
 use crate::segment::{KERNEL_CS, KERNEL_SS};
 use alloc::collections::VecDeque;
 use alloc::vec;
@@ -20,8 +21,7 @@ pub mod global {
 
     pub fn initialize() {
         unsafe { TASK_MANAGER = Some(TaskManager::new()) };
-        let id = task_manager().new_task().id;
-        task_manager().running_task_ids.push_back(id);
+        task_manager().initialize_main_task();
 
         unsafe { asm!("cli") };
         timer_manager().add_timer(Timer::new(
@@ -36,6 +36,7 @@ pub struct Task {
     id: u64,
     stack: Vec<u64>,
     context: TaskContext,
+    messages: VecDeque<Message>,
 }
 
 impl Task {
@@ -45,6 +46,7 @@ impl Task {
             id,
             stack: vec![],
             context: TaskContext::default_(),
+            messages: VecDeque::new(),
         }
     }
 
@@ -71,6 +73,15 @@ impl Task {
     pub fn id(&self) -> u64 {
         self.id
     }
+
+    /// needs to call `wake_up` after this method is invoked
+    fn send_message(&mut self, message: Message) {
+        self.messages.push_back(message)
+    }
+
+    pub fn receive_message(&mut self) -> Option<Message> {
+        self.messages.pop_front()
+    }
 }
 
 pub struct TaskManager {
@@ -78,16 +89,24 @@ pub struct TaskManager {
     next_id: u64,
     current_task_index: usize,
     running_task_ids: VecDeque<u64>,
+    main_task_id: u64,
 }
 
 impl TaskManager {
-    fn new() -> TaskManager {
+    pub fn new() -> TaskManager {
         Self {
             tasks: vec![],
             next_id: 0,
             current_task_index: 0,
             running_task_ids: VecDeque::new(),
+            main_task_id: 0,
         }
+    }
+
+    pub fn initialize_main_task(&mut self) {
+        assert!(self.tasks.is_empty());
+        self.main_task_id = self.new_task().id;
+        self.running_task_ids.push_back(self.main_task_id);
     }
 
     pub fn new_task(&mut self) -> &mut Task {
@@ -147,6 +166,29 @@ impl TaskManager {
             self.running_task_ids.push_back(task_id)
         }
         Ok(())
+    }
+
+    pub fn send_message(&mut self, task_id: u64, message: Message) -> Result<(), Error> {
+        let task = self.tasks.get_mut(task_id as usize);
+        if let Some(task) = task {
+            task.send_message(message);
+            self.wake_up(task_id).unwrap();
+            Ok(())
+        } else {
+            Err(make_error!(Code::NoSuchTask))
+        }
+    }
+
+    pub fn main_task(&self) -> &Task {
+        self.tasks
+            .get(self.main_task_id as usize)
+            .expect("tasks do not contain main task")
+    }
+
+    pub fn main_task_mut(&mut self) -> &mut Task {
+        self.tasks
+            .get_mut(self.main_task_id as usize)
+            .expect("tasks do not contain main task")
     }
 }
 
