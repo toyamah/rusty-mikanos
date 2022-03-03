@@ -37,16 +37,20 @@ pub struct Task {
     stack: Vec<u64>,
     context: TaskContext,
     messages: VecDeque<Message>,
+    pub level: PriorityLevel,
+    pub is_running: bool,
 }
 
 impl Task {
     const DEFAULT_STACK_BYTES: usize = 4096;
-    pub fn new(id: u64) -> Task {
+    pub fn new(id: u64, level: PriorityLevel) -> Task {
         Self {
             id,
             stack: vec![],
             context: TaskContext::default_(),
             messages: VecDeque::new(),
+            level,
+            is_running: false,
         }
     }
 
@@ -74,6 +78,16 @@ impl Task {
         self.id
     }
 
+    pub fn set_level(&mut self, level: PriorityLevel) -> &mut Task {
+        self.level = level;
+        self
+    }
+
+    pub fn set_is_running(&mut self, is_running: bool) -> &mut Task {
+        self.is_running = is_running;
+        self
+    }
+
     /// needs to call `wake_up` after this method is invoked
     fn send_message(&mut self, message: Message) {
         self.messages.push_back(message)
@@ -86,10 +100,12 @@ impl Task {
 
 pub struct TaskManager {
     tasks: Vec<Task>,
-    next_id: u64,
     current_task_index: usize,
-    running_task_ids: VecDeque<u64>,
+    next_id: u64,
     main_task_id: u64,
+    running_task_ids: [VecDeque<u64>; PriorityLevel::MAX.to_usize() + 1],
+    current_level: PriorityLevel,
+    level_changed: bool,
 }
 
 impl TaskManager {
@@ -98,19 +114,24 @@ impl TaskManager {
             tasks: vec![],
             next_id: 0,
             current_task_index: 0,
-            running_task_ids: VecDeque::new(),
             main_task_id: 0,
+            running_task_ids: Default::default(),
+            current_level: PriorityLevel::MAX,
+            level_changed: false,
         }
     }
 
-    pub fn initialize_main_task(&mut self) {
+    pub(crate) fn initialize_main_task(&mut self) {
         assert!(self.tasks.is_empty());
-        self.main_task_id = self.new_task().id;
-        self.running_task_ids.push_back(self.main_task_id);
+        let level = self.current_level;
+        let task_id = self.new_task().set_is_running(true).set_level(level).id;
+        self.main_task_id = task_id;
+        self.running_task_ids_mut(level).push_back(task_id);
     }
 
     pub fn new_task(&mut self) -> &mut Task {
-        self.tasks.push(Task::new(self.next_id));
+        self.tasks
+            .push(Task::new(self.next_id, PriorityLevel::default()));
         self.next_id += 1;
         self.tasks.iter_mut().last().unwrap()
     }
@@ -120,63 +141,129 @@ impl TaskManager {
     }
 
     fn _switch_task(&mut self, current_sleep: bool) {
-        let current_task_id = self.running_task_ids.pop_front().unwrap();
-        let current_task = self.tasks.get(current_task_id as usize).unwrap();
+        let current_task_id = self.current_running_task_ids_mut().pop_front().unwrap();
         if !current_sleep {
-            self.running_task_ids.push_back(current_task_id);
+            self.current_running_task_ids_mut()
+                .push_back(current_task_id);
+        }
+        if self.current_running_task_ids_mut().is_empty() {
+            self.level_changed = true;
         }
 
-        let next_task_id = *self.running_task_ids.front().unwrap();
+        if self.level_changed {
+            self.level_changed = false;
+            let next = self
+                .running_task_ids
+                .iter()
+                .enumerate()
+                .find(|(_, queue)| !queue.is_empty());
+            if let Some((index, _)) = next {
+                self.current_level = PriorityLevel::new(index as u8);
+            }
+        }
+
+        let next_task_id = *self.current_running_task_ids_mut().front().unwrap();
+        let current_task = self.tasks.get(current_task_id as usize).unwrap();
         let next_task = self.tasks.get(next_task_id as usize).unwrap();
         unsafe { switch_context(&next_task.context, &current_task.context) }
     }
 
-    pub fn sleep(&mut self, task_id: u64) -> Result<(), Error> {
-        let no_such_task = self.tasks.get(task_id as usize).is_none();
-        if no_such_task {
-            return Err(make_error!(Code::NoSuchTask));
+    fn change_level_running(&mut self, task_id: u64, level: PriorityLevel) {
+        let task_level = self.tasks.get(task_id as usize).unwrap().level;
+        if level == task_level {
+            return;
         }
 
-        let index = self
-            .running_task_ids
-            .iter()
-            .enumerate()
-            .find(|(_, &id)| id == task_id)
-            .map(|(index, _)| index);
+        let running_id = *self
+            .current_running_task_ids_mut()
+            .front()
+            .unwrap_or(&(task_id + 1));
+        if task_id != running_id {
+            // change level of other task
+            self.running_task_ids_mut(task_level)
+                .remove(task_id as usize);
+            self.running_task_ids_mut(level).push_back(task_id);
+            self.tasks[task_id as usize].level = level;
 
-        if let Some(i) = index {
-            if i == 0 {
-                self.switch_task();
-            } else {
-                self.running_task_ids.remove(i);
+            if level > self.current_level {
+                self.level_changed = true;
             }
+            return;
+        }
+
+        // change level myself
+        self.current_running_task_ids_mut().pop_front().unwrap();
+        self.running_task_ids_mut(level).push_front(task_id);
+        self.tasks[task_id as usize].level = level;
+        self.current_level = level;
+        if level < self.current_level {
+            self.level_changed = true;
+        }
+    }
+
+    pub fn sleep(&mut self, task_id: u64) -> Result<(), Error> {
+        let task = self.tasks.get_mut(task_id as usize);
+        if task.is_none() {
+            return Err(make_error!(Code::NoSuchTask));
+        }
+        let task = task.unwrap();
+        if !task.is_running {
+            return Ok(()); // the task has already slept.
+        }
+        task.is_running = false;
+
+        let is_target_task_running = self
+            .current_running_task_ids_mut()
+            .front()
+            .map(|&index| index == task_id)
+            .unwrap_or(false);
+        if is_target_task_running {
+            self._switch_task(true);
+        } else {
+            self.current_running_task_ids_mut().remove(task_id as usize);
         }
         Ok(())
     }
 
-    pub fn wake_up(&mut self, task_id: u64) -> Result<(), Error> {
-        let no_such_task = self.tasks.get(task_id as usize).is_none();
-        if no_such_task {
+    fn current_running_task_ids_mut(&mut self) -> &mut VecDeque<u64> {
+        self.running_task_ids_mut(self.current_level)
+    }
+
+    fn running_task_ids_mut(&mut self, level: PriorityLevel) -> &mut VecDeque<u64> {
+        self.running_task_ids.get_mut(level.to_usize()).unwrap()
+    }
+
+    pub fn wake_up(&mut self, task_id: u64, level: Option<PriorityLevel>) -> Result<(), Error> {
+        let index = task_id as usize;
+        if self.tasks.get(index).is_none() {
             return Err(make_error!(Code::NoSuchTask));
         }
 
-        let is_not_running = !self.running_task_ids.iter().any(|&id| id == task_id);
+        let level = level.unwrap_or(self.tasks[index].level);
 
-        if is_not_running {
-            self.running_task_ids.push_back(task_id)
+        if self.tasks[index].is_running {
+            self.change_level_running(task_id, level);
+            return Ok(());
+        }
+
+        self.tasks[index].set_level(level).set_is_running(true);
+        self.running_task_ids_mut(level).push_back(task_id);
+        if level > self.current_level {
+            self.level_changed = true;
         }
         Ok(())
     }
 
     pub fn send_message(&mut self, task_id: u64, message: Message) -> Result<(), Error> {
-        let task = self.tasks.get_mut(task_id as usize);
-        if let Some(task) = task {
-            task.send_message(message);
-            self.wake_up(task_id).unwrap();
-            Ok(())
-        } else {
-            Err(make_error!(Code::NoSuchTask))
+        let index = task_id as usize;
+        if self.tasks.get(index).is_none() {
+            return Err(make_error!(Code::NoSuchTask));
         }
+
+        self.tasks[index].send_message(message);
+        self.wake_up(task_id, Some(self.tasks[index].level))
+            .unwrap();
+        Ok(())
     }
 
     pub fn main_task(&self) -> &Task {
@@ -256,5 +343,29 @@ impl TaskContext {
             r15: 0,
             fxsave_area: [0; 512],
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd)]
+pub struct PriorityLevel(i8);
+
+impl PriorityLevel {
+    const MAX: PriorityLevel = PriorityLevel(3);
+    const MIN: PriorityLevel = PriorityLevel(0);
+
+    pub fn new(level: u8) -> Self {
+        let level = level as i8;
+        assert!(Self::MIN.0 <= level && level <= Self::MAX.0);
+        Self(level as i8)
+    }
+
+    pub const fn to_usize(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl Default for PriorityLevel {
+    fn default() -> Self {
+        PriorityLevel::new(1)
     }
 }

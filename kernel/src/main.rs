@@ -128,13 +128,14 @@ pub extern "C" fn KernelMainNewStack(
     task::global::initialize();
     let main_task_id = task_manager().main_task_mut().id();
     let task_b_id = task_manager().new_task().init_context(task_b, 45).id();
-    task_manager().wake_up(task_b_id).unwrap();
+    task_manager().wake_up(task_b_id, None).unwrap();
     task_manager()
         .wake_up(
             task_manager()
                 .new_task()
                 .init_context(task_idle, 0xdeadbeef)
                 .id(),
+            None,
         )
         .unwrap();
     task_manager()
@@ -143,6 +144,7 @@ pub extern "C" fn KernelMainNewStack(
                 .new_task()
                 .init_context(task_idle, 0xcafebabe)
                 .id(),
+            None,
         )
         .unwrap();
 
@@ -199,7 +201,7 @@ pub extern "C" fn KernelMainNewStack(
                     printk!("sleep taskB: {}\n", str)
                 } else if keyboard.ascii == 'w' {
                     let str = task_manager()
-                        .wake_up(task_b_id)
+                        .wake_up(task_b_id, None)
                         .map(|_| "Success".to_string())
                         .unwrap_or_else(|e| e.to_string());
                     printk!("wake up taskB: {}\n", str)
