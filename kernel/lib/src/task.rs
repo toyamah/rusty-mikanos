@@ -7,6 +7,7 @@ use alloc::collections::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::mem;
+use core::ops::Not;
 
 pub mod global {
     use crate::task::TaskManager;
@@ -109,6 +110,7 @@ pub struct TaskManager {
 }
 
 impl TaskManager {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> TaskManager {
         Self {
             tasks: vec![],
@@ -152,19 +154,17 @@ impl TaskManager {
 
         if self.level_changed {
             self.level_changed = false;
-            let next = self
-                .running_task_ids
-                .iter()
-                .enumerate()
-                .find(|(_, queue)| !queue.is_empty());
-            if let Some((index, _)) = next {
-                self.current_level = PriorityLevel::new(index as u8);
+            for level in (PriorityLevel::MIN.to_usize()..=PriorityLevel::MAX.to_usize()).rev() {
+                if self.running_task_ids[level].is_empty().not() {
+                    self.current_level = PriorityLevel::new(level as u8);
+                    break;
+                }
             }
         }
 
         let next_task_id = *self.current_running_task_ids_mut().front().unwrap();
-        let current_task = self.tasks.get(current_task_id as usize).unwrap();
         let next_task = self.tasks.get(next_task_id as usize).unwrap();
+        let current_task = self.tasks.get(current_task_id as usize).unwrap();
         unsafe { switch_context(&next_task.context, &current_task.context) }
     }
 
@@ -233,13 +233,13 @@ impl TaskManager {
         self.running_task_ids.get_mut(level.to_usize()).unwrap()
     }
 
-    pub fn wake_up(&mut self, task_id: u64, level: Option<PriorityLevel>) -> Result<(), Error> {
+    pub fn wake_up(&mut self, task_id: u64) -> Result<(), Error> {
         let index = task_id as usize;
         if self.tasks.get(index).is_none() {
             return Err(make_error!(Code::NoSuchTask));
         }
 
-        let level = level.unwrap_or(self.tasks[index].level);
+        let level = self.tasks[index].level;
 
         if self.tasks[index].is_running {
             self.change_level_running(task_id, level);
@@ -261,8 +261,7 @@ impl TaskManager {
         }
 
         self.tasks[index].send_message(message);
-        self.wake_up(task_id, Some(self.tasks[index].level))
-            .unwrap();
+        self.wake_up(task_id).unwrap();
         Ok(())
     }
 
