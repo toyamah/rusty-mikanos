@@ -11,11 +11,11 @@ use core::mem;
 use core::ops::Not;
 
 pub mod global {
+    use crate::asm::get_cr3;
     use crate::task::TaskManager;
     use crate::timer::global::timer_manager;
     use crate::timer::{Timer, TASK_TIMER_PERIOD, TASK_TIMER_VALUE};
     use core::arch::asm;
-    use crate::asm::get_cr3;
 
     static mut TASK_MANAGER: Option<TaskManager> = None;
     pub fn task_manager() -> &'static mut TaskManager {
@@ -57,7 +57,12 @@ impl Task {
         }
     }
 
-    pub fn init_context(&mut self, task_func: fn(u64, usize) -> (), data: u64, get_cr3: fn() -> u64) -> &mut Task {
+    pub fn init_context(
+        &mut self,
+        task_func: fn(u64, usize) -> (),
+        data: u64,
+        get_cr3: fn() -> u64,
+    ) -> &mut Task {
         let stack_size = Task::DEFAULT_STACK_BYTES / mem::size_of::<u64>();
         self.stack.resize(stack_size, 0);
         let stack_end = self.stack.last().unwrap() as *const _ as u64;
