@@ -12,6 +12,7 @@ use alloc::string::ToString;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
+use lib::asm::get_cr3;
 use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{
     fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
@@ -127,7 +128,10 @@ pub extern "C" fn KernelMainNewStack(
 
     task::global::initialize();
     let main_task_id = task_manager().main_task_mut().id();
-    let task_b_id = task_manager().new_task().init_context(task_b, 45).id();
+    let task_b_id = task_manager()
+        .new_task()
+        .init_context(task_b, 45, get_cr3)
+        .id();
     task_manager().wake_up(task_b_id).unwrap();
 
     usb::global::initialize();

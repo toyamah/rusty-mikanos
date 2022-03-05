@@ -15,6 +15,7 @@ pub mod global {
     use crate::timer::global::timer_manager;
     use crate::timer::{Timer, TASK_TIMER_PERIOD, TASK_TIMER_VALUE};
     use core::arch::asm;
+    use crate::asm::get_cr3;
 
     static mut TASK_MANAGER: Option<TaskManager> = None;
     pub fn task_manager() -> &'static mut TaskManager {
@@ -23,7 +24,7 @@ pub mod global {
 
     pub fn initialize() {
         unsafe { TASK_MANAGER = Some(TaskManager::new()) };
-        task_manager().initialize();
+        task_manager().initialize(get_cr3);
 
         unsafe { asm!("cli") };
         timer_manager().add_timer(Timer::new(
@@ -56,7 +57,7 @@ impl Task {
         }
     }
 
-    pub fn init_context(&mut self, task_func: fn(u64, usize) -> (), data: u64) -> &mut Task {
+    pub fn init_context(&mut self, task_func: fn(u64, usize) -> (), data: u64, get_cr3: fn() -> u64) -> &mut Task {
         let stack_size = Task::DEFAULT_STACK_BYTES / mem::size_of::<u64>();
         self.stack.resize(stack_size, 0);
         let stack_end = self.stack.last().unwrap() as *const _ as u64;
@@ -130,7 +131,7 @@ impl TaskManager {
         }
     }
 
-    pub(crate) fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self, get_cr3: fn() -> u64) {
         assert!(self.tasks.is_empty());
         let level = self.current_level;
         let main_task_id = self.new_task().set_is_running(true).set_level(level).id;
@@ -139,7 +140,7 @@ impl TaskManager {
 
         let idle_task_id = self
             .new_task()
-            .init_context(Task::idle, 0)
+            .init_context(Task::idle, 0, get_cr3)
             .set_is_running(true)
             .set_level(PriorityLevel::IDLE)
             .id;
