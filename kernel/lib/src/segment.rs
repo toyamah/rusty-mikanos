@@ -1,4 +1,3 @@
-use crate::asm::load_gdt;
 use crate::x86_descriptor::SegmentDescriptorType;
 use bit_field::BitField;
 
@@ -7,8 +6,8 @@ pub const KERNEL_SS: u16 = 2 << 3;
 const KERNEL_DS: u16 = 0;
 
 pub mod global {
-    use super::{load_gdt, SegmentDescriptor, KERNEL_CS, KERNEL_DS, KERNEL_SS};
-    use crate::asm::{set_csss, set_ds_all};
+    use super::{SegmentDescriptor, KERNEL_CS, KERNEL_DS, KERNEL_SS};
+    use crate::asm::global::{load_gdt, set_csss, set_ds_all};
     use crate::x86_descriptor::SegmentDescriptorType;
 
     static mut GDT: [SegmentDescriptor; 3] = [SegmentDescriptor::new(); 3];

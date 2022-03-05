@@ -1,4 +1,3 @@
-use crate::asm::{get_cr3, switch_context};
 use crate::error::{Code, Error};
 use crate::make_error;
 use crate::message::Message;
@@ -11,7 +10,7 @@ use core::mem;
 use core::ops::Not;
 
 pub mod global {
-    use crate::asm::get_cr3;
+    use crate::asm::global::{get_cr3, switch_context};
     use crate::task::TaskManager;
     use crate::timer::global::timer_manager;
     use crate::timer::{Timer, TASK_TIMER_PERIOD, TASK_TIMER_VALUE};
@@ -23,7 +22,7 @@ pub mod global {
     }
 
     pub fn initialize() {
-        unsafe { TASK_MANAGER = Some(TaskManager::new()) };
+        unsafe { TASK_MANAGER = Some(TaskManager::new(switch_context)) };
         task_manager().initialize(get_cr3);
 
         unsafe { asm!("cli") };
@@ -46,7 +45,7 @@ pub struct Task {
 
 impl Task {
     const DEFAULT_STACK_BYTES: usize = 4096;
-    pub fn new(id: u64, level: PriorityLevel) -> Task {
+    fn new(id: u64, level: PriorityLevel) -> Task {
         Self {
             id,
             stack: vec![],
@@ -120,11 +119,14 @@ pub struct TaskManager {
     running_task_ids: [VecDeque<u64>; PriorityLevel::MAX.to_usize() + 1],
     current_level: PriorityLevel,
     level_changed: bool,
+    switch_context: unsafe fn(next_ctx: &TaskContext, current_ctx: &TaskContext),
 }
 
 impl TaskManager {
     #[allow(clippy::new_without_default)]
-    pub fn new() -> TaskManager {
+    pub fn new(
+        switch_context: unsafe fn(next_ctx: &TaskContext, current_ctx: &TaskContext),
+    ) -> TaskManager {
         Self {
             tasks: vec![],
             next_id: 0,
@@ -133,6 +135,7 @@ impl TaskManager {
             running_task_ids: Default::default(),
             current_level: PriorityLevel::MAX,
             level_changed: false,
+            switch_context,
         }
     }
 
@@ -199,7 +202,7 @@ impl TaskManager {
         let next_task_id = *self.current_running_task_ids_mut().front().unwrap();
         let next_task = self.tasks.get(next_task_id as usize).unwrap();
         let current_task = self.tasks.get(current_task_id as usize).unwrap();
-        unsafe { switch_context(&next_task.context, &current_task.context) }
+        unsafe { (self.switch_context)(&next_task.context, &current_task.context) }
     }
 
     pub fn sleep(&mut self, task_id: u64) -> Result<(), Error> {
