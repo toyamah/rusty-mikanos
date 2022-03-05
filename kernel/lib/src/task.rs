@@ -216,6 +216,7 @@ impl TaskManager {
         }
         task.is_running = false;
 
+        let level = task.level;
         let is_target_task_running = self
             .current_running_task_ids_mut()
             .front()
@@ -224,7 +225,7 @@ impl TaskManager {
         if is_target_task_running {
             self._switch_task(true);
         } else {
-            self.current_running_task_ids_mut().remove(task_id as usize);
+            erase_task_id(self.running_task_ids_mut(level), task_id);
         }
         Ok(())
     }
@@ -281,8 +282,7 @@ impl TaskManager {
             .unwrap_or(&(task_id + 1));
         if task_id != running_id {
             // change level of other task
-            self.running_task_ids_mut(task_level)
-                .remove(task_id as usize);
+            erase_task_id(self.running_task_ids_mut(task_level), task_id);
             self.running_task_ids_mut(level).push_back(task_id);
             self.tasks[task_id as usize].level = level;
 
@@ -301,6 +301,15 @@ impl TaskManager {
             self.level_changed = true;
         }
     }
+}
+
+fn erase_task_id(queue: &mut VecDeque<u64>, target: u64) {
+    let (index, _) = queue
+        .iter()
+        .enumerate()
+        .find(|(_, &id)| id == target)
+        .expect("no such task to be removed");
+    queue.remove(index).unwrap();
 }
 
 #[derive(Debug)]
