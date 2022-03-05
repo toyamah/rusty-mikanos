@@ -403,3 +403,145 @@ impl Default for PriorityLevel {
         PriorityLevel::new(1)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const IDLE_TASK_ID: u64 = 1;
+
+    #[test]
+    fn task_manager_sleep_running_task_id() {
+        let mut tm = TaskManager::new(|_, _| {});
+        tm.initialize(|| 0);
+
+        let t1_id = tm.new_task().set_level(PriorityLevel::MAX).id;
+        let t2_id = tm.new_task().set_level(PriorityLevel::new(1)).id;
+        let t3_id = tm.new_task().set_level(PriorityLevel::new(1)).id;
+        tm.wake_up(t1_id).unwrap();
+        tm.wake_up(t2_id).unwrap();
+        tm.wake_up(t3_id).unwrap();
+
+        // when the current running id is given,
+        tm.sleep(tm.main_task_id).unwrap();
+
+        // then current level should not be changed
+        assert_eq!(tm.current_level, PriorityLevel::MAX);
+
+        // the id should be removed from running_task_ids
+        assert_eq!(
+            tm.running_task_ids,
+            [
+                VecDeque::from([IDLE_TASK_ID]),
+                VecDeque::from([t2_id, t3_id]),
+                VecDeque::from([]),
+                VecDeque::from([t1_id]),
+            ]
+        );
+
+        // the task should be changed to sleep
+        assert_eq!(tm.tasks[tm.main_task_id as usize].is_running, false);
+    }
+
+    #[test]
+    fn task_manager_sleep_last_task_at_running_level() {
+        let mut tm = TaskManager::new(|_, _| {});
+        tm.initialize(|| 0);
+
+        let t1_id = tm.new_task().set_level(PriorityLevel::new(1)).id;
+        let t2_id = tm.new_task().set_level(PriorityLevel::new(1)).id;
+        tm.wake_up(t1_id).unwrap();
+        tm.wake_up(t2_id).unwrap();
+
+        // when the current running id is given,
+        tm.sleep(tm.main_task_id).unwrap();
+
+        // then current level should be changed to the next highest level
+        assert_eq!(tm.current_level, PriorityLevel::new(1));
+
+        // the id should be removed from running_task_ids
+        assert_eq!(
+            tm.running_task_ids,
+            [
+                VecDeque::from([IDLE_TASK_ID]),
+                VecDeque::from([t1_id, t2_id]),
+                VecDeque::from([]),
+                VecDeque::from([]),
+            ]
+        );
+
+        // the task should be changed to sleep
+        assert_eq!(tm.tasks[tm.main_task_id as usize].is_running, false);
+    }
+
+    #[test]
+    fn task_manager_sleep_not_running_but_same_level() {
+        let mut tm = TaskManager::new(|_, _| {});
+        tm.initialize(|| 0);
+
+        let t1_id = tm.new_task().set_level(PriorityLevel::MAX).id;
+        let t2_id = tm.new_task().set_level(PriorityLevel::new(1)).id;
+        let t3_id = tm.new_task().set_level(PriorityLevel::new(1)).id;
+        tm.wake_up(t1_id).unwrap();
+        tm.wake_up(t2_id).unwrap();
+        tm.wake_up(t3_id).unwrap();
+
+        tm.sleep(t1_id).unwrap();
+
+        // current level should not be changed
+        assert_eq!(tm.current_level, PriorityLevel::MAX);
+
+        // the id should be removed from running_task_ids
+        assert_eq!(
+            tm.running_task_ids,
+            [
+                VecDeque::from([IDLE_TASK_ID]),
+                VecDeque::from([t2_id, t3_id]),
+                VecDeque::from([]),
+                VecDeque::from([tm.main_task_id]),
+            ]
+        );
+
+        // the running task should still be running
+        assert_eq!(tm.tasks[tm.main_task_id as usize].is_running, true);
+
+        // the specified task should be sleep
+        assert_eq!(tm.tasks[t1_id as usize].is_running, false);
+    }
+
+    #[test]
+    fn task_manager_sleep_level_different_from_current_level() {
+        let mut tm = TaskManager::new(|_, _| {});
+        tm.initialize(|| 0);
+
+        let t1_id = tm.new_task().set_level(PriorityLevel::MAX).id;
+        let t2_id = tm.new_task().set_level(PriorityLevel::new(1)).id;
+        let t3_id = tm.new_task().set_level(PriorityLevel::new(1)).id;
+        tm.wake_up(t1_id).unwrap();
+        tm.wake_up(t2_id).unwrap();
+        tm.wake_up(t3_id).unwrap();
+
+        // when an id of a task whose level is not the same as current_running_level,
+        tm.sleep(t1_id).unwrap();
+
+        // then current level should not be changed
+        assert_eq!(tm.current_level, PriorityLevel::MAX);
+
+        // the id should be removed from running_task_ids
+        assert_eq!(
+            tm.running_task_ids,
+            [
+                VecDeque::from([IDLE_TASK_ID]),
+                VecDeque::from([t2_id, t3_id]),
+                VecDeque::from([]),
+                VecDeque::from([tm.main_task_id]),
+            ]
+        );
+
+        // the running task should still be running
+        assert_eq!(tm.tasks[tm.main_task_id as usize].is_running, true);
+
+        // the task specified by the arg should be sleep
+        assert_eq!(tm.tasks[t1_id as usize].is_running, false);
+    }
+}
