@@ -6,10 +6,12 @@ use crate::segment::{KERNEL_CS, KERNEL_SS};
 use alloc::collections::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::arch::asm;
 use core::mem;
 use core::ops::Not;
 
 pub mod global {
+    use crate::asm::get_cr3;
     use crate::task::TaskManager;
     use crate::timer::global::timer_manager;
     use crate::timer::{Timer, TASK_TIMER_PERIOD, TASK_TIMER_VALUE};
@@ -22,7 +24,7 @@ pub mod global {
 
     pub fn initialize() {
         unsafe { TASK_MANAGER = Some(TaskManager::new()) };
-        task_manager().initialize_main_task();
+        task_manager().initialize(get_cr3);
 
         unsafe { asm!("cli") };
         timer_manager().add_timer(Timer::new(
@@ -55,7 +57,12 @@ impl Task {
         }
     }
 
-    pub fn init_context(&mut self, task_func: fn(u64, usize) -> (), data: u64) -> &mut Task {
+    pub fn init_context(
+        &mut self,
+        task_func: fn(u64, usize) -> (),
+        data: u64,
+        get_cr3: fn() -> u64,
+    ) -> &mut Task {
         let stack_size = Task::DEFAULT_STACK_BYTES / mem::size_of::<u64>();
         self.stack.resize(stack_size, 0);
         let stack_end = self.stack.last().unwrap() as *const _ as u64;
@@ -97,6 +104,12 @@ impl Task {
     pub fn receive_message(&mut self) -> Option<Message> {
         self.messages.pop_front()
     }
+
+    fn idle(_task_id: u64, _data: usize) {
+        loop {
+            unsafe { asm!("hlt") };
+        }
+    }
 }
 
 pub struct TaskManager {
@@ -123,12 +136,21 @@ impl TaskManager {
         }
     }
 
-    pub(crate) fn initialize_main_task(&mut self) {
+    pub(crate) fn initialize(&mut self, get_cr3: fn() -> u64) {
         assert!(self.tasks.is_empty());
         let level = self.current_level;
-        let task_id = self.new_task().set_is_running(true).set_level(level).id;
-        self.main_task_id = task_id;
-        self.running_task_ids_mut(level).push_back(task_id);
+        let main_task_id = self.new_task().set_is_running(true).set_level(level).id;
+        self.main_task_id = main_task_id;
+        self.running_task_ids_mut(level).push_back(main_task_id);
+
+        let idle_task_id = self
+            .new_task()
+            .init_context(Task::idle, 0, get_cr3)
+            .set_is_running(true)
+            .set_level(PriorityLevel::IDLE)
+            .id;
+        self.running_task_ids_mut(PriorityLevel::IDLE)
+            .push_back(idle_task_id);
     }
 
     pub fn new_task(&mut self) -> &mut Task {
@@ -351,6 +373,7 @@ pub struct PriorityLevel(i8);
 impl PriorityLevel {
     const MAX: PriorityLevel = PriorityLevel(3);
     const MIN: PriorityLevel = PriorityLevel(0);
+    const IDLE: PriorityLevel = Self::MIN;
 
     pub fn new(level: u8) -> Self {
         let level = level as i8;
