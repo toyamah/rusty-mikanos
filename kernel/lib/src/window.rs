@@ -9,7 +9,6 @@ use shared::{FrameBufferConfig, PixelFormat};
 pub struct Window {
     width: usize,
     height: usize,
-    //TODO: try to define without RefCel
     data: Vec<Vec<PixelColor>>,
     shadow_buffer: FrameBuffer,
     transparent_color: Option<PixelColor>,
