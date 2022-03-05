@@ -129,22 +129,6 @@ pub extern "C" fn KernelMainNewStack(
     let main_task_id = task_manager().main_task_mut().id();
     let task_b_id = task_manager().new_task().init_context(task_b, 45).id();
     task_manager().wake_up(task_b_id).unwrap();
-    task_manager()
-        .wake_up(
-            task_manager()
-                .new_task()
-                .init_context(task_idle, 0xdeadbeef)
-                .id(),
-        )
-        .unwrap();
-    task_manager()
-        .wake_up(
-            task_manager()
-                .new_task()
-                .init_context(task_idle, 0xcafebabe)
-                .id(),
-        )
-        .unwrap();
 
     usb::global::initialize();
     usb::register_keyboard_observer(keyboard_observer);
@@ -357,13 +341,6 @@ fn task_b(task_id: u64, data: usize) {
             .writer()
             .write_string(24, 28, format!("{:010}", i).as_str(), &COLOR_WHITE);
         layer_manager().draw_layer_of(task_b_window_layer_id(), screen_frame_buffer());
-    }
-}
-
-fn task_idle(task_id: u64, data: usize) {
-    printk!("TaskIdle: task_id = {}, data = {}\n", task_id, data);
-    loop {
-        unsafe { asm!("hlt") };
     }
 }
 

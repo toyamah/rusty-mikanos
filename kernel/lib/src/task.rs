@@ -6,6 +6,7 @@ use crate::segment::{KERNEL_CS, KERNEL_SS};
 use alloc::collections::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::arch::asm;
 use core::mem;
 use core::ops::Not;
 
@@ -22,7 +23,7 @@ pub mod global {
 
     pub fn initialize() {
         unsafe { TASK_MANAGER = Some(TaskManager::new()) };
-        task_manager().initialize_main_task();
+        task_manager().initialize();
 
         unsafe { asm!("cli") };
         timer_manager().add_timer(Timer::new(
@@ -97,6 +98,12 @@ impl Task {
     pub fn receive_message(&mut self) -> Option<Message> {
         self.messages.pop_front()
     }
+
+    fn idle(_task_id: u64, _data: usize) {
+        loop {
+            unsafe { asm!("hlt") };
+        }
+    }
 }
 
 pub struct TaskManager {
@@ -123,12 +130,21 @@ impl TaskManager {
         }
     }
 
-    pub(crate) fn initialize_main_task(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         assert!(self.tasks.is_empty());
         let level = self.current_level;
-        let task_id = self.new_task().set_is_running(true).set_level(level).id;
-        self.main_task_id = task_id;
-        self.running_task_ids_mut(level).push_back(task_id);
+        let main_task_id = self.new_task().set_is_running(true).set_level(level).id;
+        self.main_task_id = main_task_id;
+        self.running_task_ids_mut(level).push_back(main_task_id);
+
+        let idle_task_id = self
+            .new_task()
+            .init_context(Task::idle, 0)
+            .set_is_running(true)
+            .set_level(PriorityLevel::IDLE)
+            .id;
+        self.running_task_ids_mut(PriorityLevel::IDLE)
+            .push_back(idle_task_id);
     }
 
     pub fn new_task(&mut self) -> &mut Task {
@@ -351,6 +367,7 @@ pub struct PriorityLevel(i8);
 impl PriorityLevel {
     const MAX: PriorityLevel = PriorityLevel(3);
     const MIN: PriorityLevel = PriorityLevel(0);
+    const IDLE: PriorityLevel = Self::MIN;
 
     pub fn new(level: u8) -> Self {
         let level = level as i8;

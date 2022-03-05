@@ -201,7 +201,7 @@ mod tests {
         manager.add_timer(Timer::new(2, 2));
         manager.add_timer(Timer::new(1, 11));
         let mut task_manager = TaskManager::new();
-        task_manager.initialize_main_task();
+        task_manager.initialize();
 
         manager.tick(&mut task_manager);
         assert_eq!(
