@@ -1,48 +1,54 @@
-use crate::asm::load_interrupt_descriptor_table;
-use crate::segment::KERNEL_CS;
 use crate::x86_descriptor::SystemDescriptorType;
 use bit_field::BitField;
 
-// IDT can have 256(0-255) descriptors
-static mut IDT: [InterruptDescriptor; 256] = [InterruptDescriptor {
-    offset_low: 0,
-    segment_selector: 0,
-    attr: InterruptDescriptorAttribute(0),
-    offset_middle: 0,
-    offset_high: 0,
-    reserved: 0,
-}; 256];
-/// idt stands for Interrupt Descriptor Table which maps interruption vector numbers to interrupt handlers.
-/// https://en.wikipedia.org/wiki/Interrupt_descriptor_table
-pub fn idt() -> &'static mut [InterruptDescriptor; 256] {
-    unsafe { &mut IDT }
-}
+pub mod global {
+    use super::{InterruptDescriptor, InterruptDescriptorAttribute, InterruptVectorNumber};
+    use crate::asm::global::load_interrupt_descriptor_table;
+    use crate::segment::KERNEL_CS;
+    use crate::x86_descriptor::SystemDescriptorType;
 
-pub fn notify_end_of_interrupt() {
-    //  Writing to this register means the CPU can know an interrupt routine has been completed.
-    let end_of_interrupt_register = 0xfee000b0 as *mut u32;
-    unsafe {
-        // Use write_volatile to ignore compiler optimization.
-        end_of_interrupt_register.write_volatile(0);
+    // IDT can have 256(0-255) descriptors
+    static mut IDT: [InterruptDescriptor; 256] = [InterruptDescriptor {
+        offset_low: 0,
+        segment_selector: 0,
+        attr: InterruptDescriptorAttribute(0),
+        offset_middle: 0,
+        offset_high: 0,
+        reserved: 0,
+    }; 256];
+
+    /// idt stands for Interrupt Descriptor Table which maps interruption vector numbers to interrupt handlers.
+    /// https://en.wikipedia.org/wiki/Interrupt_descriptor_table
+    pub fn idt() -> &'static mut [InterruptDescriptor; 256] {
+        unsafe { &mut IDT }
     }
-}
 
-pub fn initialize_interrupt(xhci_offset: usize, timer_offset: usize) {
-    let idt = idt();
-    idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(
-        InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
-        xhci_offset as u64,
-        KERNEL_CS,
-    );
-    idt[InterruptVectorNumber::LAPICTimer as usize].set_idt_entry(
-        InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
-        timer_offset as u64,
-        KERNEL_CS,
-    );
-    load_interrupt_descriptor_table(
-        core::mem::size_of_val(idt) as u16,
-        &idt[0] as *const InterruptDescriptor as u64,
-    );
+    pub fn notify_end_of_interrupt() {
+        //  Writing to this register means the CPU can know an interrupt routine has been completed.
+        let end_of_interrupt_register = 0xfee000b0 as *mut u32;
+        unsafe {
+            // Use write_volatile to ignore compiler optimization.
+            end_of_interrupt_register.write_volatile(0);
+        }
+    }
+
+    pub fn initialize_interrupt(xhci_offset: usize, timer_offset: usize) {
+        let idt = idt();
+        idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(
+            InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
+            xhci_offset as u64,
+            KERNEL_CS,
+        );
+        idt[InterruptVectorNumber::LAPICTimer as usize].set_idt_entry(
+            InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
+            timer_offset as u64,
+            KERNEL_CS,
+        );
+        load_interrupt_descriptor_table(
+            core::mem::size_of_val(idt) as u16,
+            &idt[0] as *const InterruptDescriptor as u64,
+        );
+    }
 }
 
 #[repr(C)]

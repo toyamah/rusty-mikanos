@@ -32,7 +32,7 @@ pub mod global {
     use super::{
         PDPTable, PM4Table, PageDirectory, PAGE_DIRECTORY_COUNT, PAGE_SIZE_1G, PAGE_SIZE_2M,
     };
-    use crate::asm::set_cr3;
+    use crate::asm::global::set_cr3;
 
     static mut PML4_TABLE: PM4Table = PM4Table([0; 512]);
     static mut PDP_TABLE: PDPTable = PDPTable([0; 512]);

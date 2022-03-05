@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::asm::{io_in_32, io_out_32};
+use crate::asm::global::{io_in_32, io_out_32};
 use crate::error::{Code, Error};
 use crate::make_error;
 use bit_field::BitField;

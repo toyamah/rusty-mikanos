@@ -4,7 +4,7 @@ use core::{mem, slice};
 
 pub mod global {
     use crate::acpi::{DescriptionHeader, Fadt, Rsdp, Xsdt};
-    use crate::asm::io_in_32;
+    use crate::asm::global::io_in_32;
     use log::info;
 
     const PM_TIMER_FREQ: u32 = 3579545;

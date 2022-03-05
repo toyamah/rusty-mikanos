@@ -14,7 +14,8 @@ pub const TASK_TIMER_VALUE: i32 = i32::MIN;
 pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
     use crate::acpi;
-    use crate::interrupt::{notify_end_of_interrupt, InterruptVectorNumber};
+    use crate::interrupt::global::notify_end_of_interrupt;
+    use crate::interrupt::InterruptVectorNumber;
     use crate::task::TaskManager;
 
     static mut TIMER_MANAGER: Option<TimerManager> = None;
@@ -190,6 +191,7 @@ impl TimerManager {
 mod tests {
     use super::*;
     use crate::message::TimerMessage;
+    use crate::task::TaskContext;
     use alloc::vec;
     use alloc::vec::Vec;
 
@@ -200,7 +202,7 @@ mod tests {
         manager.add_timer(Timer::new(1, 1));
         manager.add_timer(Timer::new(2, 2));
         manager.add_timer(Timer::new(1, 11));
-        let mut task_manager = TaskManager::new();
+        let mut task_manager = TaskManager::new(dummy_context);
         task_manager.initialize(|| 0);
 
         manager.tick(&mut task_manager);
@@ -257,4 +259,6 @@ mod tests {
         }
         received
     }
+
+    unsafe fn dummy_context(_a: &TaskContext, _b: &TaskContext) {}
 }

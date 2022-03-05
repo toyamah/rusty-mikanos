@@ -12,12 +12,13 @@ use alloc::string::ToString;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
-use lib::asm::get_cr3;
+use lib::asm::global::get_cr3;
 use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{
     fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
 };
-use lib::interrupt::{initialize_interrupt, notify_end_of_interrupt, InterruptFrame};
+use lib::interrupt::global::{initialize_interrupt, notify_end_of_interrupt};
+use lib::interrupt::InterruptFrame;
 use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::message::{Arg, Message, MessageType};
 use lib::mouse::global::mouse;
