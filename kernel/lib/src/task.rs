@@ -38,8 +38,8 @@ pub struct Task {
     stack: Vec<u64>,
     context: TaskContext,
     messages: VecDeque<Message>,
-    pub level: PriorityLevel,
-    pub is_running: bool,
+    level: PriorityLevel,
+    is_running: bool,
 }
 
 impl Task {
@@ -79,12 +79,12 @@ impl Task {
         self.id
     }
 
-    pub fn set_level(&mut self, level: PriorityLevel) -> &mut Task {
+    fn set_level(&mut self, level: PriorityLevel) -> &mut Task {
         self.level = level;
         self
     }
 
-    pub fn set_is_running(&mut self, is_running: bool) -> &mut Task {
+    fn set_is_running(&mut self, is_running: bool) -> &mut Task {
         self.is_running = is_running;
         self
     }
