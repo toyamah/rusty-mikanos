@@ -138,6 +138,18 @@ impl TaskManager {
         self.tasks.iter_mut().last().unwrap()
     }
 
+    pub fn main_task(&self) -> &Task {
+        self.tasks
+            .get(self.main_task_id as usize)
+            .expect("tasks do not contain main task")
+    }
+
+    pub fn main_task_mut(&mut self) -> &mut Task {
+        self.tasks
+            .get_mut(self.main_task_id as usize)
+            .expect("tasks do not contain main task")
+    }
+
     pub fn switch_task(&mut self) {
         self._switch_task(false);
     }
@@ -168,39 +180,6 @@ impl TaskManager {
         unsafe { switch_context(&next_task.context, &current_task.context) }
     }
 
-    fn change_level_running(&mut self, task_id: u64, level: PriorityLevel) {
-        let task_level = self.tasks.get(task_id as usize).unwrap().level;
-        if level == task_level {
-            return;
-        }
-
-        let running_id = *self
-            .current_running_task_ids_mut()
-            .front()
-            .unwrap_or(&(task_id + 1));
-        if task_id != running_id {
-            // change level of other task
-            self.running_task_ids_mut(task_level)
-                .remove(task_id as usize);
-            self.running_task_ids_mut(level).push_back(task_id);
-            self.tasks[task_id as usize].level = level;
-
-            if level > self.current_level {
-                self.level_changed = true;
-            }
-            return;
-        }
-
-        // change level myself
-        self.current_running_task_ids_mut().pop_front().unwrap();
-        self.running_task_ids_mut(level).push_front(task_id);
-        self.tasks[task_id as usize].level = level;
-        self.current_level = level;
-        if level < self.current_level {
-            self.level_changed = true;
-        }
-    }
-
     pub fn sleep(&mut self, task_id: u64) -> Result<(), Error> {
         let task = self.tasks.get_mut(task_id as usize);
         if task.is_none() {
@@ -223,14 +202,6 @@ impl TaskManager {
             self.current_running_task_ids_mut().remove(task_id as usize);
         }
         Ok(())
-    }
-
-    fn current_running_task_ids_mut(&mut self) -> &mut VecDeque<u64> {
-        self.running_task_ids_mut(self.current_level)
-    }
-
-    fn running_task_ids_mut(&mut self, level: PriorityLevel) -> &mut VecDeque<u64> {
-        self.running_task_ids.get_mut(level.to_usize()).unwrap()
     }
 
     pub fn wake_up(&mut self, task_id: u64) -> Result<(), Error> {
@@ -265,16 +236,45 @@ impl TaskManager {
         Ok(())
     }
 
-    pub fn main_task(&self) -> &Task {
-        self.tasks
-            .get(self.main_task_id as usize)
-            .expect("tasks do not contain main task")
+    fn current_running_task_ids_mut(&mut self) -> &mut VecDeque<u64> {
+        self.running_task_ids_mut(self.current_level)
     }
 
-    pub fn main_task_mut(&mut self) -> &mut Task {
-        self.tasks
-            .get_mut(self.main_task_id as usize)
-            .expect("tasks do not contain main task")
+    fn running_task_ids_mut(&mut self, level: PriorityLevel) -> &mut VecDeque<u64> {
+        self.running_task_ids.get_mut(level.to_usize()).unwrap()
+    }
+
+    fn change_level_running(&mut self, task_id: u64, level: PriorityLevel) {
+        let task_level = self.tasks.get(task_id as usize).unwrap().level;
+        if level == task_level {
+            return;
+        }
+
+        let running_id = *self
+            .current_running_task_ids_mut()
+            .front()
+            .unwrap_or(&(task_id + 1));
+        if task_id != running_id {
+            // change level of other task
+            self.running_task_ids_mut(task_level)
+                .remove(task_id as usize);
+            self.running_task_ids_mut(level).push_back(task_id);
+            self.tasks[task_id as usize].level = level;
+
+            if level > self.current_level {
+                self.level_changed = true;
+            }
+            return;
+        }
+
+        // change level myself
+        self.current_running_task_ids_mut().pop_front().unwrap();
+        self.running_task_ids_mut(level).push_front(task_id);
+        self.tasks[task_id as usize].level = level;
+        self.current_level = level;
+        if level < self.current_level {
+            self.level_changed = true;
+        }
     }
 }
 
