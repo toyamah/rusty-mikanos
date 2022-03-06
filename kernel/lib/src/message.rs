@@ -1,4 +1,6 @@
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+use crate::graphics::Vector2D;
+
+#[derive(Debug, PartialEq)]
 pub struct Message {
     pub m_type: MessageType,
 }
@@ -7,9 +9,19 @@ impl Message {
     pub const fn new(m_type: MessageType) -> Message {
         Self { m_type }
     }
+
+    pub fn is_layer_finished(&self) -> bool {
+        match self.m_type {
+            MessageType::InterruptXhci => false,
+            MessageType::TimerTimeout { .. } => false,
+            MessageType::KeyPush { .. } => false,
+            MessageType::Layer(_) => false,
+            MessageType::LayerFinish => true,
+        }
+    }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum MessageType {
     InterruptXhci,
     TimerTimeout {
@@ -21,4 +33,20 @@ pub enum MessageType {
         keycode: u8,
         ascii: char,
     },
+    Layer(LayerMessage),
+    LayerFinish,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct LayerMessage {
+    pub layer_id: u32,
+    pub op: LayerOperation,
+    pub src_task_id: u64,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum LayerOperation {
+    Move { pos: Vector2D<i32> },
+    MoveRelative { pos: Vector2D<i32> },
+    Draw,
 }

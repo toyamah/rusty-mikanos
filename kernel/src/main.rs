@@ -20,7 +20,7 @@ use lib::graphics::{
 use lib::interrupt::global::{initialize_interrupt, notify_end_of_interrupt};
 use lib::interrupt::InterruptFrame;
 use lib::layer::global::{layer_manager, screen_frame_buffer};
-use lib::message::{Message, MessageType};
+use lib::message::{LayerMessage, LayerOperation, Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
 use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
@@ -194,6 +194,15 @@ pub extern "C" fn KernelMainNewStack(
                     printk!("wake up taskB: {}\n", str)
                 }
             }
+            MessageType::Layer(l_msg) => {
+                layer_manager().process_message(&l_msg, screen_frame_buffer());
+                unsafe { asm!("cli") };
+                task_manager()
+                    .send_message(l_msg.src_task_id, Message::new(MessageType::LayerFinish))
+                    .unwrap();
+                unsafe { asm!("sti") };
+            }
+            MessageType::LayerFinish => {}
         }
     }
 }
@@ -335,6 +344,10 @@ fn initialize_task_b_window() {
 
 fn task_b(task_id: u64, data: usize) {
     printk!("TaskB: task_id ={}, data={}\n", task_id, data);
+
+    unsafe { asm!("cli") };
+    let current_task_id = task_manager().current_task().id();
+    unsafe { asm!("sti") };
     for i in 0.. {
         fill_rectangle(
             task_b_window().writer(),
@@ -346,6 +359,37 @@ fn task_b(task_id: u64, data: usize) {
             .writer()
             .write_string(24, 28, format!("{:010}", i).as_str(), &COLOR_WHITE);
         layer_manager().draw_layer_of(task_b_window_layer_id(), screen_frame_buffer());
+
+        let message = Message::new(MessageType::Layer(LayerMessage {
+            layer_id: task_b_window_layer_id(),
+            op: LayerOperation::Draw,
+            src_task_id: current_task_id,
+        }));
+        unsafe { asm!("cli") };
+        task_manager()
+            .send_message(task_manager().main_task().id(), message)
+            .unwrap();
+        unsafe { asm!("sti") };
+
+        loop {
+            unsafe { asm!("cli") };
+            let message = task_manager()
+                .get_task_mut(current_task_id)
+                .unwrap()
+                .receive_message();
+            match message {
+                None => {
+                    task_manager().sleep(current_task_id).unwrap();
+                    unsafe { asm!("sti") };
+                    continue;
+                }
+                Some(message) => {
+                    if message.is_layer_finished() {
+                        break;
+                    }
+                }
+            }
+        }
     }
 }
 

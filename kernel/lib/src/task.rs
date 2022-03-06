@@ -163,6 +163,19 @@ impl TaskManager {
         self.tasks.iter_mut().last().unwrap()
     }
 
+    pub fn get_task_mut(&mut self, task_id: u64) -> Option<&mut Task> {
+        self.tasks.get_mut(task_id as usize)
+    }
+
+    pub fn current_task(&mut self) -> &Task {
+        let task_id = self
+            .current_running_task_ids_mut()
+            .front()
+            .expect("no such task id");
+        let task_id = *task_id;
+        self.tasks.get(task_id as usize).expect("no such task")
+    }
+
     pub fn main_task(&self) -> &Task {
         self.tasks
             .get(self.main_task_id as usize)

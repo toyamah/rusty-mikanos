@@ -1,5 +1,6 @@
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{Rectangle, Vector2D};
+use crate::message::{LayerMessage, LayerOperation};
 use crate::window::Window;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -280,6 +281,16 @@ impl<'a> LayerManager<'a> {
                     false
                 }
             })
+    }
+
+    pub fn process_message(&mut self, message: &LayerMessage, screen: &mut FrameBuffer) {
+        match message.op {
+            LayerOperation::Move { pos } => self.move_(message.layer_id, pos, screen),
+            LayerOperation::MoveRelative { pos } => {
+                self.move_relative(message.layer_id, pos, screen)
+            }
+            LayerOperation::Draw => self.draw_layer_of(message.layer_id, screen),
+        }
     }
 
     fn hide(&mut self, id: u32) {
