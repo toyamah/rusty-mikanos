@@ -113,7 +113,6 @@ impl Task {
 
 pub struct TaskManager {
     tasks: Vec<Task>,
-    current_task_index: usize,
     next_id: u64,
     main_task_id: u64,
     running_task_ids: [VecDeque<u64>; PriorityLevel::MAX.to_usize() + 1],
@@ -130,7 +129,6 @@ impl TaskManager {
         Self {
             tasks: vec![],
             next_id: 0,
-            current_task_index: 0,
             main_task_id: 0,
             running_task_ids: Default::default(),
             current_level: PriorityLevel::MAX,
