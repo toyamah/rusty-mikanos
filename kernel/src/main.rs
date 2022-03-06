@@ -20,7 +20,7 @@ use lib::graphics::{
 use lib::interrupt::global::{initialize_interrupt, notify_end_of_interrupt};
 use lib::interrupt::InterruptFrame;
 use lib::layer::global::{layer_manager, screen_frame_buffer};
-use lib::message::{Arg, Message, MessageType};
+use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
 use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
@@ -163,30 +163,30 @@ pub extern "C" fn KernelMainNewStack(
         unsafe { asm!("sti") }; // set CPU Interrupt Flag 1
         match message.m_type {
             MessageType::InterruptXhci => xhci_controller().process_events(),
-            MessageType::TimerTimeout => {
-                let timer = unsafe { message.arg.timer };
-                if timer.value == text_box_cursor_timer {
+            MessageType::TimerTimeout { timeout, value } => {
+                if value == text_box_cursor_timer {
                     unsafe { asm!("cli") };
-                    timer_manager().add_timer(Timer::new(
-                        timer.timeout + timer_05_sec,
-                        text_box_cursor_timer,
-                    ));
+                    timer_manager()
+                        .add_timer(Timer::new(timeout + timer_05_sec, text_box_cursor_timer));
                     unsafe { asm!("sti") };
                     text_box_cursor_visible = !text_box_cursor_visible;
                     draw_text_cursor(text_box_cursor_visible);
                     layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
                 }
             }
-            MessageType::KeyPush => {
-                let keyboard = unsafe { message.arg.keyboard };
-                input_text_window(keyboard.ascii);
-                if keyboard.ascii == 's' {
+            MessageType::KeyPush {
+                modifier: _,
+                keycode: _,
+                ascii,
+            } => {
+                input_text_window(ascii);
+                if ascii == 's' {
                     let str = task_manager()
                         .sleep(task_b_id)
                         .map(|_| "Success".to_string())
                         .unwrap_or_else(|e| e.to_string());
                     printk!("sleep taskB: {}\n", str)
-                } else if keyboard.ascii == 'w' {
+                } else if ascii == 'w' {
                     let str = task_manager()
                         .wake_up(task_b_id)
                         .map(|_| "Success".to_string())
@@ -231,7 +231,7 @@ extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
     task_manager()
         .send_message(
             task_manager().main_task().id(),
-            Message::new(MessageType::InterruptXhci, Arg::NONE),
+            Message::new(MessageType::InterruptXhci),
         )
         .unwrap();
     notify_end_of_interrupt();

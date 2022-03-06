@@ -1,4 +1,4 @@
-use crate::message::{Arg, Keyboard, Message, MessageType};
+use crate::message::{Message, MessageType};
 use crate::task::TaskManager;
 
 const KEYCODE_MAP: [char; 256] = [
@@ -90,12 +90,11 @@ pub fn on_input(modifier: u8, keycode: u8, task_manager: &mut TaskManager) {
     task_manager
         .send_message(
             task_manager.main_task().id(),
-            Message::new(
-                MessageType::KeyPush,
-                Arg {
-                    keyboard: Keyboard::new(modifier, keycode, ascii),
-                },
-            ),
+            Message::new(MessageType::KeyPush {
+                modifier,
+                keycode,
+                ascii,
+            }),
         )
         .unwrap();
 }
