@@ -6,12 +6,18 @@ use alloc::vec::Vec;
 use core::cmp::{max, min};
 use shared::{FrameBufferConfig, PixelFormat};
 
+pub enum Type {
+    Normal,
+    TopLevel,
+}
+
 pub struct Window {
     width: usize,
     height: usize,
     data: Vec<Vec<PixelColor>>,
     shadow_buffer: FrameBuffer,
     transparent_color: Option<PixelColor>,
+    type_: Type,
 }
 
 impl Window {
@@ -30,6 +36,7 @@ impl Window {
             data,
             shadow_buffer,
             transparent_color: None,
+            type_: Type::TopLevel,
         }
     }
 
@@ -69,8 +76,8 @@ impl Window {
     }
 
     pub fn draw_window(&mut self, title: &str) {
-        let win_w = self.width as i32;
-        let win_h = self.height as i32;
+        let win_w = self.writer().width as i32;
+        let win_h = self.writer().height as i32;
 
         self.fill_rect((0, 0), (win_w, 1), 0xc6c6c6);
         self.fill_rect((1, 1), (win_w - 2, 1), 0xffffff);
@@ -83,23 +90,7 @@ impl Window {
         self.fill_rect((1, win_h - 2), (win_w - 2, 1), 0x848484);
         self.fill_rect((0, win_h - 1), (win_w, 1), 0x000000);
 
-        self.write_string(24, 4, title, &PixelColor::from(0xffffff));
-
-        for (y, &str) in CLOSE_BUTTON.iter().enumerate() {
-            for (x, char) in str.chars().enumerate() {
-                let color = match char {
-                    '@' => COLOR_WHITE,
-                    '$' => PixelColor::from(0x848484),
-                    ':' => PixelColor::from(0xc6c6c6),
-                    _ => COLOR_BLACK,
-                };
-                self.write(
-                    win_w - 5 - str.len() as i32 + x as i32,
-                    (5 + y) as i32,
-                    &color,
-                );
-            }
-        }
+        self.draw_window_title(title);
     }
 
     pub fn draw_text_box(&mut self, pos: Vector2D<i32>, size: Vector2D<i32>) {
@@ -150,6 +141,38 @@ impl Window {
             &Vector2D::new(size.0, size.1),
             &PixelColor::from(c),
         )
+    }
+
+    fn draw_window_title(&mut self, title: &str) {
+        let win_w = self.writer().width as i32;
+        let bg_color = match self.type_ {
+            Type::Normal => PixelColor::from(0x848484),
+            Type::TopLevel => PixelColor::from(0x000084),
+        };
+
+        fill_rectangle(
+            self,
+            &Vector2D::new(3, 3),
+            &Vector2D::new(win_w - 6, 18),
+            &bg_color,
+        );
+        self.write_string(24, 4, title, &PixelColor::from(0xffffff));
+
+        for (y, &str) in CLOSE_BUTTON.iter().enumerate() {
+            for (x, char) in str.chars().enumerate() {
+                let color = match char {
+                    '@' => COLOR_WHITE,
+                    '$' => PixelColor::from(0x848484),
+                    ':' => PixelColor::from(0xc6c6c6),
+                    _ => COLOR_BLACK,
+                };
+                self.write(
+                    win_w - 5 - str.len() as i32 + x as i32,
+                    (5 + y) as i32,
+                    &color,
+                );
+            }
+        }
     }
 }
 
