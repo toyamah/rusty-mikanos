@@ -1,4 +1,4 @@
-use crate::message::{Arg, Message, MessageType, TimerMessage};
+use crate::message::{Message, MessageType};
 use crate::task::TaskManager;
 use alloc::collections::BinaryHeap;
 use core::arch::asm;
@@ -155,12 +155,10 @@ impl TimerManager {
                 continue;
             }
 
-            let m = Message::new(
-                MessageType::TimerTimeout,
-                Arg {
-                    timer: TimerMessage::new(t.timeout, t.value),
-                },
-            );
+            let m = Message::new(MessageType::TimerTimeout {
+                timeout: t.timeout,
+                value: t.value,
+            });
             task_manager
                 .send_message(task_manager.main_task().id(), m)
                 .unwrap();
@@ -190,7 +188,6 @@ impl TimerManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::message::TimerMessage;
     use crate::task::TaskContext;
     use alloc::vec;
     use alloc::vec::Vec;
@@ -240,8 +237,8 @@ mod tests {
         assert_eq!(get_received_message_timers(&mut task_manager), vec![]);
     }
 
-    fn message(timeout: u64, value: i32) -> TimerMessage {
-        TimerMessage::new(timeout, value)
+    fn message(timeout: u64, value: i32) -> MessageType {
+        MessageType::TimerTimeout { timeout, value }
     }
 
     fn get_timers(m: &mut TimerManager) -> Vec<Timer> {
@@ -250,12 +247,11 @@ mod tests {
         v
     }
 
-    fn get_received_message_timers(task_manager: &mut TaskManager) -> Vec<TimerMessage> {
+    fn get_received_message_timers(task_manager: &mut TaskManager) -> Vec<MessageType> {
         let task = task_manager.main_task_mut();
         let mut received = vec![];
         while let Some(message) = task.receive_message() {
-            let timer_message = unsafe { message.arg.timer };
-            received.push(timer_message);
+            received.push(message.m_type);
         }
         received
     }
