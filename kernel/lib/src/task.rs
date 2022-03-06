@@ -113,7 +113,6 @@ impl Task {
 
 pub struct TaskManager {
     tasks: Vec<Task>,
-    current_task_index: usize,
     next_id: u64,
     main_task_id: u64,
     running_task_ids: [VecDeque<u64>; PriorityLevel::MAX.to_usize() + 1],
@@ -130,7 +129,6 @@ impl TaskManager {
         Self {
             tasks: vec![],
             next_id: 0,
-            current_task_index: 0,
             main_task_id: 0,
             running_task_ids: Default::default(),
             current_level: PriorityLevel::MAX,
@@ -161,6 +159,19 @@ impl TaskManager {
             .push(Task::new(self.next_id, PriorityLevel::default()));
         self.next_id += 1;
         self.tasks.iter_mut().last().unwrap()
+    }
+
+    pub fn get_task_mut(&mut self, task_id: u64) -> Option<&mut Task> {
+        self.tasks.get_mut(task_id as usize)
+    }
+
+    pub fn current_task(&mut self) -> &Task {
+        let task_id = self
+            .current_running_task_ids_mut()
+            .front()
+            .expect("no such task id");
+        let task_id = *task_id;
+        self.tasks.get(task_id as usize).expect("no such task")
     }
 
     pub fn main_task(&self) -> &Task {
