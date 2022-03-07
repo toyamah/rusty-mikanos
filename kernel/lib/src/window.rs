@@ -44,8 +44,7 @@ impl Window {
         Vector2D::new(self.width, self.height)
     }
 
-    //TODO: change self to mutable reference if possible
-    pub fn draw_to(&self, dst: &mut FrameBuffer, pos: Vector2D<i32>, area: Rectangle<i32>) {
+    pub fn draw_to(&mut self, dst: &mut FrameBuffer, pos: Vector2D<i32>, area: Rectangle<i32>) {
         match self.transparent_color {
             None => {
                 let window_area = Rectangle::new(pos, self.size().to_i32_vec2d());

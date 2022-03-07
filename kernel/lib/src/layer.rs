@@ -16,62 +16,58 @@ pub mod global {
     use crate::graphics::{draw_desktop, Vector2D};
     use crate::Window;
 
+    static mut BG_LAYER_ID: u32 = 1;
+
     static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
     pub fn screen_frame_buffer() -> &'static mut FrameBuffer {
         unsafe { SCREEN_FRAME_BUFFER.as_mut().unwrap() }
     }
 
     static mut LAYER_MANAGER: Option<LayerManager> = None;
-    pub fn layer_manager_op() -> Option<&'static mut LayerManager<'static>> {
+    pub fn layer_manager_op() -> Option<&'static mut LayerManager> {
         unsafe { LAYER_MANAGER.as_mut() }
     }
-    pub fn layer_manager() -> &'static mut LayerManager<'static> {
+    pub fn layer_manager() -> &'static mut LayerManager {
         unsafe { LAYER_MANAGER.as_mut().unwrap() }
     }
 
-    static mut BG_WINDOW: Option<Window> = None;
     pub fn bg_window() -> &'static mut Window {
-        unsafe { BG_WINDOW.as_mut().unwrap() }
+        unsafe { get_layer_window_mut(BG_LAYER_ID).expect("could not find bg layer") }
     }
     pub fn bg_window_ref() -> &'static Window {
-        unsafe { BG_WINDOW.as_ref().unwrap() }
+        unsafe { get_layer_window_ref(BG_LAYER_ID).expect("could not find bg layer") }
     }
-
-    static mut CONSOLE_WINDOW: Option<Window> = None;
     pub fn console_window() -> &'static mut Window {
-        unsafe { CONSOLE_WINDOW.as_mut().unwrap() }
+        get_layer_window_mut(console().layer_id().unwrap()).expect("could not find console layer")
     }
     pub fn console_window_ref() -> &'static Window {
-        unsafe { CONSOLE_WINDOW.as_ref().unwrap() }
+        get_layer_window_ref(console().layer_id().unwrap()).expect("could not find console layer")
     }
 
     pub fn initialize() {
         let screen_size = screen_size();
-        unsafe {
-            BG_WINDOW = Some(Window::new(
-                screen_size.x,
-                screen_size.y,
-                frame_buffer_config().pixel_format,
-            ))
-        }
-        draw_desktop(bg_window().writer());
+        let mut bg_window = Window::new(
+            screen_size.x,
+            screen_size.y,
+            frame_buffer_config().pixel_format,
+        );
+        draw_desktop(bg_window.writer());
 
         unsafe {
             SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config()));
             LAYER_MANAGER = Some(LayerManager::new(frame_buffer_config()));
-            CONSOLE_WINDOW = Some(new_console_window(frame_buffer_config().pixel_format));
         };
-        console().reset_mode(ConsoleWindow, console_window());
+        let mut console_window = new_console_window(frame_buffer_config().pixel_format);
+        console().reset_mode(ConsoleWindow, &mut console_window);
 
         let bg_layer_id = layer_manager()
-            .new_layer()
-            .set_window(bg_window_ref())
+            .new_layer(bg_window)
             .move_(Vector2D::new(0, 0))
             .id();
+        unsafe { BG_LAYER_ID = bg_layer_id };
         console().set_layer_id(
             layer_manager()
-                .new_layer()
-                .set_window(console_window_ref())
+                .new_layer(console_window)
                 .move_(Vector2D::new(0, 0))
                 .id(),
         );
@@ -79,21 +75,31 @@ pub mod global {
         layer_manager().up_down(bg_layer_id, 0);
         layer_manager().up_down(console().layer_id().unwrap(), 1);
     }
+
+    pub fn get_layer_window_ref(layer_id: u32) -> Option<&'static Window> {
+        layer_manager().get_layer_mut(layer_id).map(|l| &l.window)
+    }
+
+    pub fn get_layer_window_mut(layer_id: u32) -> Option<&'static mut Window> {
+        layer_manager()
+            .get_layer_mut(layer_id)
+            .map(|l| &mut l.window)
+    }
 }
 
-pub struct Layer<'a> {
+pub struct Layer {
     id: u32,
     position: Vector2D<i32>,
-    window: Option<&'a Window>,
+    window: Window,
     draggable: bool,
 }
 
-impl<'a> Layer<'a> {
-    pub fn new(id: u32) -> Self {
+impl Layer {
+    pub fn new(id: u32, window: Window) -> Self {
         Self {
             id,
             position: Vector2D::new(0, 0),
-            window: None,
+            window,
             draggable: false,
         }
     }
@@ -102,16 +108,15 @@ impl<'a> Layer<'a> {
         self.id
     }
 
-    pub fn set_window(&mut self, window: &'a Window) -> &mut Layer<'a> {
-        self.window = Some(window);
-        self
+    pub fn get_window_ref(&self) -> &Window {
+        &self.window
     }
 
-    pub fn get_window(&self) -> Option<&'a Window> {
-        self.window
+    pub fn get_window_mut(&mut self) -> &mut Window {
+        &mut self.window
     }
 
-    pub fn set_draggable(&mut self, draggable: bool) -> &mut Layer<'a> {
+    pub fn set_draggable(&mut self, draggable: bool) -> &mut Layer {
         self.draggable = draggable;
         self
     }
@@ -120,7 +125,7 @@ impl<'a> Layer<'a> {
         self.draggable
     }
 
-    pub fn move_(&mut self, pos: Vector2D<i32>) -> &mut Layer<'a> {
+    pub fn move_(&mut self, pos: Vector2D<i32>) -> &mut Layer {
         self.position = pos;
         self
     }
@@ -131,22 +136,20 @@ impl<'a> Layer<'a> {
         self.position = Vector2D::new(x, y)
     }
 
-    fn draw_to(&self, screen: &mut FrameBuffer, area: Rectangle<i32>) {
-        if let Some(w) = self.window {
-            w.draw_to(screen, self.position, area)
-        }
+    fn draw_to(&mut self, screen: &mut FrameBuffer, area: Rectangle<i32>) {
+        self.window.draw_to(screen, self.position, area)
     }
 }
 
-pub struct LayerManager<'a> {
-    layers: Vec<Layer<'a>>,
+pub struct LayerManager {
+    layers: Vec<Layer>,
     layer_id_stack: Vec<u32>,
     latest_id: u32,
     back_buffer: FrameBuffer,
 }
 
-impl<'a> LayerManager<'a> {
-    pub fn new(screen_buffer_config: &FrameBufferConfig) -> LayerManager<'a> {
+impl LayerManager {
+    pub fn new(screen_buffer_config: &FrameBufferConfig) -> LayerManager {
         let back_buffer = FrameBuffer::new(FrameBufferConfig::new(
             screen_buffer_config.horizontal_resolution,
             screen_buffer_config.vertical_resolution,
@@ -162,8 +165,8 @@ impl<'a> LayerManager<'a> {
         }
     }
 
-    pub fn new_layer(&mut self) -> &mut Layer<'a> {
-        self.layers.push(Layer::new(self.latest_id));
+    pub fn new_layer(&mut self, window: Window) -> &mut Layer {
+        self.layers.push(Layer::new(self.latest_id, window));
         self.latest_id += 1; // increment after layer.push to make layer_id and index of layers equal
         self.layers.iter_mut().last().unwrap()
     }
@@ -181,10 +184,10 @@ impl<'a> LayerManager<'a> {
         let mut window_area: Rectangle<i32> = Rectangle::default();
         for &layer_id in &self.layer_id_stack {
             let index = layer_id as usize;
-            let layer = &self.layers[index];
+            let layer = self.layers.get_mut(index).unwrap();
 
             if layer_id == id {
-                window_area.size = layer.window.unwrap().size().to_i32_vec2d();
+                window_area.size = layer.window.size().to_i32_vec2d();
                 window_area.pos = layer.position;
                 draw = true
             }
@@ -198,7 +201,7 @@ impl<'a> LayerManager<'a> {
 
     pub fn move_(&mut self, id: u32, new_position: Vector2D<i32>, screen: &mut FrameBuffer) {
         if let Some(layer) = self.layers.iter_mut().find(|l| l.id == id) {
-            let window_size = layer.get_window().unwrap().size();
+            let window_size = layer.window.size();
             let old_pos = layer.position;
             layer.move_(new_position);
             self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()), screen);
@@ -208,7 +211,7 @@ impl<'a> LayerManager<'a> {
 
     pub fn move_relative(&mut self, id: u32, pos_diff: Vector2D<i32>, screen: &mut FrameBuffer) {
         if let Some(layer) = self.layers.iter_mut().find(|l| l.id == id) {
-            let window_size = layer.get_window().unwrap().size();
+            let window_size = layer.window.size();
             let old_pos = layer.position;
             layer.move_relative(pos_diff);
             self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()), screen);
@@ -258,28 +261,19 @@ impl<'a> LayerManager<'a> {
         }
     }
 
-    //TODO: remove the lifetime annotation of self after Layer changes not to have a Window reference
-    pub fn find_layer_by_position(
-        &'a self,
-        pos: Vector2D<i32>,
-        exclude_id: u32,
-    ) -> Option<&Layer<'a>> {
+    pub fn find_layer_by_position(&self, pos: Vector2D<i32>, exclude_id: u32) -> Option<&Layer> {
         self.layer_id_stack
             .iter()
             .rev()
             .filter(|&&id| id != exclude_id)
             .map(|&id| &self.layers[id as usize])
             .find(|&layer| {
-                if let Some(win) = layer.get_window() {
-                    let win_pos = layer.position;
-                    let win_end_pos = win_pos + win.size().to_i32_vec2d();
-                    win_pos.x <= pos.x
-                        && pos.x < win_end_pos.x
-                        && win_pos.y <= pos.y
-                        && pos.y < win_end_pos.y
-                } else {
-                    false
-                }
+                let win_pos = layer.position;
+                let win_end_pos = win_pos + layer.window.size().to_i32_vec2d();
+                win_pos.x <= pos.x
+                    && pos.x < win_end_pos.x
+                    && win_pos.y <= pos.y
+                    && pos.y < win_end_pos.y
             })
     }
 
@@ -308,6 +302,10 @@ impl<'a> LayerManager<'a> {
             self.layer_id_stack.remove(i);
         }
     }
+
+    pub fn get_layer_mut(&mut self, layer_id: u32) -> Option<&mut Layer> {
+        self.layers.get_mut(layer_id as usize)
+    }
 }
 
 #[cfg(test)]
@@ -324,7 +322,7 @@ mod tests {
             1,
             PixelFormat::KPixelBGRResv8BitPerColor,
         ));
-        let id1 = lm.new_layer().set_window(&window1).id();
+        let id1 = lm.new_layer(window1).id();
         // verify layer's id equals to index of lm.layers
         assert_eq!(lm.layers[id1 as usize].id, id1);
     }
@@ -333,7 +331,7 @@ mod tests {
     fn move_() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
         let mut lm = LayerManager::new(&frame_buffer_config());
-        let id1 = lm.new_layer().set_window(&window1).id();
+        let id1 = lm.new_layer(window1).id();
 
         lm.move_(
             id1,
@@ -350,11 +348,7 @@ mod tests {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
         let mut lm = LayerManager::new(&frame_buffer_config());
         let mut buffer = FrameBuffer::new(frame_buffer_config());
-        let id1 = lm
-            .new_layer()
-            .set_window(&window1)
-            .move_(Vector2D::new(100, 100))
-            .id();
+        let id1 = lm.new_layer(window1).move_(Vector2D::new(100, 100)).id();
 
         lm.move_relative(id1, Vector2D::new(-50, -30), &mut buffer);
         {
@@ -375,10 +369,13 @@ mod tests {
             1,
             PixelFormat::KPixelBGRResv8BitPerColor,
         ));
-        let id0 = lm.new_layer().id;
-        let id1 = lm.new_layer().id;
-        let id2 = lm.new_layer().id;
-        let id3 = lm.new_layer().id;
+        fn window() -> Window {
+            Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor)
+        }
+        let id0 = lm.new_layer(window()).id;
+        let id1 = lm.new_layer(window()).id;
+        let id2 = lm.new_layer(window()).id;
+        let id3 = lm.new_layer(window()).id;
 
         lm.up_down(id0, 0);
         lm.up_down(id1, 100);

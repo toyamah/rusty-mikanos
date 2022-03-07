@@ -19,7 +19,9 @@ use lib::graphics::{
 };
 use lib::interrupt::global::{initialize_interrupt, notify_end_of_interrupt};
 use lib::interrupt::InterruptFrame;
-use lib::layer::global::{layer_manager, screen_frame_buffer};
+use lib::layer::global::{
+    get_layer_window_mut, get_layer_window_ref, layer_manager, screen_frame_buffer,
+};
 use lib::message::{LayerMessage, LayerOperation, Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
@@ -37,12 +39,11 @@ mod logger;
 mod memory_allocator;
 mod usb;
 
-static mut MAIN_WINDOW: Option<Window> = None;
 fn main_window() -> &'static mut Window {
-    unsafe { MAIN_WINDOW.as_mut().unwrap() }
+    get_layer_window_mut(main_window_layer_id()).expect("could not find main layer")
 }
 fn main_window_ref() -> &'static Window {
-    unsafe { MAIN_WINDOW.as_ref().unwrap() }
+    get_layer_window_ref(main_window_layer_id()).expect("could not find main layer")
 }
 
 static mut MAIN_WINDOW_LAYER_ID: Option<u32> = None;
@@ -50,12 +51,11 @@ fn main_window_layer_id() -> u32 {
     unsafe { MAIN_WINDOW_LAYER_ID.unwrap() }
 }
 
-static mut TEXT_WINDOW: Option<Window> = None;
 fn text_window() -> &'static mut Window {
-    unsafe { TEXT_WINDOW.as_mut().unwrap() }
+    get_layer_window_mut(text_window_layer_id()).expect("could not find text layer")
 }
 fn text_window_ref() -> &'static Window {
-    unsafe { TEXT_WINDOW.as_ref().unwrap() }
+    get_layer_window_ref(text_window_layer_id()).expect("could not find text layer")
 }
 
 static mut TEXT_WINDOW_LAYER_ID: Option<u32> = None;
@@ -68,12 +68,11 @@ fn text_window_index() -> i32 {
     unsafe { TEXT_WINDOW_INDEX }
 }
 
-static mut TASK_B_WINDOW: Option<Window> = None;
 fn task_b_window() -> &'static mut Window {
-    unsafe { TASK_B_WINDOW.as_mut().unwrap() }
+    get_layer_window_mut(task_b_window_layer_id()).expect("could not find task b layer")
 }
 fn task_b_window_ref() -> &'static Window {
-    unsafe { TASK_B_WINDOW.as_ref().unwrap() }
+    get_layer_window_ref(task_b_window_layer_id()).expect("could not find task b layer")
 }
 
 static mut TASK_B_WINDOW_LAYER_ID: Option<u32> = None;
@@ -252,11 +251,10 @@ extern "x86-interrupt" fn int_handler_lapic_timer(_: *const InterruptFrame) {
 }
 
 fn initialize_main_window() {
-    unsafe { MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) }
-    main_window().draw_window("hello window");
+    let mut main_window = Window::new(160, 52, frame_buffer_config().pixel_format);
+    main_window.draw_window("hello window");
     let main_window_layer_id = layer_manager()
-        .new_layer()
-        .set_window(main_window_ref())
+        .new_layer(main_window)
         .set_draggable(true)
         .move_(Vector2D::new(300, 100))
         .id();
@@ -269,23 +267,16 @@ fn initialize_text_window() {
     let win_w = 160;
     let win_h = 52;
 
-    unsafe {
-        TEXT_WINDOW = Some(Window::new(
-            win_w,
-            win_h,
-            frame_buffer_config().pixel_format,
-        ))
-    }
+    let mut text_window = Window::new(win_w, win_h, frame_buffer_config().pixel_format);
 
-    text_window().draw_window("Text Box Test");
-    text_window().draw_text_box(
+    text_window.draw_window("Text Box Test");
+    text_window.draw_text_box(
         Vector2D::new(4, 24),
         Vector2D::new(win_w as i32 - 8, win_h as i32 - 24 - 4),
     );
 
     let id = layer_manager()
-        .new_layer()
-        .set_window(text_window())
+        .new_layer(text_window)
         .set_draggable(true)
         .move_(Vector2D::new(350, 200))
         .id();
@@ -328,12 +319,11 @@ fn input_text_window(c: char) {
 }
 
 fn initialize_task_b_window() {
-    unsafe { TASK_B_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) };
-    task_b_window().draw_window("TaskB Window");
+    let mut task_b_window = Window::new(160, 52, frame_buffer_config().pixel_format);
+    task_b_window.draw_window("TaskB Window");
 
     let layer_id = layer_manager()
-        .new_layer()
-        .set_window(task_b_window_ref())
+        .new_layer(task_b_window)
         .set_draggable(true)
         .move_(Vector2D::new(100, 100))
         .id();
