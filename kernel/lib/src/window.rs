@@ -2,13 +2,17 @@ use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{
     fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
 };
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cmp::{max, min};
 use shared::{FrameBufferConfig, PixelFormat};
 
+const TOP_LEFT_MARGIN: Vector2D<i32> = Vector2D::new(4, 24);
+const BOTTOM_RIGHT_MARGIN: Vector2D<i32> = Vector2D::new(4, 4);
+
 pub enum Type {
     Normal,
-    TopLevel,
+    TopLevel { title: String },
 }
 
 pub struct Window {
@@ -22,6 +26,27 @@ pub struct Window {
 
 impl Window {
     pub fn new(width: usize, height: usize, shadow_format: PixelFormat) -> Self {
+        Window::_new(width, height, shadow_format, Type::Normal)
+    }
+
+    pub fn new_with_title(
+        width: usize,
+        height: usize,
+        shadow_format: PixelFormat,
+        title: &str,
+    ) -> Window {
+        Window::_new(
+            width,
+            height,
+            shadow_format,
+            Type::TopLevel {
+                title: title.to_string(),
+            },
+        )
+        //TODO: draw_window
+    }
+
+    fn _new(width: usize, height: usize, shadow_format: PixelFormat, type_: Type) -> Window {
         debug_assert!(width <= i32::MAX as usize);
         debug_assert!(height <= i32::MAX as usize);
 
@@ -36,7 +61,7 @@ impl Window {
             data,
             shadow_buffer,
             transparent_color: None,
-            type_: Type::TopLevel,
+            type_,
         }
     }
 
@@ -90,6 +115,35 @@ impl Window {
         self.fill_rect((0, win_h - 1), (win_w, 1), 0x000000);
 
         self.draw_window_title(title);
+    }
+
+    pub fn activate(&mut self) {
+        match &self.type_ {
+            Type::Normal => {}
+            Type::TopLevel { title } => {
+                let title = title.to_string();
+                self.draw_window_title(title.as_str())
+            }
+        }
+    }
+
+    pub fn deactivate(&mut self) {
+        match &self.type_ {
+            Type::Normal => {}
+            Type::TopLevel { title } => {
+                let title = title.to_string();
+                self.draw_window_title(title.as_str())
+            }
+        }
+    }
+
+    pub fn inner_size(&self) -> Vector2D<i32> {
+        match self.type_ {
+            Type::Normal => Vector2D::new(0, 0),
+            Type::TopLevel { .. } => {
+                self.size().to_i32_vec2d() - TOP_LEFT_MARGIN - BOTTOM_RIGHT_MARGIN
+            }
+        }
     }
 
     pub fn draw_text_box(&mut self, pos: Vector2D<i32>, size: Vector2D<i32>) {
@@ -146,11 +200,11 @@ impl Window {
         let win_w = self.writer().width as i32;
         let bg_color = match self.type_ {
             Type::Normal => PixelColor::from(0x848484),
-            Type::TopLevel => PixelColor::from(0x000084),
+            Type::TopLevel { .. } => PixelColor::from(0x000084),
         };
 
         fill_rectangle(
-            self,
+            &mut WindowWriter { w: self },
             &Vector2D::new(3, 3),
             &Vector2D::new(win_w - 6, 18),
             &bg_color,
@@ -175,18 +229,74 @@ impl Window {
     }
 }
 
-impl PixelWriter for Window {
+struct WindowWriter<'a> {
+    w: &'a mut Window,
+}
+
+impl<'a> PixelWriter for WindowWriter<'a> {
     fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
-        self.data[y as usize][x as usize] = *color;
-        self.shadow_buffer.writer().write(x, y, color);
+        write_w(self.w, x, y, color)
     }
 
     fn width(&self) -> i32 {
-        self.width as i32
+        self.w.width as i32
     }
 
     fn height(&self) -> i32 {
-        self.height as i32
+        self.w.height as i32
+    }
+}
+
+struct TopLevelWindowWriter<'a> {
+    w: &'a mut Window,
+}
+
+fn write_w(w: &mut Window, x: i32, y: i32, color: &PixelColor) {
+    w.data[y as usize][x as usize] = *color;
+    w.shadow_buffer.writer().write(x, y, color);
+}
+
+impl<'a> PixelWriter for TopLevelWindowWriter<'a> {
+    fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
+        write_w(self.w, x + TOP_LEFT_MARGIN.x, y + TOP_LEFT_MARGIN.y, color)
+    }
+
+    fn width(&self) -> i32 {
+        self.w.width as i32
+    }
+
+    fn height(&self) -> i32 {
+        self.w.height as i32
+    }
+}
+
+impl PixelWriter for Window {
+    fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
+        fn _write(w: &mut Window, x: i32, y: i32, color: &PixelColor) {
+            w.data[y as usize][x as usize] = *color;
+            w.shadow_buffer.writer().write(x, y, color);
+        }
+
+        match self.type_ {
+            Type::Normal => _write(self, x, y, color),
+            Type::TopLevel { .. } => {
+                _write(self, x + TOP_LEFT_MARGIN.x, y + TOP_LEFT_MARGIN.y, color)
+            }
+        }
+    }
+
+    fn width(&self) -> i32 {
+        match self.type_ {
+            Type::Normal => self.width as i32,
+            Type::TopLevel { .. } => self.width as i32 - TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
+        }
+    }
+
+    fn height(&self) -> i32 {
+        match self.type_ {
+            Type::Normal => self.height as i32,
+            Type::TopLevel { .. } => self.height as i32 - TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
+        }
     }
 }
 

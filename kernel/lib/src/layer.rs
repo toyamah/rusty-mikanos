@@ -14,6 +14,7 @@ pub mod global {
     use crate::frame_buffer::FrameBuffer;
     use crate::graphics::global::{frame_buffer_config, screen_size};
     use crate::graphics::{draw_desktop, Vector2D};
+    use crate::layer::ActiveLayer;
     use crate::Window;
 
     static mut BG_LAYER_ID: u32 = 1;
@@ -29,6 +30,11 @@ pub mod global {
     }
     pub fn layer_manager() -> &'static mut LayerManager {
         unsafe { LAYER_MANAGER.as_mut().unwrap() }
+    }
+
+    static mut ACTIVE_LAYER: ActiveLayer = ActiveLayer::new();
+    pub fn active_layer() -> &'static mut ActiveLayer {
+        unsafe { &mut ACTIVE_LAYER }
     }
 
     pub fn bg_window() -> &'static mut Window {
@@ -305,6 +311,63 @@ impl LayerManager {
 
     pub fn get_layer_mut(&mut self, layer_id: u32) -> Option<&mut Layer> {
         self.layers.get_mut(layer_id as usize)
+    }
+
+    fn get_height(&self, layer_id: u32) -> Option<i32> {
+        self.layer_id_stack
+            .iter()
+            .enumerate()
+            .find(|(_, &id)| id == layer_id)
+            .map(|(height, _)| height as i32)
+    }
+}
+
+pub struct ActiveLayer {
+    active_layer_id: Option<u32>,
+    pub(crate) mouser_layer_id: u32,
+}
+
+impl ActiveLayer {
+    pub const fn new() -> ActiveLayer {
+        Self {
+            active_layer_id: None,
+            mouser_layer_id: u32::MAX,
+        }
+    }
+
+    pub fn get_active_layer_id(&self) -> Option<u32> {
+        self.active_layer_id
+    }
+
+    pub fn activate(
+        &mut self,
+        layer_id: u32,
+        manager: &mut LayerManager,
+        screen: &mut FrameBuffer,
+    ) {
+        if self.active_layer_id == Some(layer_id) {
+            return;
+        }
+
+        if let Some(active_layer_id) = self.active_layer_id {
+            let layer = manager
+                .get_layer_mut(active_layer_id)
+                .unwrap_or_else(|| panic!("no such layer {}", active_layer_id));
+            layer.get_window_mut().deactivate();
+            manager.draw_layer_of(active_layer_id, screen);
+        }
+
+        self.active_layer_id = Some(layer_id);
+        let layer = manager
+            .get_layer_mut(layer_id)
+            .unwrap_or_else(|| panic!("no such layer {}", layer_id));
+        layer.get_window_mut().activate();
+        let mouse_height = manager.get_height(self.mouser_layer_id).unwrap_or(-1);
+        manager.up_down(layer_id, mouse_height - 1)
+    }
+
+    pub fn activate_nothing(&mut self) {
+        self.active_layer_id = None;
     }
 }
 
