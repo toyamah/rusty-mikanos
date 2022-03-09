@@ -298,14 +298,14 @@ impl LayerManager {
             return;
         }
 
-        let last_id = *self.layer_id_stack.last().unwrap();
-        let hiding_index = self
-            .layers
+        let index = self
+            .layer_id_stack
             .iter()
-            .position(|l| l.id == id && l.id != last_id);
+            .enumerate()
+            .find(|(_, &layer_id)| layer_id == id);
 
-        if let Some(i) = hiding_index {
-            self.layer_id_stack.remove(i);
+        if let Some((index, _)) = index {
+            self.layer_id_stack.remove(index);
         }
     }
 
@@ -453,6 +453,9 @@ mod tests {
 
         lm.up_down(id1, -1);
         assert_eq!(vec![id2, id3, id0], lm.layer_id_stack);
+
+        lm.up_down(id2, -1);
+        assert_eq!(vec![id3, id0], lm.layer_id_stack);
     }
 
     fn frame_buffer_config() -> FrameBufferConfig {
