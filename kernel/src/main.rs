@@ -116,7 +116,7 @@ pub extern "C" fn KernelMainNewStack(
         screen_frame_buffer(),
     );
     active_layer().activate(
-        task_b_window_layer_id(),
+        Some(task_b_window_layer_id()),
         layer_manager(),
         screen_frame_buffer(),
     );

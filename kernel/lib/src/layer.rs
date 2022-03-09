@@ -341,11 +341,11 @@ impl ActiveLayer {
 
     pub fn activate(
         &mut self,
-        layer_id: u32,
+        layer_id: Option<u32>,
         manager: &mut LayerManager,
         screen: &mut FrameBuffer,
     ) {
-        if self.active_layer_id == Some(layer_id) {
+        if self.active_layer_id == layer_id {
             return;
         }
 
@@ -357,17 +357,15 @@ impl ActiveLayer {
             manager.draw_layer_of(active_layer_id, screen);
         }
 
-        self.active_layer_id = Some(layer_id);
-        let layer = manager
-            .get_layer_mut(layer_id)
-            .unwrap_or_else(|| panic!("no such layer {}", layer_id));
-        layer.get_window_mut().activate();
-        let mouse_height = manager.get_height(self.mouser_layer_id).unwrap_or(-1);
-        manager.up_down(layer_id, mouse_height - 1)
-    }
-
-    pub fn activate_nothing(&mut self) {
-        self.active_layer_id = None;
+        self.active_layer_id = layer_id;
+        if let Some(active_layer_id) = self.active_layer_id {
+            let layer = manager
+                .get_layer_mut(active_layer_id)
+                .unwrap_or_else(|| panic!("no such layer {}", active_layer_id));
+            layer.get_window_mut().activate();
+            let mouse_height = manager.get_height(self.mouser_layer_id).unwrap_or(-1);
+            manager.up_down(active_layer_id, mouse_height - 1)
+        }
     }
 }
 

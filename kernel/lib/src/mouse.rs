@@ -124,15 +124,14 @@ impl Mouse {
         let previous_left_pressed = (self.previous_buttons & 0x01) != 0;
         let left_pressed = (buttons & 0x01) != 0;
         if !previous_left_pressed && left_pressed {
-            let draggable_layer = layout_manager
+            let draggable_layer_id = layout_manager
                 .find_layer_by_position(new_pos, self.layer_id)
-                .filter(|l| l.is_draggable());
-            if let Some(l) = draggable_layer {
-                self.drag_layer_id = Some(l.id());
-                active_layer.activate(l.id(), layout_manager, screen_frame_buffer);
-            } else {
-                active_layer.activate_nothing();
+                .filter(|l| l.is_draggable())
+                .map(|l| l.id());
+            if let Some(id) = draggable_layer_id {
+                self.drag_layer_id = Some(id);
             }
+            active_layer.activate(draggable_layer_id, layout_manager, screen_frame_buffer);
         } else if previous_left_pressed && left_pressed {
             if let Some(drag_layer_id) = self.drag_layer_id {
                 layout_manager.move_relative(drag_layer_id, pos_diff, screen_frame_buffer);
