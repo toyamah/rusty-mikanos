@@ -35,15 +35,16 @@ impl Window {
         shadow_format: PixelFormat,
         title: &str,
     ) -> Window {
-        Window::_new(
+        let mut w = Window::_new(
             width,
             height,
             shadow_format,
             Type::TopLevel {
                 title: title.to_string(),
             },
-        )
-        //TODO: draw_window
+        );
+        draw_window(&mut w.normal_window_writer(), title);
+        w
     }
 
     fn _new(width: usize, height: usize, shadow_format: PixelFormat, type_: Type) -> Window {
@@ -99,30 +100,12 @@ impl Window {
         self
     }
 
-    pub fn draw_window(&mut self, title: &str) {
-        let win_w = self.writer().width as i32;
-        let win_h = self.writer().height as i32;
-
-        self.fill_rect((0, 0), (win_w, 1), 0xc6c6c6);
-        self.fill_rect((1, 1), (win_w - 2, 1), 0xffffff);
-        self.fill_rect((0, 0), (1, win_h), 0xc6c6c6);
-        self.fill_rect((1, 1), (1, win_h - 2), 0xffffff);
-        self.fill_rect((win_w - 2, 1), (1, win_h - 2), 0x848484);
-        self.fill_rect((win_w - 1, 0), (1, win_h), 0x000000);
-        self.fill_rect((2, 2), (win_w - 4, win_h - 4), 0xc6c6c6);
-        self.fill_rect((3, 3), (win_w - 6, 18), 0x000084);
-        self.fill_rect((1, win_h - 2), (win_w - 2, 1), 0x848484);
-        self.fill_rect((0, win_h - 1), (win_w, 1), 0x000000);
-
-        self.draw_window_title(title);
-    }
-
     pub fn activate(&mut self) {
         match &self.type_ {
             Type::Normal => {}
             Type::TopLevel { title } => {
                 let title = title.to_string();
-                self.draw_window_title(title.as_str())
+                draw_window_title(&mut self.normal_window_writer(), title.as_str(), true);
             }
         }
     }
@@ -132,7 +115,7 @@ impl Window {
             Type::Normal => {}
             Type::TopLevel { title } => {
                 let title = title.to_string();
-                self.draw_window_title(title.as_str())
+                draw_window_title(&mut self.normal_window_writer(), title.as_str(), false);
             }
         }
     }
@@ -148,13 +131,18 @@ impl Window {
 
     pub fn draw_text_box(&mut self, pos: Vector2D<i32>, size: Vector2D<i32>) {
         // fill main box
-        self.fill_rect((pos.x + 1, pos.y + 1), (size.x - 2, size.y - 2), 0xffffff);
+        fill_rect(
+            self,
+            (pos.x + 1, pos.y + 1),
+            (size.x - 2, size.y - 2),
+            0xffffff,
+        );
 
         // draw border lines
-        self.fill_rect((pos.x, pos.y), (size.x, 1), 0x848484);
-        self.fill_rect((pos.x, pos.y), (1, size.y), 0x848484);
-        self.fill_rect((pos.x, pos.y + size.y), (size.x, 1), 0xc6c6c6);
-        self.fill_rect((pos.x + size.x, pos.y), (1, size.y), 0xc6c6c6);
+        fill_rect(self, (pos.x, pos.y), (size.x, 1), 0x848484);
+        fill_rect(self, (pos.x, pos.y), (1, size.y), 0x848484);
+        fill_rect(self, (pos.x, pos.y + size.y), (size.x, 1), 0xc6c6c6);
+        fill_rect(self, (pos.x + size.x, pos.y), (1, size.y), 0xc6c6c6);
     }
 
     fn draw_with_transparent_to(
@@ -187,44 +175,99 @@ impl Window {
         self.data[y][x]
     }
 
-    fn fill_rect(&mut self, pos: (i32, i32), size: (i32, i32), c: u32) {
-        fill_rectangle(
-            self,
-            &Vector2D::new(pos.0, pos.1),
-            &Vector2D::new(size.0, size.1),
-            &PixelColor::from(c),
-        )
+    /// Official TopLevelWindow sometimes uses Writer() which is a WindowWriter not an InnerAreaWriter.
+    /// This method can be used where the official code uses TopLevelWindow.Writer().
+    fn normal_window_writer(&mut self) -> WindowWriter {
+        WindowWriter { w: self }
+    }
+}
+
+fn draw_window<W: PixelWriter>(writer: &mut W, title: &str) {
+    let win_w = writer.width() as i32;
+    let win_h = writer.height() as i32;
+
+    fill_rect(writer, (0, 0), (win_w, 1), 0xc6c6c6);
+    fill_rect(writer, (1, 1), (win_w - 2, 1), 0xffffff);
+    fill_rect(writer, (0, 0), (1, win_h), 0xc6c6c6);
+    fill_rect(writer, (1, 1), (1, win_h - 2), 0xffffff);
+    fill_rect(writer, (win_w - 2, 1), (1, win_h - 2), 0x848484);
+    fill_rect(writer, (win_w - 1, 0), (1, win_h), 0x000000);
+    fill_rect(writer, (2, 2), (win_w - 4, win_h - 4), 0xc6c6c6);
+    fill_rect(writer, (3, 3), (win_w - 6, 18), 0x000084);
+    fill_rect(writer, (1, win_h - 2), (win_w - 2, 1), 0x848484);
+    fill_rect(writer, (0, win_h - 1), (win_w, 1), 0x000000);
+
+    draw_window_title(writer, title, false);
+}
+
+fn fill_rect<W: PixelWriter>(writer: &mut W, pos: (i32, i32), size: (i32, i32), c: u32) {
+    fill_rectangle(
+        writer,
+        &Vector2D::new(pos.0, pos.1),
+        &Vector2D::new(size.0, size.1),
+        &PixelColor::from(c),
+    )
+}
+
+fn draw_window_title<W: PixelWriter>(writer: &mut W, title: &str, is_active: bool) {
+    let win_w = writer.width() as i32;
+    let bg_color = if is_active {
+        PixelColor::from(0x000084)
+    } else {
+        PixelColor::from(0x848484)
+    };
+
+    fill_rectangle(
+        writer,
+        &Vector2D::new(3, 3),
+        &Vector2D::new(win_w - 6, 18),
+        &bg_color,
+    );
+    writer.write_string(24, 4, title, &PixelColor::from(0xffffff));
+
+    for (y, &str) in CLOSE_BUTTON.iter().enumerate() {
+        for (x, char) in str.chars().enumerate() {
+            let color = match char {
+                '@' => COLOR_WHITE,
+                '$' => PixelColor::from(0x848484),
+                ':' => PixelColor::from(0xc6c6c6),
+                _ => COLOR_BLACK,
+            };
+            writer.write(
+                win_w - 5 - str.len() as i32 + x as i32,
+                (5 + y) as i32,
+                &color,
+            );
+        }
+    }
+}
+
+fn write_w(w: &mut Window, x: i32, y: i32, color: &PixelColor) {
+    w.data[y as usize][x as usize] = *color;
+    w.shadow_buffer.writer().write(x, y, color);
+}
+
+impl PixelWriter for Window {
+    fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
+        match self.type_ {
+            Type::Normal => write_w(self, x, y, color),
+            Type::TopLevel { .. } => {
+                write_w(self, x + TOP_LEFT_MARGIN.x, y + TOP_LEFT_MARGIN.y, color)
+            }
+        }
     }
 
-    fn draw_window_title(&mut self, title: &str) {
-        let win_w = self.writer().width as i32;
-        let bg_color = match self.type_ {
-            Type::Normal => PixelColor::from(0x848484),
-            Type::TopLevel { .. } => PixelColor::from(0x000084),
-        };
+    fn width(&self) -> i32 {
+        match self.type_ {
+            Type::Normal => self.width as i32,
+            Type::TopLevel { .. } => self.width as i32 - TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
+        }
+    }
 
-        fill_rectangle(
-            &mut WindowWriter { w: self },
-            &Vector2D::new(3, 3),
-            &Vector2D::new(win_w - 6, 18),
-            &bg_color,
-        );
-        self.write_string(24, 4, title, &PixelColor::from(0xffffff));
-
-        for (y, &str) in CLOSE_BUTTON.iter().enumerate() {
-            for (x, char) in str.chars().enumerate() {
-                let color = match char {
-                    '@' => COLOR_WHITE,
-                    '$' => PixelColor::from(0x848484),
-                    ':' => PixelColor::from(0xc6c6c6),
-                    _ => COLOR_BLACK,
-                };
-                self.write(
-                    win_w - 5 - str.len() as i32 + x as i32,
-                    (5 + y) as i32,
-                    &color,
-                );
-            }
+    fn height(&self) -> i32 {
+        match self.type_ {
+            Type::Normal => self.height as i32,
+            Type::TopLevel { .. } => self.height as i32 - TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
         }
     }
 }
@@ -244,59 +287,6 @@ impl<'a> PixelWriter for WindowWriter<'a> {
 
     fn height(&self) -> i32 {
         self.w.height as i32
-    }
-}
-
-struct TopLevelWindowWriter<'a> {
-    w: &'a mut Window,
-}
-
-fn write_w(w: &mut Window, x: i32, y: i32, color: &PixelColor) {
-    w.data[y as usize][x as usize] = *color;
-    w.shadow_buffer.writer().write(x, y, color);
-}
-
-impl<'a> PixelWriter for TopLevelWindowWriter<'a> {
-    fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
-        write_w(self.w, x + TOP_LEFT_MARGIN.x, y + TOP_LEFT_MARGIN.y, color)
-    }
-
-    fn width(&self) -> i32 {
-        self.w.width as i32
-    }
-
-    fn height(&self) -> i32 {
-        self.w.height as i32
-    }
-}
-
-impl PixelWriter for Window {
-    fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
-        fn _write(w: &mut Window, x: i32, y: i32, color: &PixelColor) {
-            w.data[y as usize][x as usize] = *color;
-            w.shadow_buffer.writer().write(x, y, color);
-        }
-
-        match self.type_ {
-            Type::Normal => _write(self, x, y, color),
-            Type::TopLevel { .. } => {
-                _write(self, x + TOP_LEFT_MARGIN.x, y + TOP_LEFT_MARGIN.y, color)
-            }
-        }
-    }
-
-    fn width(&self) -> i32 {
-        match self.type_ {
-            Type::Normal => self.width as i32,
-            Type::TopLevel { .. } => self.width as i32 - TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
-        }
-    }
-
-    fn height(&self) -> i32 {
-        match self.type_ {
-            Type::Normal => self.height as i32,
-            Type::TopLevel { .. } => self.height as i32 - TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
-        }
     }
 }
 
