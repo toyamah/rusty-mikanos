@@ -209,34 +209,38 @@ fn fill_rect<W: PixelWriter>(writer: &mut W, pos: (i32, i32), size: (i32, i32), 
     )
 }
 
+const COLOR_848484: PixelColor = PixelColor::new(0x84, 0x84, 0x84);
+const COLOR_C6C6C6: PixelColor = PixelColor::new(0xc6, 0xc6, 0xc6);
+const COLOR_000084: PixelColor = PixelColor::new(0x00, 0x00, 0x84);
+
 fn draw_window_title<W: PixelWriter>(writer: &mut W, title: &str, is_active: bool) {
     let win_w = writer.width() as i32;
     let bg_color = if is_active {
-        PixelColor::from(0x000084)
+        &COLOR_000084
     } else {
-        PixelColor::from(0x848484)
+        &COLOR_848484
     };
 
     fill_rectangle(
         writer,
         &Vector2D::new(3, 3),
         &Vector2D::new(win_w - 6, 18),
-        &bg_color,
+        bg_color,
     );
     writer.write_string(24, 4, title, &PixelColor::from(0xffffff));
 
     for (y, &str) in CLOSE_BUTTON.iter().enumerate() {
         for (x, char) in str.chars().enumerate() {
             let color = match char {
-                '@' => COLOR_WHITE,
-                '$' => PixelColor::from(0x848484),
-                ':' => PixelColor::from(0xc6c6c6),
-                _ => COLOR_BLACK,
+                '@' => &COLOR_WHITE,
+                '$' => &COLOR_848484,
+                ':' => &COLOR_C6C6C6,
+                _ => &COLOR_BLACK,
             };
             writer.write(
                 win_w - 5 - str.len() as i32 + x as i32,
                 (5 + y) as i32,
-                &color,
+                color,
             );
         }
     }
