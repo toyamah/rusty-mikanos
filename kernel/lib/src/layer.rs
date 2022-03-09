@@ -17,7 +17,7 @@ pub mod global {
     use crate::layer::ActiveLayer;
     use crate::Window;
 
-    static mut BG_LAYER_ID: u32 = 1;
+    static mut BG_LAYER_ID: u32 = u32::MAX;
 
     static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
     pub fn screen_frame_buffer() -> &'static mut FrameBuffer {
