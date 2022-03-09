@@ -19,7 +19,9 @@ use lib::graphics::{
 };
 use lib::interrupt::global::{initialize_interrupt, notify_end_of_interrupt};
 use lib::interrupt::InterruptFrame;
-use lib::layer::global::{layer_manager, screen_frame_buffer};
+use lib::layer::global::{
+    active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager, screen_frame_buffer,
+};
 use lib::message::{LayerMessage, LayerOperation, Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
@@ -37,12 +39,11 @@ mod logger;
 mod memory_allocator;
 mod usb;
 
-static mut MAIN_WINDOW: Option<Window> = None;
 fn main_window() -> &'static mut Window {
-    unsafe { MAIN_WINDOW.as_mut().unwrap() }
+    get_layer_window_mut(main_window_layer_id()).expect("could not find main layer")
 }
 fn main_window_ref() -> &'static Window {
-    unsafe { MAIN_WINDOW.as_ref().unwrap() }
+    get_layer_window_ref(main_window_layer_id()).expect("could not find main layer")
 }
 
 static mut MAIN_WINDOW_LAYER_ID: Option<u32> = None;
@@ -50,12 +51,11 @@ fn main_window_layer_id() -> u32 {
     unsafe { MAIN_WINDOW_LAYER_ID.unwrap() }
 }
 
-static mut TEXT_WINDOW: Option<Window> = None;
 fn text_window() -> &'static mut Window {
-    unsafe { TEXT_WINDOW.as_mut().unwrap() }
+    get_layer_window_mut(text_window_layer_id()).expect("could not find text layer")
 }
 fn text_window_ref() -> &'static Window {
-    unsafe { TEXT_WINDOW.as_ref().unwrap() }
+    get_layer_window_ref(text_window_layer_id()).expect("could not find text layer")
 }
 
 static mut TEXT_WINDOW_LAYER_ID: Option<u32> = None;
@@ -68,12 +68,11 @@ fn text_window_index() -> i32 {
     unsafe { TEXT_WINDOW_INDEX }
 }
 
-static mut TASK_B_WINDOW: Option<Window> = None;
 fn task_b_window() -> &'static mut Window {
-    unsafe { TASK_B_WINDOW.as_mut().unwrap() }
+    get_layer_window_mut(task_b_window_layer_id()).expect("could not find task b layer")
 }
 fn task_b_window_ref() -> &'static Window {
-    unsafe { TASK_B_WINDOW.as_ref().unwrap() }
+    get_layer_window_ref(task_b_window_layer_id()).expect("could not find task b layer")
 }
 
 static mut TASK_B_WINDOW_LAYER_ID: Option<u32> = None;
@@ -116,6 +115,11 @@ pub extern "C" fn KernelMainNewStack(
         Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
         screen_frame_buffer(),
     );
+    active_layer().activate(
+        Some(task_b_window_layer_id()),
+        layer_manager(),
+        screen_frame_buffer(),
+    );
 
     acpi::global::initialize(acpi_table);
     timer::global::initialize_lapic_timer();
@@ -142,12 +146,12 @@ pub extern "C" fn KernelMainNewStack(
     loop {
         fill_rectangle(
             main_window().writer(),
-            &Vector2D::new(24, 28),
+            &Vector2D::new(20, 4),
             &Vector2D::new(8 * 10, 16),
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
         let tick = unsafe { timer_manager().current_tick_with_lock() };
-        main_window().write_string(24, 28, &format!("{:010}", tick), &COLOR_WHITE);
+        main_window().write_string(20, 4, &format!("{:010}", tick), &COLOR_WHITE);
         layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
@@ -176,22 +180,37 @@ pub extern "C" fn KernelMainNewStack(
             }
             MessageType::KeyPush {
                 modifier: _,
-                keycode: _,
+                keycode,
                 ascii,
             } => {
-                input_text_window(ascii);
-                if ascii == 's' {
-                    let str = task_manager()
-                        .sleep(task_b_id)
-                        .map(|_| "Success".to_string())
-                        .unwrap_or_else(|e| e.to_string());
-                    printk!("sleep taskB: {}\n", str)
-                } else if ascii == 'w' {
-                    let str = task_manager()
-                        .wake_up(task_b_id)
-                        .map(|_| "Success".to_string())
-                        .unwrap_or_else(|e| e.to_string());
-                    printk!("wake up taskB: {}\n", str)
+                let act = active_layer().get_active_layer_id();
+                if act.is_none() {
+                    continue;
+                }
+                let act = act.unwrap();
+
+                if act == text_window_layer_id() {
+                    input_text_window(ascii);
+                } else if act == task_b_window_layer_id() {
+                    if ascii == 's' {
+                        let str = task_manager()
+                            .sleep(task_b_id)
+                            .map(|_| "Success".to_string())
+                            .unwrap_or_else(|e| e.to_string());
+                        printk!("sleep taskB: {}\n", str)
+                    } else if ascii == 'w' {
+                        let str = task_manager()
+                            .wake_up(task_b_id)
+                            .map(|_| "Success".to_string())
+                            .unwrap_or_else(|e| e.to_string());
+                        printk!("wake up taskB: {}\n", str)
+                    }
+                } else {
+                    printk!(
+                        "key push not handles: keycode {}, ascii {}\n",
+                        keycode,
+                        ascii
+                    );
                 }
             }
             MessageType::Layer(l_msg) => {
@@ -209,7 +228,8 @@ pub extern "C" fn KernelMainNewStack(
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    printk!("{}", _info); // Use printk to show the entire message
+    printk!("{}\n", _info); // Use printk to show the entire message
+    printk!("{:?}", _info.location().unwrap()); // Use printk to show the entire message
     loop_and_hlt()
 }
 
@@ -229,6 +249,7 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
         screen_size().to_i32_vec2d(),
         layer_manager(),
         screen_frame_buffer(),
+        active_layer(),
     );
 }
 
@@ -252,11 +273,11 @@ extern "x86-interrupt" fn int_handler_lapic_timer(_: *const InterruptFrame) {
 }
 
 fn initialize_main_window() {
-    unsafe { MAIN_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) }
-    main_window().draw_window("hello window");
+    let main_window =
+        Window::new_with_title(160, 52, frame_buffer_config().pixel_format, "Hello Window");
+
     let main_window_layer_id = layer_manager()
-        .new_layer()
-        .set_window(main_window_ref())
+        .new_layer(main_window)
         .set_draggable(true)
         .move_(Vector2D::new(300, 100))
         .id();
@@ -269,23 +290,16 @@ fn initialize_text_window() {
     let win_w = 160;
     let win_h = 52;
 
-    unsafe {
-        TEXT_WINDOW = Some(Window::new(
-            win_w,
-            win_h,
-            frame_buffer_config().pixel_format,
-        ))
-    }
-
-    text_window().draw_window("Text Box Test");
-    text_window().draw_text_box(
-        Vector2D::new(4, 24),
-        Vector2D::new(win_w as i32 - 8, win_h as i32 - 24 - 4),
+    let mut text_window = Window::new_with_title(
+        win_w,
+        win_h,
+        frame_buffer_config().pixel_format,
+        "Text Box Test",
     );
+    text_window.draw_text_box(Vector2D::new(0, 0), text_window.inner_size());
 
     let id = layer_manager()
-        .new_layer()
-        .set_window(text_window())
+        .new_layer(text_window)
         .set_draggable(true)
         .move_(Vector2D::new(350, 200))
         .id();
@@ -300,10 +314,10 @@ fn input_text_window(c: char) {
     }
 
     fn pos() -> Vector2D<i32> {
-        Vector2D::new(8 + 8 * text_window_index(), 24 + 6)
+        Vector2D::new(4 + 8 * text_window_index(), 6)
     }
 
-    let max_chars = (text_window_ref().width() - 16) / 8 - 1;
+    let max_chars = (text_window_ref().inner_size().x - 8) / 8 - 1;
     if c == '\x08' && text_window_index() > 0 {
         draw_text_cursor(false);
         unsafe { TEXT_WINDOW_INDEX -= 1 };
@@ -328,12 +342,11 @@ fn input_text_window(c: char) {
 }
 
 fn initialize_task_b_window() {
-    unsafe { TASK_B_WINDOW = Some(Window::new(160, 52, frame_buffer_config().pixel_format)) };
-    task_b_window().draw_window("TaskB Window");
+    let task_b_window =
+        Window::new_with_title(160, 52, frame_buffer_config().pixel_format, "TaskB Window");
 
     let layer_id = layer_manager()
-        .new_layer()
-        .set_window(task_b_window_ref())
+        .new_layer(task_b_window)
         .set_draggable(true)
         .move_(Vector2D::new(100, 100))
         .id();
@@ -351,13 +364,13 @@ fn task_b(task_id: u64, data: usize) {
     for i in 0.. {
         fill_rectangle(
             task_b_window().writer(),
-            &Vector2D::new(24, 28),
+            &Vector2D::new(20, 4),
             &Vector2D::new(8 * 10, 16),
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
         task_b_window()
             .writer()
-            .write_string(24, 28, format!("{:010}", i).as_str(), &COLOR_WHITE);
+            .write_string(20, 4, format!("{:010}", i).as_str(), &COLOR_WHITE);
         layer_manager().draw_layer_of(task_b_window_layer_id(), screen_frame_buffer());
 
         let message = Message::new(MessageType::Layer(LayerMessage {
@@ -395,7 +408,7 @@ fn task_b(task_id: u64, data: usize) {
 
 fn draw_text_cursor(visible: bool) {
     let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
-    let pos = Vector2D::new(8 + 8 * text_window_index(), 24 + 5);
+    let pos = Vector2D::new(4 + 8 * text_window_index(), 5);
     fill_rectangle(text_window().writer(), &pos, &Vector2D::new(7, 15), color);
 }
 

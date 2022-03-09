@@ -1,6 +1,6 @@
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE};
-use crate::layer::LayerManager;
+use crate::layer::{ActiveLayer, LayerManager};
 use crate::Window;
 use shared::PixelFormat;
 
@@ -8,15 +8,18 @@ pub mod global {
     use super::{draw_mouse_cursor, new_mouse_cursor_window, Mouse};
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
-    use crate::layer::global::{layer_manager, screen_frame_buffer};
+    use crate::layer::global::{
+        active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager,
+        screen_frame_buffer,
+    };
     use crate::Window;
 
-    static mut MOUSE_CURSOR_WINDOW: Option<Window> = None;
     fn mouse_cursor_window() -> &'static mut Window {
-        unsafe { MOUSE_CURSOR_WINDOW.as_mut().unwrap() }
+        get_layer_window_mut(mouse().layer_id).expect("could not find mouse layer")
     }
+
     fn mouse_cursor_window_ref() -> &'static Window {
-        unsafe { MOUSE_CURSOR_WINDOW.as_ref().unwrap() }
+        get_layer_window_ref(mouse().layer_id).expect("could not find mouse layer")
     }
 
     static mut MOUSE: Option<Mouse> = None;
@@ -25,15 +28,10 @@ pub mod global {
     }
 
     pub fn initialize() {
-        unsafe {
-            MOUSE_CURSOR_WINDOW = Some(new_mouse_cursor_window(frame_buffer_config().pixel_format))
-        }
-        draw_mouse_cursor(mouse_cursor_window().writer(), &Vector2D::new(0, 0));
+        let mut window = new_mouse_cursor_window(frame_buffer_config().pixel_format);
+        draw_mouse_cursor(window.writer(), &Vector2D::new(0, 0));
 
-        let mouse_layer_id = layer_manager()
-            .new_layer()
-            .set_window(mouse_cursor_window_ref())
-            .id();
+        let mouse_layer_id = layer_manager().new_layer(window).id();
 
         unsafe { MOUSE = Some(Mouse::new(mouse_layer_id)) };
         mouse().set_position(
@@ -42,6 +40,8 @@ pub mod global {
             screen_frame_buffer(),
         );
         layer_manager().up_down(mouse_layer_id, i32::MAX);
+
+        active_layer().mouser_layer_id = mouse_layer_id;
     }
 }
 
@@ -100,6 +100,7 @@ impl Mouse {
         layout_manager.move_(self.layer_id, self.position, screen_buffer)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn on_interrupt(
         &mut self,
         buttons: u8,
@@ -108,6 +109,7 @@ impl Mouse {
         screen_size: Vector2D<i32>,
         layout_manager: &mut LayerManager,
         screen_frame_buffer: &mut FrameBuffer,
+        active_layer: &mut ActiveLayer,
     ) {
         let new_pos = self.position + Vector2D::new(displacement_x as i32, displacement_y as i32);
         let new_pos = new_pos
@@ -122,12 +124,14 @@ impl Mouse {
         let previous_left_pressed = (self.previous_buttons & 0x01) != 0;
         let left_pressed = (buttons & 0x01) != 0;
         if !previous_left_pressed && left_pressed {
-            let draggable_layer = layout_manager
+            let draggable_layer_id = layout_manager
                 .find_layer_by_position(new_pos, self.layer_id)
-                .filter(|l| l.is_draggable());
-            if let Some(l) = draggable_layer {
-                self.drag_layer_id = Some(l.id());
+                .filter(|l| l.is_draggable())
+                .map(|l| l.id());
+            if let Some(id) = draggable_layer_id {
+                self.drag_layer_id = Some(id);
             }
+            active_layer.activate(draggable_layer_id, layout_manager, screen_frame_buffer);
         } else if previous_left_pressed && left_pressed {
             if let Some(drag_layer_id) = self.drag_layer_id {
                 layout_manager.move_relative(drag_layer_id, pos_diff, screen_frame_buffer);
