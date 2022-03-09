@@ -10,7 +10,7 @@ use shared::{FrameBufferConfig, PixelFormat};
 const TOP_LEFT_MARGIN: Vector2D<i32> = Vector2D::new(4, 24);
 const BOTTOM_RIGHT_MARGIN: Vector2D<i32> = Vector2D::new(4, 4);
 
-pub enum Type {
+enum Type {
     Normal,
     TopLevel { title: String },
 }
