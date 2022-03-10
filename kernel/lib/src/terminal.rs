@@ -114,7 +114,7 @@ impl Terminal {
 
     fn draw_cursor(&mut self, window: &mut Window, visible: bool) {
         let color = if visible { &COLOR_BLACK } else { &COLOR_WHITE };
-        let pos = Vector2D::new(4 + 8 * self.cursor.x, 16 * self.cursor.y);
+        let pos = Vector2D::new(4 + 8 * self.cursor.x, 5 + 16 * self.cursor.y);
         fill_rectangle(window, &pos, &Vector2D::new(7, 15), color);
     }
 }
