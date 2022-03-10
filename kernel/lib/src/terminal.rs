@@ -18,6 +18,7 @@ pub mod global {
 
     pub fn task_terminal(task_id: u64, _: usize) {
         unsafe { asm!("cli") };
+        let current_task_id = task_manager().current_task().id();
         let mut terminal = Terminal::new();
         terminal.initialize(layer_manager(), frame_buffer_config().pixel_format);
         layer_manager().move_(
@@ -34,10 +35,12 @@ pub mod global {
 
         loop {
             unsafe { asm!("cli") };
-            let msg = task_manager().current_task_mut().receive_message();
+            let msg = task_manager()
+                .get_task_mut(current_task_id)
+                .unwrap()
+                .receive_message();
             if msg.is_none() {
-                let task_id = task_manager().current_task().id();
-                task_manager().sleep(task_id).unwrap();
+                task_manager().sleep(current_task_id).unwrap();
                 unsafe { asm!("sti") };
                 continue;
             };
