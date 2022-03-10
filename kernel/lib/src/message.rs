@@ -1,4 +1,4 @@
-use crate::graphics::Vector2D;
+use crate::graphics::{Rectangle, Vector2D};
 
 #[derive(Debug, PartialEq)]
 pub struct Message {
@@ -49,4 +49,5 @@ pub enum LayerOperation {
     Move { pos: Vector2D<i32> },
     MoveRelative { pos: Vector2D<i32> },
     Draw,
+    DrawArea(Rectangle<i32>),
 }

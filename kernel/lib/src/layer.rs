@@ -186,6 +186,14 @@ impl LayerManager {
     }
 
     pub fn draw_layer_of(&mut self, id: u32, screen: &mut FrameBuffer) {
+        self.draw(
+            id,
+            Rectangle::new(Vector2D::new(0, 0), Vector2D::new(-1, -1)),
+            screen,
+        )
+    }
+
+    fn draw(&mut self, id: u32, mut area: Rectangle<i32>, screen: &mut FrameBuffer) {
         let mut draw = false;
         let mut window_area: Rectangle<i32> = Rectangle::default();
         for &layer_id in &self.layer_id_stack {
@@ -195,6 +203,10 @@ impl LayerManager {
             if layer_id == id {
                 window_area.size = layer.window.size().to_i32_vec2d();
                 window_area.pos = layer.position;
+                if area.size.x >= 0 || area.size.y >= 0 {
+                    area.pos += window_area.pos;
+                    window_area = window_area & area;
+                }
                 draw = true
             }
 
@@ -290,6 +302,9 @@ impl LayerManager {
                 self.move_relative(message.layer_id, pos, screen)
             }
             LayerOperation::Draw => self.draw_layer_of(message.layer_id, screen),
+            LayerOperation::DrawArea(area) => {
+                self.draw(message.layer_id, area, screen);
+            }
         }
     }
 
