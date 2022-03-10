@@ -379,7 +379,8 @@ impl ActiveLayer {
                 .unwrap_or_else(|| panic!("no such layer {}", active_layer_id));
             layer.get_window_mut().activate();
             let mouse_height = manager.get_height(self.mouser_layer_id).unwrap_or(-1);
-            manager.up_down(active_layer_id, mouse_height - 1)
+            manager.up_down(active_layer_id, mouse_height - 1);
+            manager.draw_layer_of(active_layer_id, screen);
         }
     }
 }
