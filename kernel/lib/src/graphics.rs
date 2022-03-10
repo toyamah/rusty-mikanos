@@ -321,6 +321,43 @@ fn draw_rectangle<W: PixelWriter>(
     }
 }
 
+pub fn draw_text_box_with_colors<W: PixelWriter>(
+    writer: &mut W,
+    pos: Vector2D<i32>,
+    size: Vector2D<i32>,
+    background: &PixelColor,
+    border_light: &PixelColor,
+    border_dark: &PixelColor,
+) {
+    // fill main box
+    fill_rect(
+        writer,
+        (pos.x + 1, pos.y + 1),
+        (size.x - 2, size.y - 2),
+        background,
+    );
+
+    // draw border lines
+    fill_rect(writer, (pos.x, pos.y), (size.x, 1), border_dark);
+    fill_rect(writer, (pos.x, pos.y), (1, size.y), border_dark);
+    fill_rect(writer, (pos.x, pos.y + size.y), (size.x, 1), border_light);
+    fill_rect(writer, (pos.x + size.x, pos.y), (1, size.y), border_light);
+}
+
+fn fill_rect<W: PixelWriter>(
+    writer: &mut W,
+    pos: (i32, i32),
+    size: (i32, i32),
+    color: &PixelColor,
+) {
+    fill_rectangle(
+        writer,
+        &Vector2D::new(pos.0, pos.1),
+        &Vector2D::new(size.0, size.1),
+        color,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

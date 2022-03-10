@@ -1,6 +1,7 @@
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{
-    fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
+    draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
+    COLOR_BLACK, COLOR_WHITE,
 };
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -25,6 +26,11 @@ pub struct Window {
 }
 
 impl Window {
+    pub const TITLED_WINDOW_MARGIN: Vector2D<i32> = Vector2D::new(
+        TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
+        TOP_LEFT_MARGIN.y - BOTTOM_RIGHT_MARGIN.y,
+    );
+
     pub fn new(width: usize, height: usize, shadow_format: PixelFormat) -> Self {
         Window::_new(width, height, shadow_format, Type::Normal)
     }
@@ -130,19 +136,14 @@ impl Window {
     }
 
     pub fn draw_text_box(&mut self, pos: Vector2D<i32>, size: Vector2D<i32>) {
-        // fill main box
-        fill_rect(
+        draw_text_box_with_colors(
             self,
-            (pos.x + 1, pos.y + 1),
-            (size.x - 2, size.y - 2),
-            0xffffff,
+            pos,
+            size,
+            &COLOR_BLACK,
+            &PixelColor::from(0xc6c6c6),
+            &PixelColor::from(0x848484),
         );
-
-        // draw border lines
-        fill_rect(self, (pos.x, pos.y), (size.x, 1), 0x848484);
-        fill_rect(self, (pos.x, pos.y), (1, size.y), 0x848484);
-        fill_rect(self, (pos.x, pos.y + size.y), (size.x, 1), 0xc6c6c6);
-        fill_rect(self, (pos.x + size.x, pos.y), (1, size.y), 0xc6c6c6);
     }
 
     fn draw_with_transparent_to(
