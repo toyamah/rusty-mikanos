@@ -1,8 +1,9 @@
 use crate::graphics::{
-    draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Vector2D, COLOR_BLACK,
-    COLOR_WHITE,
+    draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
+    COLOR_BLACK, COLOR_WHITE,
 };
 use crate::layer::LayerManager;
+use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::Window;
 use shared::PixelFormat;
 
@@ -52,11 +53,12 @@ pub mod global {
                     timeout: _,
                     value: _,
                 } => {
-                    terminal.blink_cursor(terminal_window(terminal.layer_id).get_window_mut());
+                    let area =
+                        terminal.blink_cursor(terminal_window(terminal.layer_id).get_window_mut());
 
                     let msg = Message::new(MessageType::Layer(LayerMessage {
                         layer_id: terminal.layer_id,
-                        op: LayerOperation::Draw,
+                        op: LayerOperation::DrawArea(area),
                         src_task_id: task_id,
                     }));
                     unsafe { asm!("cli") };
@@ -110,9 +112,15 @@ impl Terminal {
         self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
     }
 
-    fn blink_cursor(&mut self, window: &mut Window) {
+    fn blink_cursor(&mut self, window: &mut Window) -> Rectangle<i32> {
         self.is_cursor_visible = !self.is_cursor_visible;
         self.draw_cursor(window, self.is_cursor_visible);
+
+        Rectangle::new(
+            TITLED_WINDOW_TOP_LEFT_MARGIN
+                + Vector2D::new(4 + 8 * self.cursor.x, 5 + 16 * self.cursor.y),
+            Vector2D::new(7, 15),
+        )
     }
 
     fn draw_cursor(&mut self, window: &mut Window, visible: bool) {

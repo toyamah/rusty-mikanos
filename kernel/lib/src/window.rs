@@ -8,8 +8,8 @@ use alloc::vec::Vec;
 use core::cmp::{max, min};
 use shared::{FrameBufferConfig, PixelFormat};
 
-const TOP_LEFT_MARGIN: Vector2D<i32> = Vector2D::new(4, 24);
-const BOTTOM_RIGHT_MARGIN: Vector2D<i32> = Vector2D::new(4, 4);
+pub const TITLED_WINDOW_TOP_LEFT_MARGIN: Vector2D<i32> = Vector2D::new(4, 24);
+pub const TITLED_WINDOW_BOTTOM_RIGHT_MARGIN: Vector2D<i32> = Vector2D::new(4, 4);
 
 enum Type {
     Normal,
@@ -27,8 +27,8 @@ pub struct Window {
 
 impl Window {
     pub const TITLED_WINDOW_MARGIN: Vector2D<i32> = Vector2D::new(
-        TOP_LEFT_MARGIN.x + BOTTOM_RIGHT_MARGIN.x,
-        TOP_LEFT_MARGIN.y + BOTTOM_RIGHT_MARGIN.y,
+        TITLED_WINDOW_TOP_LEFT_MARGIN.x + TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.x,
+        TITLED_WINDOW_TOP_LEFT_MARGIN.y + TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.y,
     );
 
     pub fn new(width: usize, height: usize, shadow_format: PixelFormat) -> Self {
@@ -130,7 +130,9 @@ impl Window {
         match self.type_ {
             Type::Normal => Vector2D::new(0, 0),
             Type::TopLevel { .. } => {
-                self.size().to_i32_vec2d() - TOP_LEFT_MARGIN - BOTTOM_RIGHT_MARGIN
+                self.size().to_i32_vec2d()
+                    - TITLED_WINDOW_TOP_LEFT_MARGIN
+                    - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN
             }
         }
     }
@@ -256,23 +258,34 @@ impl PixelWriter for Window {
     fn write(&mut self, x: i32, y: i32, color: &PixelColor) {
         match self.type_ {
             Type::Normal => write_w(self, x, y, color),
-            Type::TopLevel { .. } => {
-                write_w(self, x + TOP_LEFT_MARGIN.x, y + TOP_LEFT_MARGIN.y, color)
-            }
+            Type::TopLevel { .. } => write_w(
+                self,
+                x + TITLED_WINDOW_TOP_LEFT_MARGIN.x,
+                y + TITLED_WINDOW_TOP_LEFT_MARGIN.y,
+                color,
+            ),
         }
     }
 
     fn width(&self) -> i32 {
         match self.type_ {
             Type::Normal => self.width as i32,
-            Type::TopLevel { .. } => self.width as i32 - TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
+            Type::TopLevel { .. } => {
+                self.width as i32
+                    - TITLED_WINDOW_TOP_LEFT_MARGIN.x
+                    - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.x
+            }
         }
     }
 
     fn height(&self) -> i32 {
         match self.type_ {
             Type::Normal => self.height as i32,
-            Type::TopLevel { .. } => self.height as i32 - TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
+            Type::TopLevel { .. } => {
+                self.height as i32
+                    - TITLED_WINDOW_TOP_LEFT_MARGIN.x
+                    - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.x
+            }
         }
     }
 }
