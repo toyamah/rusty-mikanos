@@ -27,8 +27,8 @@ pub struct Window {
 
 impl Window {
     pub const TITLED_WINDOW_MARGIN: Vector2D<i32> = Vector2D::new(
-        TOP_LEFT_MARGIN.x - BOTTOM_RIGHT_MARGIN.x,
-        TOP_LEFT_MARGIN.y - BOTTOM_RIGHT_MARGIN.y,
+        TOP_LEFT_MARGIN.x + BOTTOM_RIGHT_MARGIN.x,
+        TOP_LEFT_MARGIN.y + BOTTOM_RIGHT_MARGIN.y,
     );
 
     pub fn new(width: usize, height: usize, shadow_format: PixelFormat) -> Self {
