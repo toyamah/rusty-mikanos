@@ -25,6 +25,7 @@ use lib::layer::global::{
 use lib::message::{LayerMessage, LayerOperation, Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
+use lib::terminal::global::task_terminal;
 use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
 use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
@@ -138,6 +139,11 @@ pub extern "C" fn KernelMainNewStack(
         .init_context(task_b, 45, get_cr3)
         .id();
     task_manager().wake_up(task_b_id).unwrap();
+    let task_terminal_id = task_manager()
+        .new_task()
+        .init_context(task_terminal, 0, get_cr3)
+        .id();
+    task_manager().wake_up(task_terminal_id).unwrap();
 
     usb::global::initialize();
     usb::register_keyboard_observer(keyboard_observer);
@@ -176,6 +182,12 @@ pub extern "C" fn KernelMainNewStack(
                     text_box_cursor_visible = !text_box_cursor_visible;
                     draw_text_cursor(text_box_cursor_visible);
                     layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
+
+                    unsafe { asm!("cli") };
+                    task_manager()
+                        .send_message(task_terminal_id, message)
+                        .unwrap();
+                    unsafe { asm!("sti") };
                 }
             }
             MessageType::KeyPush {
@@ -301,7 +313,7 @@ fn initialize_text_window() {
     let id = layer_manager()
         .new_layer(text_window)
         .set_draggable(true)
-        .move_(Vector2D::new(350, 200))
+        .move_(Vector2D::new(500, 100))
         .id();
     unsafe { TEXT_WINDOW_LAYER_ID = Some(id) };
 

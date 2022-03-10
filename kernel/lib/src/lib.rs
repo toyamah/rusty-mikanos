@@ -22,6 +22,7 @@ pub mod paging;
 pub mod pci;
 pub mod segment;
 pub mod task;
+pub mod terminal;
 pub mod timer;
 pub mod window;
 mod x86_descriptor;
