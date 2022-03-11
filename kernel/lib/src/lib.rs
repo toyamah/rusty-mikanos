@@ -1,5 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(dead_code)]
+#![feature(const_btree_new)]
 
 extern crate alloc;
 

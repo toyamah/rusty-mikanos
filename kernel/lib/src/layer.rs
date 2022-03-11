@@ -16,6 +16,7 @@ pub mod global {
     use crate::graphics::{draw_desktop, Vector2D};
     use crate::layer::ActiveLayer;
     use crate::Window;
+    use alloc::collections::BTreeMap;
 
     static mut BG_LAYER_ID: u32 = u32::MAX;
 
@@ -35,6 +36,11 @@ pub mod global {
     static mut ACTIVE_LAYER: ActiveLayer = ActiveLayer::new();
     pub fn active_layer() -> &'static mut ActiveLayer {
         unsafe { &mut ACTIVE_LAYER }
+    }
+
+    static mut LAYER_TASK_MAP: BTreeMap<u32, u64> = BTreeMap::new();
+    pub fn layer_task_map() -> &'static mut BTreeMap<u32, u64> {
+        unsafe { &mut LAYER_TASK_MAP }
     }
 
     pub fn bg_window() -> &'static mut Window {

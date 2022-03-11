@@ -6,17 +6,18 @@ use crate::graphics::{
 use crate::layer::LayerManager;
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::Window;
+use alloc::string::String;
 use log::warn;
 use shared::PixelFormat;
 
 pub mod global {
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
-    use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
-    use crate::layer::Layer;
+    use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
     use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
     use crate::task::global::task_manager;
     use crate::terminal::Terminal;
+    use crate::Window;
     use core::arch::asm;
 
     pub fn task_terminal(task_id: u64, _: usize) {
@@ -34,6 +35,7 @@ pub mod global {
             layer_manager(),
             screen_frame_buffer(),
         );
+        layer_task_map().insert(terminal.layer_id, task_id);
         unsafe { asm!("sti") };
 
         loop {
@@ -55,8 +57,7 @@ pub mod global {
                     timeout: _,
                     value: _,
                 } => {
-                    let area =
-                        terminal.blink_cursor(terminal_window(terminal.layer_id).get_window_mut());
+                    let area = terminal.blink_cursor(terminal_window(terminal.layer_id));
 
                     let msg = Message::new(MessageType::Layer(LayerMessage {
                         layer_id: terminal.layer_id,
@@ -69,17 +70,39 @@ pub mod global {
                         .unwrap();
                     unsafe { asm!("sti") };
                 }
-                MessageType::KeyPush { .. } => {}
+                MessageType::KeyPush {
+                    modifier,
+                    keycode,
+                    ascii,
+                } => {
+                    let area = terminal.input_key(
+                        modifier,
+                        keycode,
+                        ascii,
+                        terminal_window(terminal.layer_id),
+                    );
+                    let msg = Message::new(MessageType::Layer(LayerMessage {
+                        layer_id: terminal.layer_id,
+                        op: LayerOperation::DrawArea(area),
+                        src_task_id: task_id,
+                    }));
+                    unsafe { asm!("cli") };
+                    task_manager()
+                        .send_message(task_manager().main_task().id(), msg)
+                        .unwrap();
+                    unsafe { asm!("sti") };
+                }
                 MessageType::Layer(_) => {}
                 MessageType::LayerFinish => {}
             }
         }
     }
 
-    fn terminal_window(terminal_layer_id: u32) -> &'static mut Layer {
+    fn terminal_window(terminal_layer_id: u32) -> &'static mut Window {
         layer_manager()
             .get_layer_mut(terminal_layer_id)
             .expect("couldn't find terminal window")
+            .get_window_mut()
     }
 }
 
@@ -137,8 +160,8 @@ impl Terminal {
 
     fn input_key(
         &mut self,
-        modifier: u8,
-        keycode: u8,
+        _modifier: u8,
+        _keycode: u8,
         ascii: char,
         window: &mut Window,
     ) -> Rectangle<i32> {
@@ -151,7 +174,7 @@ impl Terminal {
                 self.line_buf[self.line_buf_index as usize] = '\x00';
                 self.line_buf_index = 0;
                 self.cursor.x = 0;
-                warn!("line = {}", self.line_buf[0]);
+                warn!("line = {}", self.line_buf.iter().collect::<String>());
                 if self.cursor.y < ROWS as i32 - 1 {
                     self.cursor.y += 1;
                 } else {
