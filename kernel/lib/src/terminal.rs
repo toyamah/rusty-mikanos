@@ -122,18 +122,17 @@ impl Terminal {
     fn blink_cursor(&mut self, window: &mut Window) -> Rectangle<i32> {
         self.is_cursor_visible = !self.is_cursor_visible;
         self.draw_cursor(window, self.is_cursor_visible);
-
-        Rectangle::new(
-            TITLED_WINDOW_TOP_LEFT_MARGIN
-                + Vector2D::new(4 + 8 * self.cursor.x, 5 + 16 * self.cursor.y),
-            Vector2D::new(7, 15),
-        )
+        Rectangle::new(self.calc_cursor_pos(), Vector2D::new(7, 15))
     }
 
     fn draw_cursor(&mut self, window: &mut Window, visible: bool) {
         let color = if visible { &COLOR_BLACK } else { &COLOR_WHITE };
-        let pos = Vector2D::new(4 + 8 * self.cursor.x, 5 + 16 * self.cursor.y);
-        fill_rectangle(window, &pos, &Vector2D::new(7, 15), color);
+        fill_rectangle(
+            &mut window.normal_window_writer(),
+            &self.calc_cursor_pos(),
+            &Vector2D::new(7, 15),
+            color,
+        );
     }
 
     fn input_key(
