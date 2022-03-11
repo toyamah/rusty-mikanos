@@ -180,7 +180,7 @@ impl Window {
 
     /// Official TopLevelWindow sometimes uses Writer() which is a WindowWriter not an InnerAreaWriter.
     /// This method can be used where the official code uses TopLevelWindow.Writer().
-    fn normal_window_writer(&mut self) -> WindowWriter {
+    pub fn normal_window_writer(&mut self) -> WindowWriter {
         WindowWriter { w: self }
     }
 }
@@ -290,7 +290,7 @@ impl PixelWriter for Window {
     }
 }
 
-struct WindowWriter<'a> {
+pub struct WindowWriter<'a> {
     w: &'a mut Window,
 }
 
