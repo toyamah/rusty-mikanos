@@ -124,7 +124,7 @@ impl Terminal {
     }
 
     fn draw_cursor(&mut self, window: &mut Window, visible: bool) {
-        let color = if visible { &COLOR_BLACK } else { &COLOR_WHITE };
+        let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
         let pos = Vector2D::new(4 + 8 * self.cursor.x, 5 + 16 * self.cursor.y);
         fill_rectangle(window, &pos, &Vector2D::new(7, 15), color);
     }
@@ -135,7 +135,7 @@ fn draw_terminal<W: PixelWriter>(w: &mut W, pos: Vector2D<i32>, size: Vector2D<i
         w,
         pos,
         size,
-        &COLOR_WHITE,
+        &COLOR_BLACK,
         &PixelColor::from(0xc6c6c6),
         &PixelColor::from(0x848484),
     );
