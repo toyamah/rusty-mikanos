@@ -175,7 +175,7 @@ impl Terminal {
                 if self.cursor.y < ROWS as i32 - 1 {
                     self.cursor.y += 1;
                 } else {
-                    self.scroll(window);
+                    self.scroll1(window);
                 }
                 draw_area.pos = TITLED_WINDOW_TOP_LEFT_MARGIN;
                 draw_area.size = window.inner_size();
@@ -218,7 +218,7 @@ impl Terminal {
         TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4 + 8 * self.cursor.x, 4 + 16 * self.cursor.y)
     }
 
-    fn scroll(&mut self, window: &mut Window) {
+    fn scroll1(&mut self, window: &mut Window) {
         let move_src = Rectangle::new(
             TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4 + 16),
             Vector2D::new(8 * COLUMNS as i32, 16 * (ROWS as i32 - 1)),
