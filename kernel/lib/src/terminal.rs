@@ -114,7 +114,6 @@ struct Terminal {
     layer_id: u32,
     cursor: Vector2D<i32>,
     is_cursor_visible: bool,
-    line_buf_index: i32,
     line_buf: String,
 }
 
@@ -124,7 +123,6 @@ impl Terminal {
             layer_id: u32::MAX,
             cursor: Vector2D::new(0, 0),
             is_cursor_visible: false,
-            line_buf_index: 0,
             line_buf: String::with_capacity(LINE_MAX),
         }
     }
@@ -172,7 +170,6 @@ impl Terminal {
         match ascii {
             '\n' => {
                 warn!("line = {}", self.line_buf);
-                self.line_buf_index = 0;
                 self.cursor.x = 0;
                 self.line_buf.clear();
                 if self.cursor.y < ROWS as i32 - 1 {
@@ -194,17 +191,12 @@ impl Terminal {
                         &COLOR_BLACK,
                     );
                     draw_area.pos = self.calc_cursor_pos();
-
-                    if self.line_buf_index > 0 {
-                        self.line_buf_index -= 1;
-                    }
                 }
             }
             '\x00' => {}
             _ => {
-                if self.cursor.x < COLUMNS as i32 - 1 && self.line_buf_index < LINE_MAX as i32 - 1 {
+                if self.cursor.x < COLUMNS as i32 - 1 && self.line_buf.len() < LINE_MAX {
                     self.line_buf.push(ascii);
-                    self.line_buf_index += 1;
                     let pos = self.calc_cursor_pos();
                     write_ascii(
                         &mut window.normal_window_writer(),
