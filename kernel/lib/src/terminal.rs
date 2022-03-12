@@ -180,6 +180,8 @@ impl Terminal {
                 } else {
                     self.scroll(window);
                 }
+                draw_area.pos = TITLED_WINDOW_TOP_LEFT_MARGIN;
+                draw_area.size = window.inner_size();
             }
             '\x08' => {
                 if self.cursor.x > 0 {
@@ -188,7 +190,7 @@ impl Terminal {
                         &mut window.normal_window_writer(),
                         &self.calc_cursor_pos(),
                         &Vector2D::new(8, 16),
-                        &COLOR_WHITE,
+                        &COLOR_BLACK,
                     );
                     draw_area.pos = self.calc_cursor_pos();
 
@@ -208,7 +210,7 @@ impl Terminal {
                         pos.x,
                         pos.y,
                         ascii,
-                        &COLOR_BLACK,
+                        &COLOR_WHITE,
                     );
                     self.cursor.x += 1;
                 }
@@ -216,7 +218,6 @@ impl Terminal {
         }
 
         self.draw_cursor(window, true);
-
         draw_area
     }
 
@@ -229,7 +230,6 @@ impl Terminal {
             TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4 + 16),
             Vector2D::new(8 * COLUMNS as i32, 16 * (ROWS as i32 - 1)),
         );
-
         window.move_(
             TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4),
             &move_src,
@@ -238,7 +238,7 @@ impl Terminal {
             window,
             &Vector2D::new(4, 4 + 16 * self.cursor.y),
             &Vector2D::new(8 * COLUMNS as i32, 16),
-            &COLOR_WHITE,
+            &COLOR_BLACK,
         );
     }
 }
