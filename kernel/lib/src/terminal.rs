@@ -261,6 +261,12 @@ impl Terminal {
                 );
                 self.cursor = Vector2D::new(0, 0);
             }
+            "lspci" => {
+                // comment out because of referencing a global variable
+                // for device in devices() {
+                //     self.print(format!("{}\n", device).as_str(), w);
+                // }
+            }
             _ => {
                 self.print("no such command: ", w);
                 self.print(command, w);
