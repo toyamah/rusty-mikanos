@@ -115,7 +115,7 @@ struct Terminal {
     cursor: Vector2D<i32>,
     is_cursor_visible: bool,
     line_buf_index: i32,
-    line_buf: [char; LINE_MAX],
+    line_buf: String,
 }
 
 impl Terminal {
@@ -125,7 +125,7 @@ impl Terminal {
             cursor: Vector2D::new(0, 0),
             is_cursor_visible: false,
             line_buf_index: 0,
-            line_buf: ['\x00'; LINE_MAX],
+            line_buf: String::with_capacity(LINE_MAX),
         }
     }
 
@@ -171,10 +171,10 @@ impl Terminal {
 
         match ascii {
             '\n' => {
-                self.line_buf[self.line_buf_index as usize] = '\x00';
+                warn!("line = {}", self.line_buf);
                 self.line_buf_index = 0;
                 self.cursor.x = 0;
-                warn!("line = {}", self.line_buf.iter().collect::<String>());
+                self.line_buf.clear();
                 if self.cursor.y < ROWS as i32 - 1 {
                     self.cursor.y += 1;
                 } else {
@@ -186,6 +186,7 @@ impl Terminal {
             '\x08' => {
                 if self.cursor.x > 0 {
                     self.cursor.x -= 1;
+                    self.line_buf.pop().expect("could not pop from line_buf");
                     fill_rectangle(
                         &mut window.normal_window_writer(),
                         &self.calc_cursor_pos(),
@@ -202,7 +203,7 @@ impl Terminal {
             '\x00' => {}
             _ => {
                 if self.cursor.x < COLUMNS as i32 - 1 && self.line_buf_index < LINE_MAX as i32 - 1 {
-                    self.line_buf[self.line_buf_index as usize] = ascii;
+                    self.line_buf.push(ascii);
                     self.line_buf_index += 1;
                     let pos = self.calc_cursor_pos();
                     write_ascii(
