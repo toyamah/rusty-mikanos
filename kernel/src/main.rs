@@ -157,7 +157,7 @@ pub extern "C" fn KernelMainNewStack(
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
         let tick = unsafe { timer_manager().current_tick_with_lock() };
-        main_window().write_string(20, 4, &format!("{:010}", tick), &COLOR_WHITE);
+        main_window().write_string(20, 4, &format!("{:010}", tick), &COLOR_BLACK);
         layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
@@ -419,7 +419,7 @@ fn task_b(task_id: u64, data: usize) {
 }
 
 fn draw_text_cursor(visible: bool) {
-    let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
+    let color = if visible { &COLOR_BLACK } else { &COLOR_WHITE };
     let pos = Vector2D::new(4 + 8 * text_window_index(), 5);
     fill_rectangle(text_window().writer(), &pos, &Vector2D::new(7, 15), color);
 }

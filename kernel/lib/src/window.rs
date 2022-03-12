@@ -142,7 +142,7 @@ impl Window {
             self,
             pos,
             size,
-            &COLOR_BLACK,
+            &COLOR_WHITE,
             &PixelColor::from(0xc6c6c6),
             &PixelColor::from(0x848484),
         );
@@ -235,10 +235,10 @@ fn draw_window_title<W: PixelWriter>(writer: &mut W, title: &str, is_active: boo
     for (y, &str) in CLOSE_BUTTON.iter().enumerate() {
         for (x, char) in str.chars().enumerate() {
             let color = match char {
-                '@' => &COLOR_WHITE,
+                '@' => &COLOR_BLACK,
                 '$' => &COLOR_848484,
                 ':' => &COLOR_C6C6C6,
-                _ => &COLOR_BLACK,
+                _ => &COLOR_WHITE,
             };
             writer.write(
                 win_w - 5 - str.len() as i32 + x as i32,

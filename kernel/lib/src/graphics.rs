@@ -4,19 +4,19 @@ use core::fmt::Debug;
 use core::ops::{Add, AddAssign, BitAnd, Sub};
 use shared::{FrameBufferConfig, PixelFormat};
 
-pub const COLOR_BLACK: PixelColor = PixelColor {
+pub const COLOR_BLACK: PixelColor = PixelColor { r: 0, g: 0, b: 0 };
+pub const COLOR_WHITE: PixelColor = PixelColor {
     r: 255,
     g: 255,
     b: 255,
 };
-pub const COLOR_WHITE: PixelColor = PixelColor { r: 0, g: 0, b: 0 };
 
 pub const DESKTOP_BG_COLOR: PixelColor = PixelColor {
     r: 45,
     g: 118,
     b: 237,
 };
-pub const DESKTOP_FG_COLOR: PixelColor = COLOR_BLACK;
+pub const DESKTOP_FG_COLOR: PixelColor = COLOR_WHITE;
 
 pub mod global {
     use super::{draw_desktop, FrameBufferWriter, Vector2D};
@@ -241,18 +241,18 @@ impl FrameBufferWriter {
     fn write_rgb(&self, x: i32, y: i32, color: &PixelColor) {
         let p = self.pixel_at(x, y);
         unsafe {
-            *p.offset(0) = color.r;
-            *p.offset(1) = color.g;
-            *p.offset(2) = color.b;
+            *p.add(0) = color.r;
+            *p.add(1) = color.g;
+            *p.add(2) = color.b;
         }
     }
 
     fn write_bgr(&self, x: i32, y: i32, color: &PixelColor) {
         let p = self.pixel_at(x, y);
         unsafe {
-            *p.offset(0) = color.b;
-            *p.offset(1) = color.g;
-            *p.offset(2) = color.r;
+            *p.add(0) = color.b;
+            *p.add(1) = color.g;
+            *p.add(2) = color.r;
         }
     }
 

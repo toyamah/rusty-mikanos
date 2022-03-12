@@ -150,8 +150,8 @@ pub fn draw_mouse_cursor(writer: &mut Window, position: &Vector2D<i32>) {
     for (dy, row) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
         for (dx, char) in row.chars().enumerate() {
             let color = match char {
-                '@' => &COLOR_WHITE,
-                '.' => &COLOR_BLACK,
+                '@' => &COLOR_BLACK,
+                '.' => &COLOR_WHITE,
                 _ => &MOUSE_TRANSPARENT_COLOR,
             };
             writer.write(position.x + dx as i32, position.y + dy as i32, color);
