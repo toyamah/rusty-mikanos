@@ -252,6 +252,15 @@ impl Terminal {
                 }
                 self.print("\n", w);
             }
+            "clear" => {
+                fill_rectangle(
+                    w,
+                    &Vector2D::new(4, 4),
+                    &Vector2D::new(8 * COLUMNS as i32, 16 * ROWS as i32),
+                    &COLOR_BLACK,
+                );
+                self.cursor = Vector2D::new(0, 0);
+            }
             _ => {
                 self.print("no such command: ", w);
                 self.print(command, w);
