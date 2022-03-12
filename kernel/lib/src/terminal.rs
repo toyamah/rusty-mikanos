@@ -260,23 +260,23 @@ impl Terminal {
         }
     }
 
-    fn print(&mut self, s: &str, window: &mut Window) {
-        self.draw_cursor(window, false);
+    fn print(&mut self, s: &str, w: &mut Window) {
+        self.draw_cursor(w, false);
 
         for char in s.chars() {
             match char {
-                '\n' => self.new_line(window),
+                '\n' => self.new_line(w),
                 _ => {
                     let pos = self.calc_cursor_pos();
                     write_ascii(
-                        &mut window.normal_window_writer(),
+                        &mut w.normal_window_writer(),
                         pos.x,
                         pos.y,
                         char,
                         &COLOR_WHITE,
                     );
                     if self.cursor.x == COLUMNS as i32 - 1 {
-                        self.new_line(window);
+                        self.new_line(w);
                     } else {
                         self.cursor.x += 1;
                     }
@@ -284,15 +284,15 @@ impl Terminal {
             }
         }
 
-        self.draw_cursor(window, false);
+        self.draw_cursor(w, false);
     }
 
-    fn new_line(&mut self, window: &mut Window) {
+    fn new_line(&mut self, w: &mut Window) {
         self.cursor.x = 0;
         if self.cursor.y < ROWS as i32 - 1 {
             self.cursor.y += 1;
         } else {
-            self.scroll1(window)
+            self.scroll1(w)
         }
     }
 }
