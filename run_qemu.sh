@@ -14,8 +14,8 @@ build_and_run() {
   # run clippy instead of run on Github Actions because setting up the environment is bothersome.
   cargo clippy -- -Dwarnings
 
-#  cargo build --release # build in release mode to optimize code
-  cargo build # build in release mode to optimize code
+  cargo build --release # build in release mode to optimize code
+#  cargo build
 
   cd ~/edk2
   unlink MikanLoaderPkg
