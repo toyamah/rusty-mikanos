@@ -137,6 +137,7 @@ impl Terminal {
 
         let inner_size = window.inner_size();
         draw_terminal(&mut window, Vector2D::new(0, 0), inner_size);
+        self.print(">", &mut window);
         self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
     }
 
@@ -233,6 +234,42 @@ impl Terminal {
             &Vector2D::new(8 * COLUMNS as i32, 16),
             &COLOR_BLACK,
         );
+    }
+
+    fn print(&mut self, s: &str, window: &mut Window) {
+        self.draw_cursor(window, false);
+
+        for char in s.chars() {
+            match char {
+                '\n' => self.new_line(window),
+                _ => {
+                    let pos = self.calc_cursor_pos();
+                    write_ascii(
+                        &mut window.normal_window_writer(),
+                        pos.x,
+                        pos.y,
+                        char,
+                        &COLOR_WHITE,
+                    );
+                    if self.cursor.x == COLUMNS as i32 - 1 {
+                        self.new_line(window);
+                    } else {
+                        self.cursor.x += 1;
+                    }
+                }
+            }
+        }
+
+        self.draw_cursor(window, false);
+    }
+
+    fn new_line(&mut self, window: &mut Window) {
+        self.cursor.x = 0;
+        if self.cursor.y < ROWS as i32 - 1 {
+            self.cursor.y += 1;
+        } else {
+            self.scroll1(window)
+        }
     }
 }
 
