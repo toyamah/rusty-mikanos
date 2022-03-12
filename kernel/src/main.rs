@@ -20,7 +20,8 @@ use lib::graphics::{
 use lib::interrupt::global::{initialize_interrupt, notify_end_of_interrupt};
 use lib::interrupt::InterruptFrame;
 use lib::layer::global::{
-    active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager, screen_frame_buffer,
+    active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager, layer_task_map,
+    screen_frame_buffer,
 };
 use lib::message::{LayerMessage, LayerOperation, Message, MessageType};
 use lib::mouse::global::mouse;
@@ -218,11 +219,20 @@ pub extern "C" fn KernelMainNewStack(
                         printk!("wake up taskB: {}\n", str)
                     }
                 } else {
-                    printk!(
-                        "key push not handles: keycode {}, ascii {}\n",
-                        keycode,
-                        ascii
-                    );
+                    unsafe { asm!("cli") };
+                    let task_id = layer_task_map().get(&act);
+                    unsafe { asm!("sti") };
+                    if let Some(&task_id) = task_id {
+                        unsafe { asm!("cli") };
+                        task_manager().send_message(task_id, message).unwrap();
+                        unsafe { asm!("sti") };
+                    } else {
+                        printk!(
+                            "key push not handles: keycode {}, ascii {}\n",
+                            keycode,
+                            ascii
+                        );
+                    }
                 }
             }
             MessageType::Layer(l_msg) => {

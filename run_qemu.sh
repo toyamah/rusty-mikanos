@@ -15,6 +15,7 @@ build_and_run() {
   cargo clippy -- -Dwarnings
 
   cargo build --release # build in release mode to optimize code
+#  cargo build
 
   cd ~/edk2
   unlink MikanLoaderPkg
