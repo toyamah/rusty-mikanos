@@ -6,8 +6,10 @@ use crate::graphics::{
 use crate::layer::LayerManager;
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::Window;
+use alloc::collections::VecDeque;
 use alloc::string::String;
-use log::warn;
+use alloc::vec::Vec;
+use core::mem;
 use shared::PixelFormat;
 
 pub mod global {
@@ -170,21 +172,20 @@ impl Terminal {
 
         match ascii {
             '\n' => {
-                warn!("line = {}", self.line_buf);
                 self.cursor.x = 0;
-                self.line_buf.clear();
                 if self.cursor.y < ROWS as i32 - 1 {
                     self.cursor.y += 1;
                 } else {
                     self.scroll1(window);
                 }
+                self.execute_line(window);
+                self.print(">", window);
                 draw_area.pos = TITLED_WINDOW_TOP_LEFT_MARGIN;
                 draw_area.size = window.inner_size();
             }
             '\x08' => {
-                if self.cursor.x > 0 {
+                if self.line_buf.pop().is_some() {
                     self.cursor.x -= 1;
-                    self.line_buf.pop().expect("could not pop from line_buf");
                     fill_rectangle(
                         &mut window.normal_window_writer(),
                         &self.calc_cursor_pos(),
@@ -236,6 +237,29 @@ impl Terminal {
         );
     }
 
+    fn execute_line(&mut self, w: &mut Window) {
+        let line_buf = mem::take(&mut self.line_buf);
+        let command = parse_command(line_buf.as_str());
+        if command.is_none() {
+            return;
+        }
+        let (command, args) = command.unwrap();
+
+        match command {
+            "echo" => {
+                if let Some(&arg) = args.get(0) {
+                    self.print(arg, w);
+                }
+                self.print("\n", w);
+            }
+            _ => {
+                self.print("no such command: ", w);
+                self.print(command, w);
+                self.print("\n", w);
+            }
+        }
+    }
+
     fn print(&mut self, s: &str, window: &mut Window) {
         self.draw_cursor(window, false);
 
@@ -282,4 +306,43 @@ fn draw_terminal<W: PixelWriter>(w: &mut W, pos: Vector2D<i32>, size: Vector2D<i
         &PixelColor::from(0xc6c6c6),
         &PixelColor::from(0x848484),
     );
+}
+
+fn parse_command(s: &str) -> Option<(&str, Vec<&str>)> {
+    let mut parsed = s.trim().split_whitespace().collect::<VecDeque<_>>();
+    if parsed.is_empty() {
+        return None;
+    }
+
+    let command = parsed.pop_front().unwrap();
+    Some((command, Vec::from(parsed)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+
+    #[test]
+    fn parse_command_empty() {
+        assert_eq!(parse_command(""), None);
+    }
+
+    #[test]
+    fn parse_command_no_args() {
+        assert_eq!(parse_command("echo"), Some(("echo", Vec::new())));
+    }
+
+    #[test]
+    fn parse_command_one_arg() {
+        assert_eq!(parse_command("echo a\\aa"), Some(("echo", vec!["a\\aa"])));
+    }
+
+    #[test]
+    fn parse_command_args() {
+        assert_eq!(
+            parse_command("ls -l | sort"),
+            Some(("ls", vec!["-l", "|", "sort"]))
+        );
+    }
 }
