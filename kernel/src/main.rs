@@ -8,7 +8,6 @@ extern crate alloc;
 
 use crate::usb::global::xhci_controller;
 use alloc::format;
-use alloc::string::ToString;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
@@ -23,7 +22,7 @@ use lib::layer::global::{
     active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager, layer_task_map,
     screen_frame_buffer,
 };
-use lib::message::{LayerMessage, LayerOperation, Message, MessageType};
+use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
 use lib::terminal::global::task_terminal;
@@ -70,18 +69,6 @@ fn text_window_index() -> i32 {
     unsafe { TEXT_WINDOW_INDEX }
 }
 
-fn task_b_window() -> &'static mut Window {
-    get_layer_window_mut(task_b_window_layer_id()).expect("could not find task b layer")
-}
-fn task_b_window_ref() -> &'static Window {
-    get_layer_window_ref(task_b_window_layer_id()).expect("could not find task b layer")
-}
-
-static mut TASK_B_WINDOW_LAYER_ID: Option<u32> = None;
-fn task_b_window_layer_id() -> u32 {
-    unsafe { TASK_B_WINDOW_LAYER_ID.unwrap() }
-}
-
 #[repr(align(16))]
 struct KernelMainStack([u8; 1024 * 1024]);
 
@@ -112,14 +99,8 @@ pub extern "C" fn KernelMainNewStack(
     layer::global::initialize();
     initialize_main_window();
     initialize_text_window();
-    initialize_task_b_window();
     layer_manager().draw_on(
         Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
-        screen_frame_buffer(),
-    );
-    active_layer().activate(
-        Some(task_b_window_layer_id()),
-        layer_manager(),
         screen_frame_buffer(),
     );
 
@@ -135,11 +116,6 @@ pub extern "C" fn KernelMainNewStack(
 
     task::global::initialize();
     let main_task_id = task_manager().main_task_mut().id();
-    let task_b_id = task_manager()
-        .new_task()
-        .init_context(task_b, 45, get_cr3)
-        .id();
-    task_manager().wake_up(task_b_id).unwrap();
     let task_terminal_id = task_manager()
         .new_task()
         .init_context(task_terminal, 0, get_cr3)
@@ -204,20 +180,6 @@ pub extern "C" fn KernelMainNewStack(
 
                 if act == text_window_layer_id() {
                     input_text_window(ascii);
-                } else if act == task_b_window_layer_id() {
-                    if ascii == 's' {
-                        let str = task_manager()
-                            .sleep(task_b_id)
-                            .map(|_| "Success".to_string())
-                            .unwrap_or_else(|e| e.to_string());
-                        printk!("sleep taskB: {}\n", str)
-                    } else if ascii == 'w' {
-                        let str = task_manager()
-                            .wake_up(task_b_id)
-                            .map(|_| "Success".to_string())
-                            .unwrap_or_else(|e| e.to_string());
-                        printk!("wake up taskB: {}\n", str)
-                    }
                 } else {
                     unsafe { asm!("cli") };
                     let task_id = layer_task_map().get(&act);
@@ -361,71 +323,6 @@ fn input_text_window(c: char) {
     }
 
     layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
-}
-
-fn initialize_task_b_window() {
-    let task_b_window =
-        Window::new_with_title(160, 52, frame_buffer_config().pixel_format, "TaskB Window");
-
-    let layer_id = layer_manager()
-        .new_layer(task_b_window)
-        .set_draggable(true)
-        .move_(Vector2D::new(100, 100))
-        .id();
-    unsafe { TASK_B_WINDOW_LAYER_ID = Some(layer_id) };
-
-    layer_manager().up_down(layer_id, i32::MAX);
-}
-
-fn task_b(task_id: u64, data: usize) {
-    printk!("TaskB: task_id ={}, data={}\n", task_id, data);
-
-    unsafe { asm!("cli") };
-    let current_task_id = task_manager().current_task().id();
-    unsafe { asm!("sti") };
-    for i in 0.. {
-        fill_rectangle(
-            task_b_window().writer(),
-            &Vector2D::new(20, 4),
-            &Vector2D::new(8 * 10, 16),
-            &PixelColor::new(0xc6, 0xc6, 0xc6),
-        );
-        task_b_window()
-            .writer()
-            .write_string(20, 4, format!("{:010}", i).as_str(), &COLOR_WHITE);
-        layer_manager().draw_layer_of(task_b_window_layer_id(), screen_frame_buffer());
-
-        let message = Message::new(MessageType::Layer(LayerMessage {
-            layer_id: task_b_window_layer_id(),
-            op: LayerOperation::Draw,
-            src_task_id: current_task_id,
-        }));
-        unsafe { asm!("cli") };
-        task_manager()
-            .send_message(task_manager().main_task().id(), message)
-            .unwrap();
-        unsafe { asm!("sti") };
-
-        loop {
-            unsafe { asm!("cli") };
-            let message = task_manager()
-                .get_task_mut(current_task_id)
-                .unwrap()
-                .receive_message();
-            match message {
-                None => {
-                    task_manager().sleep(current_task_id).unwrap();
-                    unsafe { asm!("sti") };
-                    continue;
-                }
-                Some(message) => {
-                    if message.is_layer_finished() {
-                        break;
-                    }
-                }
-            }
-        }
-    }
 }
 
 fn draw_text_cursor(visible: bool) {
