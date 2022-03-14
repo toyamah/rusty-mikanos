@@ -80,6 +80,7 @@ pub extern "C" fn KernelMainNewStack(
     frame_buffer_config_: &'static FrameBufferConfig,
     memory_map: &'static MemoryMap,
     acpi_table: &'static Rsdp,
+    volume_image: *const u8,
 ) -> ! {
     let memory_map = *memory_map;
     graphics::global::initialize(*frame_buffer_config_);
@@ -125,6 +126,22 @@ pub extern "C" fn KernelMainNewStack(
     usb::global::initialize();
     usb::register_keyboard_observer(keyboard_observer);
     mouse::global::initialize();
+
+    printk!("Volume Image:\n");
+    let mut p = volume_image;
+    for i in 0..16 {
+        printk!("{:04}", i * 16);
+        for _ in 0..8 {
+            unsafe { printk!(" {:02x}", *p) };
+            p = unsafe { p.add(1) };
+        }
+        printk!(" ");
+        for _ in 0..8 {
+            unsafe { printk!(" {:02x}", *p) };
+            p = unsafe { p.add(1) };
+        }
+        printk!("\n");
+    }
 
     loop {
         fill_rectangle(
