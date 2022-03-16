@@ -9,13 +9,12 @@ pub mod global {
     }
 
     pub fn initialize(volume_image: *const u8) {
-        let bpb = unsafe { (volume_image as *const u8 as *const Bpb).as_ref().unwrap() };
+        let bpb = unsafe { (volume_image as *const Bpb).as_ref().unwrap() };
         unsafe { BOOT_VOLUME_IMAGE = Some(bpb) };
     }
 }
 
-#[derive(Debug)]
-#[repr(C)]
+#[repr(packed)]
 pub struct Bpb {
     jump_boot: [u8; 3],
     oem_name: [u8; 8],
@@ -49,6 +48,7 @@ pub struct Bpb {
 impl Bpb {
     pub fn root_dir_entries(&self) -> &[DirectoryEntry] {
         let size = self.get_entries_per_cluster();
+
         unsafe {
             let data = self.get_cluster_addr(self.root_cluster as u64);
             slice::from_raw_parts(data.cast(), size)
@@ -60,17 +60,18 @@ impl Bpb {
             * self.sectors_per_cluster as usize
     }
 
-    fn get_cluster_addr(&self, cluster: u64) -> *const u32 {
+    fn get_cluster_addr(&self, cluster: u64) -> *const u8 {
         let sector_num = self.reserved_sector_count as u64
             + self.num_fats as u64 * self.fat_size_32 as u64
             + (cluster - 2) * self.sectors_per_cluster as u64;
 
         let offset = (sector_num * self.bytes_per_sector as u64) as usize;
-        unsafe { (self as *const _ as *const u32).add(offset) }
+        unsafe { (self as *const _ as *const u8).add(offset) }
     }
 }
 
 #[derive(Debug, Eq, PartialEq)]
+#[repr(C)]
 pub enum Attribute {
     ReadOnly = 0x01,
     Hidden = 0x02,
@@ -81,10 +82,11 @@ pub enum Attribute {
     LongName = 0x0f,
 }
 
-#[repr(C)]
+#[repr(packed)]
 pub struct DirectoryEntry {
     name: [u8; 11],
-    pub attr: Attribute,
+    // pub attr: Attribute,
+    pub attr: u8,
     ntres: u8,
     create_time_tenth: u8,
     create_time: u16,
@@ -94,7 +96,7 @@ pub struct DirectoryEntry {
     write_time: u16,
     write_date: u16,
     first_cluster_low: u16,
-    file_size: u16,
+    file_size: u32,
 }
 
 impl DirectoryEntry {
@@ -102,28 +104,27 @@ impl DirectoryEntry {
         self.first_cluster_low as u32 | (self.first_cluster_high as u32) << 16
     }
 
-    pub fn read_name(&self) -> ([u8; 9], [u8; 4]) {
-        let mut base = [0; 9];
+    pub fn base(&self) -> [u8; 8] {
+        let mut base = [0; 8];
         base.copy_from_slice(&self.name[..8]);
-        base[8] = 0;
-
-        for i in (0..7).rev() {
-            if base[i] == 0x20 {
+        for i in (0..base.len()).rev() {
+            if base[i] != 0x20 {
                 break;
             }
             base[i] = 0;
         }
+        base
+    }
 
-        let mut ext = [0; 4];
+    pub fn ext(&self) -> [u8; 3] {
+        let mut ext = [0; 3];
         ext.copy_from_slice(&self.name[8..]);
-        ext[3] = 0;
-        for i in (0..2).rev() {
-            if ext[i] == 0x20 {
+        for i in (0..ext.len()).rev() {
+            if ext[i] != 0x20 {
                 break;
             }
             ext[i] = 0;
         }
-
-        (base, ext)
+        ext
     }
 }

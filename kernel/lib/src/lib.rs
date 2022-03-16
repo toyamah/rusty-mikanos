@@ -9,7 +9,7 @@ pub mod acpi;
 pub mod asm;
 pub mod console;
 pub mod error;
-mod fat;
+pub mod fat;
 mod font;
 pub mod frame_buffer;
 pub mod graphics;

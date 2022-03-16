@@ -5,8 +5,9 @@ use crate::graphics::{
 };
 use crate::layer::LayerManager;
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
-use crate::Window;
+use crate::{fat, Window};
 use alloc::collections::VecDeque;
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::mem;
@@ -278,6 +279,33 @@ impl Terminal {
                 //     self.print(format!("{}\n", device).as_str(), w);
                 // }
             }
+            "ls" => {
+                let root_dir_entries = fat::global::boot_volume_image().root_dir_entries();
+                for dir in root_dir_entries {
+                    let base = dir.base();
+                    let ext = dir.ext();
+                    if base[0] == 0x00 {
+                        break;
+                    }
+                    if base[0] == 0xe5 {
+                        continue;
+                    }
+                    if dir.attr == 0x0f {
+                        continue;
+                    }
+
+                    let string = if ext[0] != 0 {
+                        format!(
+                            "{}.{}\n",
+                            string_trimming_null(&base),
+                            string_trimming_null(&ext)
+                        )
+                    } else {
+                        format!("{}\n", string_trimming_null(&base))
+                    };
+                    self.print(string.as_str(), w);
+                }
+            }
             _ => {
                 self.print("no such command: ", w);
                 self.print(command, w);
@@ -348,6 +376,15 @@ impl Terminal {
 
         draw_area
     }
+}
+
+fn string_trimming_null(bytes: &[u8]) -> String {
+    let vec: Vec<u8> = bytes
+        .iter()
+        .take_while(|&&v| v != 0x00)
+        .map(|&v| v)
+        .collect();
+    String::from_utf8(vec).unwrap()
 }
 
 enum Direction {
