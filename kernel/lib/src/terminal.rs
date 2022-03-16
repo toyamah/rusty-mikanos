@@ -1,3 +1,4 @@
+use crate::fat::Attribute;
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
@@ -290,7 +291,7 @@ impl Terminal {
                     if base[0] == 0xe5 {
                         continue;
                     }
-                    if dir.attr == 0x0f {
+                    if dir.attr() == Attribute::LongName {
                         continue;
                     }
 

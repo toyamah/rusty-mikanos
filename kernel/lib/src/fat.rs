@@ -71,22 +71,35 @@ impl Bpb {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-#[repr(C)]
 pub enum Attribute {
-    ReadOnly = 0x01,
-    Hidden = 0x02,
-    System = 0x04,
-    VolumeID = 0x08,
-    Directory = 0x10,
-    Archive = 0x20,
-    LongName = 0x0f,
+    ReadOnly,
+    Hidden,
+    System,
+    VolumeID,
+    Directory,
+    Archive,
+    LongName,
+}
+
+impl From<u8> for Attribute {
+    fn from(v: u8) -> Self {
+        match v {
+            0x01 => Attribute::ReadOnly,
+            0x02 => Attribute::Hidden,
+            0x04 => Attribute::System,
+            0x08 => Attribute::VolumeID,
+            0x10 => Attribute::Directory,
+            0x20 => Attribute::Archive,
+            0x0f => Attribute::LongName,
+            _ => panic!("unexpected value: {}", v),
+        }
+    }
 }
 
 #[repr(packed)]
 pub struct DirectoryEntry {
     name: [u8; 11],
-    // pub attr: Attribute,
-    pub attr: u8,
+    attr: u8,
     ntres: u8,
     create_time_tenth: u8,
     create_time: u16,
@@ -102,6 +115,10 @@ pub struct DirectoryEntry {
 impl DirectoryEntry {
     pub fn first_cluster(&self) -> u32 {
         self.first_cluster_low as u32 | (self.first_cluster_high as u32) << 16
+    }
+
+    pub fn attr(&self) -> Attribute {
+        Attribute::from(self.attr)
     }
 
     pub fn base(&self) -> [u8; 8] {
