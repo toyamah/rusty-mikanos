@@ -378,11 +378,6 @@ impl Terminal {
     }
 }
 
-fn string_trimming_null(bytes: &[u8]) -> String {
-    let vec: Vec<u8> = bytes.iter().take_while(|&&v| v != 0x00).copied().collect();
-    String::from_utf8(vec).unwrap()
-}
-
 enum Direction {
     Up,
     Down,
@@ -469,6 +464,11 @@ fn parse_command(s: &str) -> Option<(&str, Vec<&str>)> {
 
     let command = parsed.pop_front().unwrap();
     Some((command, Vec::from(parsed)))
+}
+
+fn string_trimming_null(bytes: &[u8]) -> String {
+    let vec: Vec<u8> = bytes.iter().take_while(|&&v| v != 0x00).copied().collect();
+    String::from_utf8(vec).unwrap()
 }
 
 #[cfg(test)]
