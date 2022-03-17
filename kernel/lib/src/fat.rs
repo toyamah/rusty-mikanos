@@ -96,6 +96,7 @@ impl From<u8> for Attribute {
     }
 }
 
+/// See 27 page of https://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/fatgen103.doc
 #[repr(packed)]
 pub struct DirectoryEntry {
     name: [u8; 11],
@@ -119,6 +120,17 @@ impl DirectoryEntry {
 
     pub fn attr(&self) -> Attribute {
         Attribute::from(self.attr)
+    }
+
+    /// the directory entry is free (there is no file or directory name in this entry).
+    pub fn is_free(&self) -> bool {
+        self.name[0] == 0xe5
+    }
+
+    /// the directory entry is free (same as for 0xE5),
+    /// and there are no allocated directory entries after this one (all of the DIR_Name[0] bytes in all of the entries after this one are also set to 0).
+    pub fn is_free_and_no_more_allocated_after_this(&self) -> bool {
+        self.name[0] == 0x00
     }
 
     pub fn base(&self) -> [u8; 8] {

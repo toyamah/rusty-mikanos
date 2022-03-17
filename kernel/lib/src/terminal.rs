@@ -283,17 +283,15 @@ impl Terminal {
             "ls" => {
                 let root_dir_entries = fat::global::boot_volume_image().root_dir_entries();
                 for dir in root_dir_entries {
-                    let base = dir.base();
-                    let ext = dir.ext();
-                    if base[0] == 0x00 {
+                    if dir.is_free_and_no_more_allocated_after_this() {
                         break;
                     }
-                    if base[0] == 0xe5 {
+                    if dir.is_free() || dir.attr() == Attribute::LongName {
                         continue;
                     }
-                    if dir.attr() == Attribute::LongName {
-                        continue;
-                    }
+
+                    let base = dir.base();
+                    let ext = dir.ext();
 
                     let string = if ext[0] != 0 {
                         format!(
