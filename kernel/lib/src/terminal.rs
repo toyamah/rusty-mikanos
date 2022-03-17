@@ -281,6 +281,7 @@ impl Terminal {
                 // }
             }
             "ls" => {
+                // don't care about depending on a global var...
                 let root_dir_entries = fat::global::boot_volume_image().root_dir_entries();
                 for dir in root_dir_entries {
                     if dir.is_free_and_no_more_allocated_after_this() {
@@ -290,8 +291,8 @@ impl Terminal {
                         continue;
                     }
 
-                    let base = dir.base();
-                    let ext = dir.ext();
+                    let base = dir.basename();
+                    let ext = dir.extension();
 
                     let string = if ext[0] != 0 {
                         format!(

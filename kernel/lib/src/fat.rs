@@ -72,12 +72,23 @@ impl Bpb {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Attribute {
+    /// Indicates that writes to the file should fail.
     ReadOnly,
+    /// Indicates that normal directory listings should not show this file.
     Hidden,
+    /// Indicates that this is an operating system file.
     System,
+    /// There should only be one “file” on the volume that has this attribute set, /// and that file must be in the root directory.
+    /// This name of this file is actually the label for the volume.
+    /// DIR_FstClusHI and DIR_FstClusLO must always be 0 for the volume label (no data clusters are allocated to the volume label file).
     VolumeID,
+    /// Indicates that this file is actually a container for other files.
     Directory,
+    /// This attribute supports backup utilities.
+    /// This bit is set by the FAT file system driver when a file is created, renamed, or written to.
+    /// Backup utilities may use this attribute to indicate which files on the volume have been modified since the last time that a backup was performed.
     Archive,
+    /// Indicates that the “file” is actually part of the long name entry for some other file.
     LongName,
 }
 
@@ -133,7 +144,7 @@ impl DirectoryEntry {
         self.name[0] == 0x00
     }
 
-    pub fn base(&self) -> [u8; 8] {
+    pub fn basename(&self) -> [u8; 8] {
         let mut base = [0; 8];
         base.copy_from_slice(&self.name[..8]);
         for i in (0..base.len()).rev() {
@@ -145,7 +156,7 @@ impl DirectoryEntry {
         base
     }
 
-    pub fn ext(&self) -> [u8; 3] {
+    pub fn extension(&self) -> [u8; 3] {
         let mut ext = [0; 3];
         ext.copy_from_slice(&self.name[8..]);
         for i in (0..ext.len()).rev() {
