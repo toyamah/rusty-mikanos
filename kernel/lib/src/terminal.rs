@@ -1,3 +1,4 @@
+use crate::fat::Attribute;
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
@@ -5,8 +6,9 @@ use crate::graphics::{
 };
 use crate::layer::LayerManager;
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
-use crate::Window;
+use crate::{fat, Window};
 use alloc::collections::VecDeque;
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::mem;
@@ -278,6 +280,32 @@ impl Terminal {
                 //     self.print(format!("{}\n", device).as_str(), w);
                 // }
             }
+            "ls" => {
+                // don't care about depending on a global var...
+                let root_dir_entries = fat::global::boot_volume_image().root_dir_entries();
+                for dir in root_dir_entries {
+                    if dir.is_free_and_no_more_allocated_after_this() {
+                        break;
+                    }
+                    if dir.is_free() || dir.attr() == Attribute::LongName {
+                        continue;
+                    }
+
+                    let base = dir.basename();
+                    let ext = dir.extension();
+
+                    let string = if ext[0] != 0 {
+                        format!(
+                            "{}.{}\n",
+                            string_trimming_null(&base),
+                            string_trimming_null(&ext)
+                        )
+                    } else {
+                        format!("{}\n", string_trimming_null(&base))
+                    };
+                    self.print(string.as_str(), w);
+                }
+            }
             _ => {
                 self.print("no such command: ", w);
                 self.print(command, w);
@@ -436,6 +464,11 @@ fn parse_command(s: &str) -> Option<(&str, Vec<&str>)> {
 
     let command = parsed.pop_front().unwrap();
     Some((command, Vec::from(parsed)))
+}
+
+fn string_trimming_null(bytes: &[u8]) -> String {
+    let vec: Vec<u8> = bytes.iter().take_while(|&&v| v != 0x00).copied().collect();
+    String::from_utf8(vec).unwrap()
 }
 
 #[cfg(test)]

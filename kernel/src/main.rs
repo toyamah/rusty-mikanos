@@ -30,8 +30,8 @@ use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
 use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
 use lib::{
-    acpi, console, graphics, keyboard, layer, memory_manager, mouse, paging, pci, segment, task,
-    timer,
+    acpi, console, fat, graphics, keyboard, layer, memory_manager, mouse, paging, pci, segment,
+    task, timer,
 };
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
@@ -94,6 +94,7 @@ pub extern "C" fn KernelMainNewStack(
     memory_manager::global::initialize(&memory_map);
     initialize_interrupt(int_handler_xhci as usize, int_handler_lapic_timer as usize);
 
+    fat::global::initialize(volume_image);
     pci::initialize();
     usb::register_mouse_observer(mouse_observer);
 
@@ -126,22 +127,6 @@ pub extern "C" fn KernelMainNewStack(
     usb::global::initialize();
     usb::register_keyboard_observer(keyboard_observer);
     mouse::global::initialize();
-
-    printk!("Volume Image:\n");
-    let mut p = volume_image;
-    for i in 0..16 {
-        printk!("{:04}", i * 16);
-        for _ in 0..8 {
-            unsafe { printk!(" {:02x}", *p) };
-            p = unsafe { p.add(1) };
-        }
-        printk!(" ");
-        for _ in 0..8 {
-            unsafe { printk!(" {:02x}", *p) };
-            p = unsafe { p.add(1) };
-        }
-        printk!("\n");
-    }
 
     loop {
         fill_rectangle(
