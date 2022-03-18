@@ -1,3 +1,4 @@
+use core::mem::size_of;
 use core::{mem, slice};
 
 pub mod global {
@@ -8,11 +9,20 @@ pub mod global {
         unsafe { BOOT_VOLUME_IMAGE.unwrap() }
     }
 
+    static mut BYTES_PER_CLUSTER: u64 = u64::MAX;
+    pub fn bytes_per_cluster() -> u64 {
+        unsafe { BYTES_PER_CLUSTER }
+    }
+
     pub fn initialize(volume_image: *const u8) {
         let bpb = unsafe { (volume_image as *const Bpb).as_ref().unwrap() };
+        let bytes_per_cluster = (bpb.bytes_per_sector as u64) * bpb.sectors_per_cluster as u64;
         unsafe { BOOT_VOLUME_IMAGE = Some(bpb) };
+        unsafe { BYTES_PER_CLUSTER = bytes_per_cluster }
     }
 }
+
+const END_OF_CLUSTER_CHAIN: u64 = 0x0fffffff;
 
 #[repr(packed)]
 pub struct Bpb {
@@ -67,6 +77,20 @@ impl Bpb {
 
         let offset = (sector_num * self.bytes_per_sector as u64) as usize;
         unsafe { (self as *const _ as *const u8).add(offset) }
+    }
+
+    pub fn next_cluster(&self, cluster: u64) -> u64 {
+        let fat_offset = self.reserved_sector_count as usize * self.bytes_per_sector as usize;
+        let fat = unsafe { (self as *const _ as *const u8).add(fat_offset) };
+        let fat = fat as *const u32;
+        let next = unsafe { fat.add(cluster as usize) };
+        unsafe {
+            if *next >= 0x0ffffff8 {
+                END_OF_CLUSTER_CHAIN
+            } else {
+                (*next).into()
+            }
+        }
     }
 }
 
@@ -167,4 +191,51 @@ impl DirectoryEntry {
         }
         ext
     }
+
+    pub fn name_is_equal(&self, name: &str) -> bool {
+        let mut name83: [u8; 11] = [0x20; 11];
+        let name = name.as_bytes();
+
+        let mut i = 0;
+        let mut i83 = 0;
+        loop {
+            if i >= name.len() || i83 >= name83.len() {
+                break;
+            }
+            if name[i] == b'.' {
+                i83 = 7;
+                i += 1;
+                i83 += 1;
+                continue;
+            }
+            name83[i83] = name[i].to_ascii_uppercase();
+            i += 1;
+            i83 += 1;
+        }
+
+        self.name == name83
+    }
+}
+
+pub fn find_file(name: &str, mut directory_cluster: u64) -> Option<&DirectoryEntry> {
+    loop {
+        if directory_cluster == END_OF_CLUSTER_CHAIN {
+            break;
+        }
+
+        let dirs: &[DirectoryEntry] = unsafe {
+            let data = global::boot_volume_image().get_cluster_addr(directory_cluster);
+            let size = global::bytes_per_cluster() as usize / size_of::<DirectoryEntry>();
+            slice::from_raw_parts(data.cast(), size)
+        };
+        for dir in dirs {
+            if dir.name_is_equal(name) {
+                return Some(dir);
+            }
+        }
+
+        directory_cluster = global::boot_volume_image().next_cluster(directory_cluster);
+    }
+
+    None
 }
