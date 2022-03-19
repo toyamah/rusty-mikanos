@@ -12,6 +12,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::mem;
+use log::info;
 use shared::PixelFormat;
 
 pub mod global {
@@ -304,6 +305,21 @@ impl Terminal {
                         format!("{}\n", string_trimming_null(&base))
                     };
                     self.print(string.as_str(), w);
+                }
+            }
+            "cat" => {
+                //TODO:
+                // let first_arg = *args.take_first().unwrap();
+                let first_arg = "MEMMAP";
+                let file_entry = fat::find_file(
+                    first_arg,
+                    fat::global::boot_volume_image().get_root_cluster() as u64,
+                );
+                if let Some(file_entry) = file_entry {
+                    info!("file_entry found");
+                } else {
+                    let string1 = format!("no such file: {}", first_arg);
+                    self.print(string1.as_str(), w);
                 }
             }
             _ => {
