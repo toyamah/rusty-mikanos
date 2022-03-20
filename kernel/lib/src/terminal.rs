@@ -1,4 +1,4 @@
-use crate::fat::Attribute;
+use crate::fat::{Attribute, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
@@ -12,7 +12,6 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::mem;
-use log::info;
 use shared::PixelFormat;
 
 pub mod global {
@@ -316,7 +315,27 @@ impl Terminal {
                     fat::global::boot_volume_image().get_root_cluster() as u64,
                 );
                 if let Some(file_entry) = file_entry {
-                    info!("file_entry found");
+                    let mut cluster = file_entry.first_cluster() as u64;
+                    let mut remain_bytes = file_entry.file_size() as u64;
+                    self.draw_cursor(w, false);
+                    loop {
+                        if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
+                            break;
+                        }
+                        let p = fat::global::get_sector_by_cluster::<u8>(cluster as u64);
+                        let mut i = 0;
+                        loop {
+                            if i >= fat::global::bytes_per_cluster() || i >= remain_bytes {
+                                break;
+                            }
+                            let c = *p.get(i as usize).unwrap();
+                            self.print_char(c as char, w);
+                            i += 1;
+                        }
+                        remain_bytes -= i;
+                        cluster = fat::global::boot_volume_image().next_cluster(cluster);
+                    }
+                    self.draw_cursor(w, true);
                 } else {
                     let string1 = format!("no such file: {}", first_arg);
                     self.print(string1.as_str(), w);
@@ -334,27 +353,24 @@ impl Terminal {
         self.draw_cursor(w, false);
 
         for char in s.chars() {
-            match char {
-                '\n' => self.new_line(w),
-                _ => {
-                    let pos = self.calc_cursor_pos();
-                    write_ascii(
-                        &mut w.normal_window_writer(),
-                        pos.x,
-                        pos.y,
-                        char,
-                        &COLOR_WHITE,
-                    );
-                    if self.cursor.x == COLUMNS as i32 - 1 {
-                        self.new_line(w);
-                    } else {
-                        self.cursor.x += 1;
-                    }
-                }
-            }
+            self.print_char(char, w);
         }
 
         self.draw_cursor(w, false);
+    }
+
+    fn print_char(&mut self, c: char, w: &mut Window) {
+        if c == '\n' {
+            self.new_line(w);
+        } else {
+            let pos = self.calc_cursor_pos();
+            write_ascii(&mut w.normal_window_writer(), pos.x, pos.y, c, &COLOR_WHITE);
+            if self.cursor.x == COLUMNS as i32 - 1 {
+                self.new_line(w);
+            } else {
+                self.cursor.x += 1;
+            }
+        }
     }
 
     fn new_line(&mut self, w: &mut Window) {

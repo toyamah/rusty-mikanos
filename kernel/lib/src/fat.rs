@@ -3,6 +3,8 @@ use core::{mem, slice};
 
 pub mod global {
     use crate::fat::Bpb;
+    use core::mem::size_of;
+    use core::slice;
 
     static mut BOOT_VOLUME_IMAGE: Option<&'static Bpb> = None;
     pub fn boot_volume_image() -> &'static Bpb {
@@ -20,9 +22,15 @@ pub mod global {
         unsafe { BOOT_VOLUME_IMAGE = Some(bpb) };
         unsafe { BYTES_PER_CLUSTER = bytes_per_cluster }
     }
+
+    pub fn get_sector_by_cluster<T>(cluster: u64) -> &'static [T] {
+        let data = boot_volume_image().get_cluster_addr(cluster);
+        let size = bytes_per_cluster() as usize / size_of::<T>();
+        unsafe { slice::from_raw_parts(data.cast(), size) }
+    }
 }
 
-const END_OF_CLUSTER_CHAIN: u64 = 0x0fffffff;
+pub const END_OF_CLUSTER_CHAIN: u64 = 0x0fffffff;
 
 #[repr(packed)]
 pub struct Bpb {
@@ -63,6 +71,10 @@ impl Bpb {
             let data = self.get_cluster_addr(self.root_cluster as u64);
             slice::from_raw_parts(data.cast(), size)
         }
+    }
+
+    pub fn get_root_cluster(&self) -> u32 {
+        self.root_cluster
     }
 
     fn get_entries_per_cluster(&self) -> usize {
@@ -149,6 +161,10 @@ pub struct DirectoryEntry {
 }
 
 impl DirectoryEntry {
+    pub fn file_size(&self) -> u32 {
+        self.file_size
+    }
+
     pub fn first_cluster(&self) -> u32 {
         self.first_cluster_low as u32 | (self.first_cluster_high as u32) << 16
     }
