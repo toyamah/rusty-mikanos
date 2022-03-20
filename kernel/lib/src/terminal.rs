@@ -11,7 +11,7 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::mem;
+use core::{cmp, mem};
 use shared::PixelFormat;
 
 pub mod global {
@@ -322,17 +322,14 @@ impl Terminal {
                         if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
                             break;
                         }
+                        let size =
+                            cmp::min(fat::global::bytes_per_cluster(), remain_bytes) as usize;
                         let p = fat::global::get_sector_by_cluster::<u8>(cluster as u64);
-                        let mut i = 0;
-                        loop {
-                            if i >= fat::global::bytes_per_cluster() || i >= remain_bytes {
-                                break;
-                            }
-                            let c = *p.get(i as usize).unwrap();
+                        let p = &p[..size];
+                        for &c in p {
                             self.print_char(c as char, w);
-                            i += 1;
                         }
-                        remain_bytes -= i;
+                        remain_bytes -= p.len() as u64;
                         cluster = fat::global::boot_volume_image().next_cluster(cluster);
                     }
                     self.draw_cursor(w, true);
