@@ -11,6 +11,7 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::ops::Deref;
 use core::{cmp, mem};
 use shared::PixelFormat;
 
@@ -308,9 +309,7 @@ impl Terminal {
             }
             "cat" => {
                 let bpb = fat::global::boot_volume_image();
-                //TODO:
-                // let first_arg = *args.take_first().unwrap();
-                let first_arg = "MEMMAP";
+                let first_arg = args.get(0).unwrap_or(&"").deref();
                 let file_entry = fat::find_file(first_arg, bpb.get_root_cluster() as u64, bpb);
                 if let Some(file_entry) = file_entry {
                     let mut cluster = file_entry.first_cluster() as u64;
@@ -332,7 +331,7 @@ impl Terminal {
                     }
                     self.draw_cursor(w, true);
                 } else {
-                    let string1 = format!("no such file: {}", first_arg);
+                    let string1 = format!("no such file: {}\n", first_arg);
                     self.print(string1.as_str(), w);
                 }
             }
