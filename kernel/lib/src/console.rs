@@ -2,6 +2,7 @@ use crate::console::Mode::{ConsoleWindow, Frame};
 use crate::graphics::global::pixel_writer;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
 use crate::layer::global::{console_window, layer_manager_op, screen_frame_buffer};
+use crate::layer::LayerID;
 use crate::Window;
 use core::fmt;
 use shared::PixelFormat;
@@ -42,7 +43,7 @@ pub struct Console {
     bg_color: PixelColor,
     cursor_row: usize,
     cursor_column: usize,
-    layer_id: Option<u32>,
+    layer_id: Option<LayerID>,
     // 1 means null character to be written at end of a line
     buffer: [[char; COLUMNS + 1]; ROWS],
 }
@@ -71,11 +72,11 @@ impl Console {
         self.refresh(writer);
     }
 
-    pub fn layer_id(&self) -> Option<u32> {
+    pub fn layer_id(&self) -> Option<LayerID> {
         self.layer_id
     }
 
-    pub fn set_layer_id(&mut self, layer_id: u32) {
+    pub fn set_layer_id(&mut self, layer_id: LayerID) {
         self.layer_id = Some(layer_id);
     }
 

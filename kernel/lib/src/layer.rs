@@ -4,6 +4,8 @@ use crate::message::{LayerMessage, LayerOperation};
 use crate::window::Window;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::fmt::{Display, Formatter};
+use core::ops::AddAssign;
 use shared::FrameBufferConfig;
 
 pub mod global {
@@ -14,11 +16,11 @@ pub mod global {
     use crate::frame_buffer::FrameBuffer;
     use crate::graphics::global::{frame_buffer_config, screen_size};
     use crate::graphics::{draw_desktop, Vector2D};
-    use crate::layer::ActiveLayer;
+    use crate::layer::{ActiveLayer, LayerID};
     use crate::Window;
     use alloc::collections::BTreeMap;
 
-    static mut BG_LAYER_ID: u32 = u32::MAX;
+    static mut BG_LAYER_ID: LayerID = LayerID::MAX;
 
     static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
     pub fn screen_frame_buffer() -> &'static mut FrameBuffer {
@@ -38,8 +40,8 @@ pub mod global {
         unsafe { &mut ACTIVE_LAYER }
     }
 
-    static mut LAYER_TASK_MAP: BTreeMap<u32, u64> = BTreeMap::new();
-    pub fn layer_task_map() -> &'static mut BTreeMap<u32, u64> {
+    static mut LAYER_TASK_MAP: BTreeMap<LayerID, u64> = BTreeMap::new();
+    pub fn layer_task_map() -> &'static mut BTreeMap<LayerID, u64> {
         unsafe { &mut LAYER_TASK_MAP }
     }
 
@@ -88,11 +90,11 @@ pub mod global {
         layer_manager().up_down(console().layer_id().unwrap(), 1);
     }
 
-    pub fn get_layer_window_ref(layer_id: u32) -> Option<&'static Window> {
+    pub fn get_layer_window_ref(layer_id: LayerID) -> Option<&'static Window> {
         layer_manager().get_layer_mut(layer_id).map(|l| &l.window)
     }
 
-    pub fn get_layer_window_mut(layer_id: u32) -> Option<&'static mut Window> {
+    pub fn get_layer_window_mut(layer_id: LayerID) -> Option<&'static mut Window> {
         layer_manager()
             .get_layer_mut(layer_id)
             .map(|l| &mut l.window)
@@ -100,14 +102,14 @@ pub mod global {
 }
 
 pub struct Layer {
-    id: u32,
+    id: LayerID,
     position: Vector2D<i32>,
     window: Window,
     draggable: bool,
 }
 
 impl Layer {
-    pub fn new(id: u32, window: Window) -> Self {
+    pub fn new(id: LayerID, window: Window) -> Self {
         Self {
             id,
             position: Vector2D::new(0, 0),
@@ -116,7 +118,7 @@ impl Layer {
         }
     }
 
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> LayerID {
         self.id
     }
 
@@ -155,8 +157,8 @@ impl Layer {
 
 pub struct LayerManager {
     layers: Vec<Layer>,
-    layer_id_stack: Vec<u32>,
-    latest_id: u32,
+    layer_id_stack: Vec<LayerID>,
+    latest_id: LayerID,
     back_buffer: FrameBuffer,
 }
 
@@ -172,26 +174,26 @@ impl LayerManager {
         Self {
             layers: vec![],
             layer_id_stack: vec![],
-            latest_id: 0,
+            latest_id: LayerID(0),
             back_buffer,
         }
     }
 
     pub fn new_layer(&mut self, window: Window) -> &mut Layer {
         self.layers.push(Layer::new(self.latest_id, window));
-        self.latest_id += 1; // increment after layer.push to make layer_id and index of layers equal
+        self.latest_id += LayerID(1); // increment after layer.push to make layer_id and index of layers equal
         self.layers.iter_mut().last().unwrap()
     }
 
     pub fn draw_on(&mut self, area: Rectangle<i32>, screen: &mut FrameBuffer) {
         for &layer_id in &self.layer_id_stack {
-            let index = layer_id as usize;
+            let index = layer_id.as_usize();
             self.layers[index].draw_to(&mut self.back_buffer, area);
         }
         screen.copy(area.pos, &self.back_buffer, area);
     }
 
-    pub fn draw_layer_of(&mut self, id: u32, screen: &mut FrameBuffer) {
+    pub fn draw_layer_of(&mut self, id: LayerID, screen: &mut FrameBuffer) {
         self.draw(
             id,
             Rectangle::new(Vector2D::new(0, 0), Vector2D::new(-1, -1)),
@@ -199,11 +201,11 @@ impl LayerManager {
         )
     }
 
-    fn draw(&mut self, id: u32, mut area: Rectangle<i32>, screen: &mut FrameBuffer) {
+    fn draw(&mut self, id: LayerID, mut area: Rectangle<i32>, screen: &mut FrameBuffer) {
         let mut draw = false;
         let mut window_area: Rectangle<i32> = Rectangle::default();
         for &layer_id in &self.layer_id_stack {
-            let index = layer_id as usize;
+            let index = layer_id.as_usize();
             let layer = self.layers.get_mut(index).unwrap();
 
             if layer_id == id {
@@ -223,7 +225,7 @@ impl LayerManager {
         screen.copy(window_area.pos, &self.back_buffer, window_area);
     }
 
-    pub fn move_(&mut self, id: u32, new_position: Vector2D<i32>, screen: &mut FrameBuffer) {
+    pub fn move_(&mut self, id: LayerID, new_position: Vector2D<i32>, screen: &mut FrameBuffer) {
         if let Some(layer) = self.layers.iter_mut().find(|l| l.id == id) {
             let window_size = layer.window.size();
             let old_pos = layer.position;
@@ -233,7 +235,12 @@ impl LayerManager {
         }
     }
 
-    pub fn move_relative(&mut self, id: u32, pos_diff: Vector2D<i32>, screen: &mut FrameBuffer) {
+    pub fn move_relative(
+        &mut self,
+        id: LayerID,
+        pos_diff: Vector2D<i32>,
+        screen: &mut FrameBuffer,
+    ) {
         if let Some(layer) = self.layers.iter_mut().find(|l| l.id == id) {
             let window_size = layer.window.size();
             let old_pos = layer.position;
@@ -243,7 +250,7 @@ impl LayerManager {
         }
     }
 
-    pub fn up_down(&mut self, id: u32, new_height: i32) {
+    pub fn up_down(&mut self, id: LayerID, new_height: i32) {
         if self.layers.is_empty() {
             return;
         }
@@ -285,12 +292,16 @@ impl LayerManager {
         }
     }
 
-    pub fn find_layer_by_position(&self, pos: Vector2D<i32>, exclude_id: u32) -> Option<&Layer> {
+    pub fn find_layer_by_position(
+        &self,
+        pos: Vector2D<i32>,
+        exclude_id: LayerID,
+    ) -> Option<&Layer> {
         self.layer_id_stack
             .iter()
             .rev()
             .filter(|&&id| id != exclude_id)
-            .map(|&id| &self.layers[id as usize])
+            .map(|&id| &self.layers[id.as_usize()])
             .find(|&layer| {
                 let win_pos = layer.position;
                 let win_end_pos = win_pos + layer.window.size().to_i32_vec2d();
@@ -314,7 +325,7 @@ impl LayerManager {
         }
     }
 
-    fn hide(&mut self, id: u32) {
+    fn hide(&mut self, id: LayerID) {
         if self.layers.is_empty() {
             return;
         }
@@ -330,11 +341,11 @@ impl LayerManager {
         }
     }
 
-    pub fn get_layer_mut(&mut self, layer_id: u32) -> Option<&mut Layer> {
-        self.layers.get_mut(layer_id as usize)
+    pub fn get_layer_mut(&mut self, layer_id: LayerID) -> Option<&mut Layer> {
+        self.layers.get_mut(layer_id.as_usize())
     }
 
-    fn get_height(&self, layer_id: u32) -> Option<i32> {
+    fn get_height(&self, layer_id: LayerID) -> Option<i32> {
         self.layer_id_stack
             .iter()
             .enumerate()
@@ -343,26 +354,49 @@ impl LayerManager {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct LayerID(u32);
+
+impl LayerID {
+    pub const MAX: LayerID = LayerID(u32::MAX);
+
+    pub fn as_usize(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl Display for LayerID {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AddAssign for LayerID {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0
+    }
+}
+
 pub struct ActiveLayer {
-    active_layer_id: Option<u32>,
-    pub(crate) mouser_layer_id: u32,
+    active_layer_id: Option<LayerID>,
+    pub(crate) mouser_layer_id: LayerID,
 }
 
 impl ActiveLayer {
     pub const fn new() -> ActiveLayer {
         Self {
             active_layer_id: None,
-            mouser_layer_id: u32::MAX,
+            mouser_layer_id: LayerID::MAX,
         }
     }
 
-    pub fn get_active_layer_id(&self) -> Option<u32> {
+    pub fn get_active_layer_id(&self) -> Option<LayerID> {
         self.active_layer_id
     }
 
     pub fn activate(
         &mut self,
-        layer_id: Option<u32>,
+        layer_id: Option<LayerID>,
         manager: &mut LayerManager,
         screen: &mut FrameBuffer,
     ) {
@@ -407,7 +441,7 @@ mod tests {
         ));
         let id1 = lm.new_layer(window1).id();
         // verify layer's id equals to index of lm.layers
-        assert_eq!(lm.layers[id1 as usize].id, id1);
+        assert_eq!(lm.layers[id1.as_usize()].id, id1);
     }
 
     #[test]

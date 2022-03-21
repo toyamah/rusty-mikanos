@@ -4,7 +4,7 @@ use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
     COLOR_BLACK, COLOR_WHITE,
 };
-use crate::layer::LayerManager;
+use crate::layer::{LayerID, LayerManager};
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, Window};
 use alloc::collections::VecDeque;
@@ -19,6 +19,7 @@ pub mod global {
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
     use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
+    use crate::layer::LayerID;
     use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
     use crate::task::global::task_manager;
     use crate::terminal::Terminal;
@@ -103,7 +104,7 @@ pub mod global {
         }
     }
 
-    pub(crate) fn terminal_window(terminal_layer_id: u32) -> &'static mut Window {
+    pub(crate) fn terminal_window(terminal_layer_id: LayerID) -> &'static mut Window {
         layer_manager()
             .get_layer_mut(terminal_layer_id)
             .expect("couldn't find terminal window")
@@ -116,7 +117,7 @@ const COLUMNS: usize = 60;
 const LINE_MAX: usize = 128;
 
 struct Terminal {
-    layer_id: u32,
+    layer_id: LayerID,
     cursor: Vector2D<i32>,
     is_cursor_visible: bool,
     line_buf: String,
@@ -126,7 +127,7 @@ struct Terminal {
 impl Terminal {
     fn new() -> Terminal {
         Self {
-            layer_id: u32::MAX,
+            layer_id: LayerID::MAX,
             cursor: Vector2D::new(0, 0),
             is_cursor_visible: false,
             line_buf: String::with_capacity(LINE_MAX),
