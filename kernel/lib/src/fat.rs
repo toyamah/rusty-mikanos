@@ -3,8 +3,6 @@ use core::{mem, slice};
 
 pub mod global {
     use crate::fat::Bpb;
-    use core::mem::size_of;
-    use core::slice;
 
     static mut BOOT_VOLUME_IMAGE: Option<&'static Bpb> = None;
     pub fn boot_volume_image() -> &'static Bpb {
@@ -18,15 +16,9 @@ pub mod global {
 
     pub fn initialize(volume_image: *const u8) {
         let bpb = unsafe { (volume_image as *const Bpb).as_ref().unwrap() };
-        let bytes_per_cluster = (bpb.bytes_per_sector as u64) * bpb.sectors_per_cluster as u64;
+        let bytes_per_cluster = bpb.bytes_per_cluster();
         unsafe { BOOT_VOLUME_IMAGE = Some(bpb) };
         unsafe { BYTES_PER_CLUSTER = bytes_per_cluster }
-    }
-
-    pub fn get_sector_by_cluster<T>(cluster: u64) -> &'static [T] {
-        let data = boot_volume_image().get_cluster_addr(cluster);
-        let size = bytes_per_cluster() as usize / size_of::<T>();
-        unsafe { slice::from_raw_parts(data.cast(), size) }
     }
 }
 
@@ -103,6 +95,16 @@ impl Bpb {
                 (*next).into()
             }
         }
+    }
+
+    pub fn get_sector_by_cluster<T>(&self, cluster: u64) -> &'static [T] {
+        let data = self.get_cluster_addr(cluster);
+        let size = self.bytes_per_cluster() as usize / size_of::<T>();
+        unsafe { slice::from_raw_parts(data.cast(), size) }
+    }
+
+    fn bytes_per_cluster(&self) -> u64 {
+        (self.bytes_per_sector as u64) * self.sectors_per_cluster as u64
     }
 }
 
@@ -233,24 +235,19 @@ impl DirectoryEntry {
     }
 }
 
-pub fn find_file(name: &str, mut directory_cluster: u64) -> Option<&DirectoryEntry> {
-    loop {
-        if directory_cluster == END_OF_CLUSTER_CHAIN {
-            break;
-        }
-
-        let dirs: &[DirectoryEntry] = unsafe {
-            let data = global::boot_volume_image().get_cluster_addr(directory_cluster);
-            let size = global::bytes_per_cluster() as usize / size_of::<DirectoryEntry>();
-            slice::from_raw_parts(data.cast(), size)
-        };
+pub fn find_file<'a>(
+    name: &'a str,
+    mut directory_cluster: u64,
+    bpb: &'a Bpb,
+) -> Option<&'a DirectoryEntry> {
+    while directory_cluster != END_OF_CLUSTER_CHAIN {
+        let dirs = bpb.get_sector_by_cluster::<DirectoryEntry>(directory_cluster);
         for dir in dirs {
             if dir.name_is_equal(name) {
                 return Some(dir);
             }
         }
-
-        directory_cluster = global::boot_volume_image().next_cluster(directory_cluster);
+        directory_cluster = bpb.next_cluster(directory_cluster);
     }
 
     None

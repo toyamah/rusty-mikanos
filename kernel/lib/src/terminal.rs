@@ -307,13 +307,11 @@ impl Terminal {
                 }
             }
             "cat" => {
+                let bpb = fat::global::boot_volume_image();
                 //TODO:
                 // let first_arg = *args.take_first().unwrap();
                 let first_arg = "MEMMAP";
-                let file_entry = fat::find_file(
-                    first_arg,
-                    fat::global::boot_volume_image().get_root_cluster() as u64,
-                );
+                let file_entry = fat::find_file(first_arg, bpb.get_root_cluster() as u64, bpb);
                 if let Some(file_entry) = file_entry {
                     let mut cluster = file_entry.first_cluster() as u64;
                     let mut remain_bytes = file_entry.file_size() as u64;
@@ -324,13 +322,13 @@ impl Terminal {
                         }
                         let size =
                             cmp::min(fat::global::bytes_per_cluster(), remain_bytes) as usize;
-                        let p = fat::global::get_sector_by_cluster::<u8>(cluster as u64);
+                        let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
                         let p = &p[..size];
                         for &c in p {
                             self.print_char(c as char, w);
                         }
                         remain_bytes -= p.len() as u64;
-                        cluster = fat::global::boot_volume_image().next_cluster(cluster);
+                        cluster = bpb.next_cluster(cluster);
                     }
                     self.draw_cursor(w, true);
                 } else {
