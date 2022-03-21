@@ -148,13 +148,13 @@ impl Terminal {
         self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
     }
 
-    fn blink_cursor(&mut self, window: &mut Window) -> Rectangle<i32> {
+    fn blink_cursor(&mut self, w: &mut Window) -> Rectangle<i32> {
         self.is_cursor_visible = !self.is_cursor_visible;
-        self.draw_cursor(window, self.is_cursor_visible);
+        self.draw_cursor(self.is_cursor_visible, w);
         Rectangle::new(self.calc_cursor_pos(), Vector2D::new(7, 15))
     }
 
-    fn draw_cursor(&mut self, window: &mut Window, visible: bool) {
+    fn draw_cursor(&mut self, visible: bool, window: &mut Window) {
         let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
         fill_rectangle(
             &mut window.normal_window_writer(),
@@ -171,7 +171,7 @@ impl Terminal {
         ascii: char,
         window: &mut Window,
     ) -> Rectangle<i32> {
-        self.draw_cursor(window, false);
+        self.draw_cursor(false, window);
 
         let mut draw_area = Rectangle::new(self.calc_cursor_pos(), Vector2D::new(8 * 2, 16));
 
@@ -226,7 +226,7 @@ impl Terminal {
             }
         }
 
-        self.draw_cursor(window, true);
+        self.draw_cursor(true, window);
         draw_area
     }
 
@@ -314,7 +314,7 @@ impl Terminal {
                 if let Some(file_entry) = file_entry {
                     let mut cluster = file_entry.first_cluster() as u64;
                     let mut remain_bytes = file_entry.file_size() as u64;
-                    self.draw_cursor(w, false);
+                    self.draw_cursor(false, w);
                     loop {
                         if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
                             break;
@@ -329,7 +329,7 @@ impl Terminal {
                         remain_bytes -= p.len() as u64;
                         cluster = bpb.next_cluster(cluster);
                     }
-                    self.draw_cursor(w, true);
+                    self.draw_cursor(true, w);
                 } else {
                     let text = format!("no such file: {}\n", first_arg);
                     self.print(text.as_str(), w);
@@ -344,13 +344,13 @@ impl Terminal {
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {
-        self.draw_cursor(w, false);
+        self.draw_cursor(false, w);
 
         for char in s.chars() {
             self.print_char(char, w);
         }
 
-        self.draw_cursor(w, false);
+        self.draw_cursor(false, w);
     }
 
     fn print_char(&mut self, c: char, w: &mut Window) {
