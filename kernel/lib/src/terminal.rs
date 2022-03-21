@@ -331,8 +331,8 @@ impl Terminal {
                     }
                     self.draw_cursor(w, true);
                 } else {
-                    let string1 = format!("no such file: {}\n", first_arg);
-                    self.print(string1.as_str(), w);
+                    let text = format!("no such file: {}\n", first_arg);
+                    self.print(text.as_str(), w);
                 }
             }
             _ => {
