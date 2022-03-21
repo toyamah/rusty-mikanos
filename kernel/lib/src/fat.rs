@@ -1,3 +1,4 @@
+use core::mem::size_of;
 use core::{mem, slice};
 
 pub mod global {
@@ -8,11 +9,20 @@ pub mod global {
         unsafe { BOOT_VOLUME_IMAGE.unwrap() }
     }
 
+    static mut BYTES_PER_CLUSTER: u64 = u64::MAX;
+    pub fn bytes_per_cluster() -> u64 {
+        unsafe { BYTES_PER_CLUSTER }
+    }
+
     pub fn initialize(volume_image: *const u8) {
         let bpb = unsafe { (volume_image as *const Bpb).as_ref().unwrap() };
+        let bytes_per_cluster = bpb.bytes_per_cluster();
         unsafe { BOOT_VOLUME_IMAGE = Some(bpb) };
+        unsafe { BYTES_PER_CLUSTER = bytes_per_cluster }
     }
 }
+
+pub const END_OF_CLUSTER_CHAIN: u64 = 0x0fffffff;
 
 #[repr(packed)]
 pub struct Bpb {
@@ -55,6 +65,10 @@ impl Bpb {
         }
     }
 
+    pub fn get_root_cluster(&self) -> u32 {
+        self.root_cluster
+    }
+
     fn get_entries_per_cluster(&self) -> usize {
         self.bytes_per_sector as usize / mem::size_of::<DirectoryEntry>()
             * self.sectors_per_cluster as usize
@@ -67,6 +81,30 @@ impl Bpb {
 
         let offset = (sector_num * self.bytes_per_sector as u64) as usize;
         unsafe { (self as *const _ as *const u8).add(offset) }
+    }
+
+    pub fn next_cluster(&self, cluster: u64) -> u64 {
+        let fat_offset = self.reserved_sector_count as usize * self.bytes_per_sector as usize;
+        let fat = unsafe { (self as *const _ as *const u8).add(fat_offset) };
+        let fat = fat as *const u32;
+        let next = unsafe { fat.add(cluster as usize) };
+        unsafe {
+            if *next >= 0x0ffffff8 {
+                END_OF_CLUSTER_CHAIN
+            } else {
+                (*next).into()
+            }
+        }
+    }
+
+    pub fn get_sector_by_cluster<T>(&self, cluster: u64) -> &'static [T] {
+        let data = self.get_cluster_addr(cluster);
+        let size = self.bytes_per_cluster() as usize / size_of::<T>();
+        unsafe { slice::from_raw_parts(data.cast(), size) }
+    }
+
+    fn bytes_per_cluster(&self) -> u64 {
+        (self.bytes_per_sector as u64) * self.sectors_per_cluster as u64
     }
 }
 
@@ -125,6 +163,10 @@ pub struct DirectoryEntry {
 }
 
 impl DirectoryEntry {
+    pub fn file_size(&self) -> u32 {
+        self.file_size
+    }
+
     pub fn first_cluster(&self) -> u32 {
         self.first_cluster_low as u32 | (self.first_cluster_high as u32) << 16
     }
@@ -167,4 +209,44 @@ impl DirectoryEntry {
         }
         ext
     }
+
+    pub fn name_is_equal(&self, name: &str) -> bool {
+        let mut name83: [u8; 11] = [0x20; 11];
+        let name = name.as_bytes();
+
+        let mut i = 0;
+        let mut i83 = 0;
+        loop {
+            if i >= name.len() || i83 >= name83.len() {
+                break;
+            }
+            if name[i] == b'.' {
+                i83 = 7;
+            } else {
+                name83[i83] = name[i].to_ascii_uppercase();
+            }
+            i += 1;
+            i83 += 1;
+        }
+
+        self.name == name83
+    }
+}
+
+pub fn find_file<'a>(
+    name: &'a str,
+    mut directory_cluster: u64,
+    bpb: &'a Bpb,
+) -> Option<&'a DirectoryEntry> {
+    while directory_cluster != END_OF_CLUSTER_CHAIN {
+        let dirs = bpb.get_sector_by_cluster::<DirectoryEntry>(directory_cluster);
+        for dir in dirs {
+            if dir.name_is_equal(name) {
+                return Some(dir);
+            }
+        }
+        directory_cluster = bpb.next_cluster(directory_cluster);
+    }
+
+    None
 }

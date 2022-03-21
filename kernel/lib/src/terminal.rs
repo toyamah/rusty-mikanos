@@ -1,4 +1,4 @@
-use crate::fat::Attribute;
+use crate::fat::{Attribute, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
@@ -11,7 +11,8 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::mem;
+use core::ops::Deref;
+use core::{cmp, mem};
 use shared::PixelFormat;
 
 pub mod global {
@@ -306,6 +307,34 @@ impl Terminal {
                     self.print(string.as_str(), w);
                 }
             }
+            "cat" => {
+                let bpb = fat::global::boot_volume_image();
+                let first_arg = args.get(0).unwrap_or(&"").deref();
+                let file_entry = fat::find_file(first_arg, bpb.get_root_cluster() as u64, bpb);
+                if let Some(file_entry) = file_entry {
+                    let mut cluster = file_entry.first_cluster() as u64;
+                    let mut remain_bytes = file_entry.file_size() as u64;
+                    self.draw_cursor(w, false);
+                    loop {
+                        if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
+                            break;
+                        }
+                        let size =
+                            cmp::min(fat::global::bytes_per_cluster(), remain_bytes) as usize;
+                        let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
+                        let p = &p[..size];
+                        for &c in p {
+                            self.print_char(c as char, w);
+                        }
+                        remain_bytes -= p.len() as u64;
+                        cluster = bpb.next_cluster(cluster);
+                    }
+                    self.draw_cursor(w, true);
+                } else {
+                    let text = format!("no such file: {}\n", first_arg);
+                    self.print(text.as_str(), w);
+                }
+            }
             _ => {
                 self.print("no such command: ", w);
                 self.print(command, w);
@@ -318,27 +347,24 @@ impl Terminal {
         self.draw_cursor(w, false);
 
         for char in s.chars() {
-            match char {
-                '\n' => self.new_line(w),
-                _ => {
-                    let pos = self.calc_cursor_pos();
-                    write_ascii(
-                        &mut w.normal_window_writer(),
-                        pos.x,
-                        pos.y,
-                        char,
-                        &COLOR_WHITE,
-                    );
-                    if self.cursor.x == COLUMNS as i32 - 1 {
-                        self.new_line(w);
-                    } else {
-                        self.cursor.x += 1;
-                    }
-                }
-            }
+            self.print_char(char, w);
         }
 
         self.draw_cursor(w, false);
+    }
+
+    fn print_char(&mut self, c: char, w: &mut Window) {
+        if c == '\n' {
+            self.new_line(w);
+        } else {
+            let pos = self.calc_cursor_pos();
+            write_ascii(&mut w.normal_window_writer(), pos.x, pos.y, c, &COLOR_WHITE);
+            if self.cursor.x == COLUMNS as i32 - 1 {
+                self.new_line(w);
+            } else {
+                self.cursor.x += 1;
+            }
+        }
     }
 
     fn new_line(&mut self, w: &mut Window) {
