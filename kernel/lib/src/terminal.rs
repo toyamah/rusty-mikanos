@@ -4,29 +4,32 @@ use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
     COLOR_BLACK, COLOR_WHITE,
 };
-use crate::layer::LayerManager;
+use crate::layer::{LayerID, LayerManager};
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, Window};
 use alloc::collections::VecDeque;
-use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::fmt::Write;
 use core::ops::Deref;
-use core::{cmp, mem};
+use core::{cmp, fmt, mem};
 use shared::PixelFormat;
 
 pub mod global {
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
     use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
+    use crate::layer::LayerID;
     use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
     use crate::task::global::task_manager;
+    use crate::task::TaskID;
     use crate::terminal::Terminal;
     use crate::Window;
     use core::arch::asm;
 
     pub fn task_terminal(task_id: u64, _: usize) {
         unsafe { asm!("cli") };
+        let task_id = TaskID::new(task_id);
         let current_task_id = task_manager().current_task().id();
         let mut terminal = Terminal::new();
         terminal.initialize(layer_manager(), frame_buffer_config().pixel_format);
@@ -103,7 +106,7 @@ pub mod global {
         }
     }
 
-    fn terminal_window(terminal_layer_id: u32) -> &'static mut Window {
+    pub(crate) fn terminal_window(terminal_layer_id: LayerID) -> &'static mut Window {
         layer_manager()
             .get_layer_mut(terminal_layer_id)
             .expect("couldn't find terminal window")
@@ -116,7 +119,7 @@ const COLUMNS: usize = 60;
 const LINE_MAX: usize = 128;
 
 struct Terminal {
-    layer_id: u32,
+    layer_id: LayerID,
     cursor: Vector2D<i32>,
     is_cursor_visible: bool,
     line_buf: String,
@@ -126,7 +129,7 @@ struct Terminal {
 impl Terminal {
     fn new() -> Terminal {
         Self {
-            layer_id: u32::MAX,
+            layer_id: LayerID::MAX,
             cursor: Vector2D::new(0, 0),
             is_cursor_visible: false,
             line_buf: String::with_capacity(LINE_MAX),
@@ -148,13 +151,13 @@ impl Terminal {
         self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
     }
 
-    fn blink_cursor(&mut self, window: &mut Window) -> Rectangle<i32> {
+    fn blink_cursor(&mut self, w: &mut Window) -> Rectangle<i32> {
         self.is_cursor_visible = !self.is_cursor_visible;
-        self.draw_cursor(window, self.is_cursor_visible);
+        self.draw_cursor(self.is_cursor_visible, w);
         Rectangle::new(self.calc_cursor_pos(), Vector2D::new(7, 15))
     }
 
-    fn draw_cursor(&mut self, window: &mut Window, visible: bool) {
+    fn draw_cursor(&mut self, visible: bool, window: &mut Window) {
         let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
         fill_rectangle(
             &mut window.normal_window_writer(),
@@ -171,7 +174,7 @@ impl Terminal {
         ascii: char,
         window: &mut Window,
     ) -> Rectangle<i32> {
-        self.draw_cursor(window, false);
+        self.draw_cursor(false, window);
 
         let mut draw_area = Rectangle::new(self.calc_cursor_pos(), Vector2D::new(8 * 2, 16));
 
@@ -226,7 +229,7 @@ impl Terminal {
             }
         }
 
-        self.draw_cursor(window, true);
+        self.draw_cursor(true, window);
         draw_area
     }
 
@@ -295,16 +298,17 @@ impl Terminal {
                     let base = dir.basename();
                     let ext = dir.extension();
 
-                    let string = if ext[0] != 0 {
-                        format!(
-                            "{}.{}\n",
+                    if ext[0] != 0 {
+                        writeln!(
+                            self,
+                            "{}.{}",
                             string_trimming_null(&base),
                             string_trimming_null(&ext)
                         )
+                        .unwrap();
                     } else {
-                        format!("{}\n", string_trimming_null(&base))
-                    };
-                    self.print(string.as_str(), w);
+                        writeln!(self, "{}", string_trimming_null(&base)).unwrap();
+                    }
                 }
             }
             "cat" => {
@@ -314,7 +318,7 @@ impl Terminal {
                 if let Some(file_entry) = file_entry {
                     let mut cluster = file_entry.first_cluster() as u64;
                     let mut remain_bytes = file_entry.file_size() as u64;
-                    self.draw_cursor(w, false);
+                    self.draw_cursor(false, w);
                     loop {
                         if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
                             break;
@@ -324,33 +328,30 @@ impl Terminal {
                         let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
                         let p = &p[..size];
                         for &c in p {
-                            self.print_char(c as char, w);
+                            self.write_char(c as char).unwrap();
                         }
                         remain_bytes -= p.len() as u64;
                         cluster = bpb.next_cluster(cluster);
                     }
-                    self.draw_cursor(w, true);
+                    self.draw_cursor(true, w);
                 } else {
-                    let text = format!("no such file: {}\n", first_arg);
-                    self.print(text.as_str(), w);
+                    writeln!(self, "no such file: {}", first_arg).unwrap();
                 }
             }
             _ => {
-                self.print("no such command: ", w);
-                self.print(command, w);
-                self.print("\n", w);
+                writeln!(self, "no such command: {}", command).unwrap();
             }
         }
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {
-        self.draw_cursor(w, false);
+        self.draw_cursor(false, w);
 
         for char in s.chars() {
             self.print_char(char, w);
         }
 
-        self.draw_cursor(w, false);
+        self.draw_cursor(false, w);
     }
 
     fn print_char(&mut self, c: char, w: &mut Window) {
@@ -401,6 +402,13 @@ impl Terminal {
         self.cursor.x = self.line_buf.len() as i32 + 1;
 
         draw_area
+    }
+}
+
+impl fmt::Write for Terminal {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.print(s, global::terminal_window(self.layer_id));
+        Ok(())
     }
 }
 

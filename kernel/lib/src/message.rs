@@ -1,4 +1,6 @@
 use crate::graphics::{Rectangle, Vector2D};
+use crate::layer::LayerID;
+use crate::task::TaskID;
 
 #[derive(Debug, PartialEq)]
 pub struct Message {
@@ -39,9 +41,9 @@ pub enum MessageType {
 
 #[derive(Debug, PartialEq)]
 pub struct LayerMessage {
-    pub layer_id: u32,
+    pub layer_id: LayerID,
     pub op: LayerOperation,
-    pub src_task_id: u64,
+    pub src_task_id: TaskID,
 }
 
 #[derive(Debug, PartialEq)]

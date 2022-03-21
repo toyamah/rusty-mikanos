@@ -22,6 +22,7 @@ use lib::layer::global::{
     active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager, layer_task_map,
     screen_frame_buffer,
 };
+use lib::layer::LayerID;
 use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
@@ -47,8 +48,8 @@ fn main_window_ref() -> &'static Window {
     get_layer_window_ref(main_window_layer_id()).expect("could not find main layer")
 }
 
-static mut MAIN_WINDOW_LAYER_ID: Option<u32> = None;
-fn main_window_layer_id() -> u32 {
+static mut MAIN_WINDOW_LAYER_ID: Option<LayerID> = None;
+fn main_window_layer_id() -> LayerID {
     unsafe { MAIN_WINDOW_LAYER_ID.unwrap() }
 }
 
@@ -59,8 +60,8 @@ fn text_window_ref() -> &'static Window {
     get_layer_window_ref(text_window_layer_id()).expect("could not find text layer")
 }
 
-static mut TEXT_WINDOW_LAYER_ID: Option<u32> = None;
-fn text_window_layer_id() -> u32 {
+static mut TEXT_WINDOW_LAYER_ID: Option<LayerID> = None;
+fn text_window_layer_id() -> LayerID {
     unsafe { TEXT_WINDOW_LAYER_ID.unwrap() }
 }
 

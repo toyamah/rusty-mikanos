@@ -1,6 +1,6 @@
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE};
-use crate::layer::{ActiveLayer, LayerManager};
+use crate::layer::{ActiveLayer, LayerID, LayerManager};
 use crate::Window;
 use shared::PixelFormat;
 
@@ -74,14 +74,14 @@ const MOUSE_CURSOR_SHAPE: [&str; 24] = [
 ];
 
 pub struct Mouse {
-    layer_id: u32,
+    layer_id: LayerID,
     position: Vector2D<i32>,
-    drag_layer_id: Option<u32>,
+    drag_layer_id: Option<LayerID>,
     previous_buttons: u8,
 }
 
 impl Mouse {
-    pub fn new(layer_id: u32) -> Mouse {
+    pub fn new(layer_id: LayerID) -> Mouse {
         Mouse {
             layer_id,
             position: Vector2D::new(0, 0),
