@@ -8,11 +8,11 @@ use crate::layer::LayerManager;
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, Window};
 use alloc::collections::VecDeque;
-use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::fmt::Write;
 use core::ops::Deref;
-use core::{cmp, mem};
+use core::{cmp, fmt, mem};
 use shared::PixelFormat;
 
 pub mod global {
@@ -103,7 +103,7 @@ pub mod global {
         }
     }
 
-    fn terminal_window(terminal_layer_id: u32) -> &'static mut Window {
+    pub(crate) fn terminal_window(terminal_layer_id: u32) -> &'static mut Window {
         layer_manager()
             .get_layer_mut(terminal_layer_id)
             .expect("couldn't find terminal window")
@@ -295,16 +295,17 @@ impl Terminal {
                     let base = dir.basename();
                     let ext = dir.extension();
 
-                    let string = if ext[0] != 0 {
-                        format!(
-                            "{}.{}\n",
+                    if ext[0] != 0 {
+                        writeln!(
+                            self,
+                            "{}.{}",
                             string_trimming_null(&base),
                             string_trimming_null(&ext)
                         )
+                        .unwrap();
                     } else {
-                        format!("{}\n", string_trimming_null(&base))
-                    };
-                    self.print(string.as_str(), w);
+                        writeln!(self, "{}", string_trimming_null(&base)).unwrap();
+                    }
                 }
             }
             "cat" => {
@@ -324,21 +325,18 @@ impl Terminal {
                         let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
                         let p = &p[..size];
                         for &c in p {
-                            self.print_char(c as char, w);
+                            self.write_char(c as char).unwrap();
                         }
                         remain_bytes -= p.len() as u64;
                         cluster = bpb.next_cluster(cluster);
                     }
                     self.draw_cursor(true, w);
                 } else {
-                    let text = format!("no such file: {}\n", first_arg);
-                    self.print(text.as_str(), w);
+                    writeln!(self, "no such file: {}", first_arg).unwrap();
                 }
             }
             _ => {
-                self.print("no such command: ", w);
-                self.print(command, w);
-                self.print("\n", w);
+                writeln!(self, "no such command: {}", command).unwrap();
             }
         }
     }
@@ -401,6 +399,13 @@ impl Terminal {
         self.cursor.x = self.line_buf.len() as i32 + 1;
 
         draw_area
+    }
+}
+
+impl fmt::Write for Terminal {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.print(s, global::terminal_window(self.layer_id));
+        Ok(())
     }
 }
 
