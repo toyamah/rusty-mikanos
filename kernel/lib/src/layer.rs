@@ -17,6 +17,7 @@ pub mod global {
     use crate::graphics::global::{frame_buffer_config, screen_size};
     use crate::graphics::{draw_desktop, Vector2D};
     use crate::layer::{ActiveLayer, LayerID};
+    use crate::task::TaskID;
     use crate::Window;
     use alloc::collections::BTreeMap;
 
@@ -40,8 +41,8 @@ pub mod global {
         unsafe { &mut ACTIVE_LAYER }
     }
 
-    static mut LAYER_TASK_MAP: BTreeMap<LayerID, u64> = BTreeMap::new();
-    pub fn layer_task_map() -> &'static mut BTreeMap<LayerID, u64> {
+    static mut LAYER_TASK_MAP: BTreeMap<LayerID, TaskID> = BTreeMap::new();
+    pub fn layer_task_map() -> &'static mut BTreeMap<LayerID, TaskID> {
         unsafe { &mut LAYER_TASK_MAP }
     }
 

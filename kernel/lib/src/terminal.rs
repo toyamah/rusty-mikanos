@@ -22,12 +22,14 @@ pub mod global {
     use crate::layer::LayerID;
     use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
     use crate::task::global::task_manager;
+    use crate::task::TaskID;
     use crate::terminal::Terminal;
     use crate::Window;
     use core::arch::asm;
 
     pub fn task_terminal(task_id: u64, _: usize) {
         unsafe { asm!("cli") };
+        let task_id = TaskID::new(task_id);
         let current_task_id = task_manager().current_task().id();
         let mut terminal = Terminal::new();
         terminal.initialize(layer_manager(), frame_buffer_config().pixel_format);
