@@ -222,11 +222,9 @@ impl DirectoryEntry {
             }
             if name[i] == b'.' {
                 i83 = 7;
-                i += 1;
-                i83 += 1;
-                continue;
+            } else {
+                name83[i83] = name[i].to_ascii_uppercase();
             }
-            name83[i83] = name[i].to_ascii_uppercase();
             i += 1;
             i83 += 1;
         }
