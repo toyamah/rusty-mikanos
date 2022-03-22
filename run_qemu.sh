@@ -17,30 +17,35 @@ build_and_run() {
   cargo build --release # build in release mode to optimize code
 #  cargo build
 
-  cd ~/edk2
-  unlink MikanLoaderPkg
-  ln -s "$script_dir"/MikanLoaderPkg .
-  source edksetup.sh
-  build
-  $HOME/osbook/devenv/run_qemu.sh \
-    ./Build/MikanLoaderX64/DEBUG_CLANG38/X64/Loader.efi \
-    "$script_dir"/kernel.elf
+  make -C apps/onlyhlt/ onlyhlt
+
+  MIKANOS_DIR=$PWD $HOME/osbook/devenv/run_mikanos.sh
+
+#  cd ~/edk2
+#  unlink MikanLoaderPkg
+#  ln -s "$script_dir"/MikanLoaderPkg .
+#  source edksetup.sh
+#  build
+#  $HOME/osbook/devenv/run_qemu.sh \
+#    ./Build/MikanLoaderX64/DEBUG_CLANG38/X64/Loader.efi \
+#    "$script_dir"/kernel.elf
 }
 
 build_and_run_official() {
   official_dir="$script_dir"/official
 
-  cd "$official_dir"/kernel
-  make
+  cd "$official_dir"
+#  make
+  ./build.sh run
 
-  cd ~/edk2
-  unlink MikanLoaderPkg
-  ln -s "$official_dir"/MikanLoaderPkg .
-  source edksetup.sh
-  build
-  $HOME/osbook/devenv/run_qemu.sh \
-    ./Build/MikanLoaderX64/DEBUG_CLANG38/X64/Loader.efi \
-    "$official_dir"/kernel/kernel.elf
+#  cd ~/edk2
+#  unlink MikanLoaderPkg
+#  ln -s "$official_dir"/MikanLoaderPkg .
+#  source edksetup.sh
+#  build
+#  $HOME/osbook/devenv/run_qemu.sh \
+#    ./Build/MikanLoaderX64/DEBUG_CLANG38/X64/Loader.efi \
+#    "$official_dir"/kernel/kernel.elf
 }
 
 parse_params() {
