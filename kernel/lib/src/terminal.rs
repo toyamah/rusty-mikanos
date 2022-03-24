@@ -1,4 +1,4 @@
-use crate::fat::{Attribute, END_OF_CLUSTER_CHAIN};
+use crate::fat::{Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
@@ -9,6 +9,7 @@ use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, Window};
 use alloc::collections::VecDeque;
 use alloc::string::{String, ToString};
+use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::Write;
 use core::ops::Deref;
@@ -57,6 +58,7 @@ pub mod global {
                 unsafe { asm!("sti") };
                 continue;
             };
+            unsafe { asm!("sti") };
 
             let msg = msg.unwrap();
             match msg.m_type {
@@ -339,9 +341,41 @@ impl Terminal {
                 }
             }
             _ => {
-                writeln!(self, "no such command: {}", command).unwrap();
+                let bpb = fat::global::boot_volume_image();
+                if let Some(file_entry) =
+                    fat::find_file(command, bpb.get_root_cluster() as u64, bpb)
+                {
+                    self.execute_file(file_entry, bpb);
+                } else {
+                    writeln!(self, "no such command: {}", command).unwrap();
+                }
             }
         }
+    }
+
+    fn execute_file(&self, file_entry: &DirectoryEntry, boot_volume_image: &Bpb) {
+        let mut cluster = file_entry.first_cluster() as u64;
+        let mut remain_bytes = file_entry.file_size() as u64;
+
+        let mut file_buf: Vec<u8> = vec![0; remain_bytes as usize];
+        let mut p = &mut file_buf[..];
+
+        while cluster != 0 && cluster != fat::END_OF_CLUSTER_CHAIN {
+            let copy_bytes = if fat::global::bytes_per_cluster() < remain_bytes {
+                fat::global::bytes_per_cluster()
+            } else {
+                remain_bytes
+            };
+
+            let sector = boot_volume_image.get_sector_by_cluster::<u8>(cluster);
+            p.copy_from_slice(&sector[..copy_bytes as usize]);
+            remain_bytes -= copy_bytes;
+            p = &mut p[copy_bytes as usize..];
+            cluster = boot_volume_image.next_cluster(cluster);
+        }
+
+        let f = &file_buf as *const _ as *const fn() -> ();
+        unsafe { f.as_ref() }.unwrap()();
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {
