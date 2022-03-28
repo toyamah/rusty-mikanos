@@ -1,3 +1,4 @@
+use crate::elf::Elf64Ehdr;
 use crate::fat::{Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
@@ -345,7 +346,7 @@ impl Terminal {
                 if let Some(file_entry) =
                     fat::find_file(command, bpb.get_root_cluster() as u64, bpb)
                 {
-                    self.execute_file(file_entry, bpb);
+                    self.execute_file(file_entry, command, args, bpb);
                 } else {
                     writeln!(self, "no such command: {}", command).unwrap();
                 }
@@ -353,7 +354,13 @@ impl Terminal {
         }
     }
 
-    fn execute_file(&self, file_entry: &DirectoryEntry, boot_volume_image: &Bpb) {
+    fn execute_file(
+        &mut self,
+        file_entry: &DirectoryEntry,
+        command: &str,
+        args: Vec<&str>,
+        boot_volume_image: &Bpb,
+    ) {
         let mut cluster = file_entry.first_cluster() as u64;
         let mut remain_bytes = file_entry.file_size() as u64;
 
@@ -374,8 +381,15 @@ impl Terminal {
             cluster = boot_volume_image.next_cluster(cluster);
         }
 
-        let f = &file_buf as *const _ as *const fn() -> ();
-        unsafe { f.as_ref() }.unwrap()();
+        let elf_header = &file_buf as *const _ as *const Elf64Ehdr;
+        let elf_header = unsafe { elf_header.as_ref() }.unwrap();
+        if !elf_header.is_elf() {
+            let f = &file_buf as *const _ as *const fn() -> ();
+            unsafe { f.as_ref() }.unwrap()();
+            return;
+        }
+
+        todo!();
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {
