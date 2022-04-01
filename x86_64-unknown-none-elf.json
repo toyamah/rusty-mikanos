@@ -20,7 +20,7 @@
       "--entry", "KernelMain",
       "-z", "norelro",
       "--image-base", "0x100000",
-      "-o", "kernel.elf",
+      "-o", "kernel/kernel.elf",
       "--static"
     ]
   }
