@@ -168,7 +168,7 @@ impl DirectoryEntry {
     }
 
     pub fn first_cluster(&self) -> u32 {
-        self.first_cluster_low as u32 | (self.first_cluster_high as u32) << 16
+        self.first_cluster_low as u32 | ((self.first_cluster_high as u32) << 16)
     }
 
     pub fn attr(&self) -> Attribute {
