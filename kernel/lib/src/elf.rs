@@ -1,4 +1,4 @@
-use log::info;
+use core::mem;
 
 const EI_NIDENT: usize = 16;
 
@@ -10,6 +10,7 @@ type Elf64Sword = i32;
 type Elf64Xword = u64;
 type Elf64Sxword = i64;
 
+#[repr(C)]
 pub struct Elf64Ehdr {
     pub e_ident: [u8; EI_NIDENT],
     pub e_type: Elf64Half,
@@ -28,7 +29,13 @@ pub struct Elf64Ehdr {
 }
 
 impl Elf64Ehdr {
-    pub fn is_elf(&self) -> bool {
+    pub(crate) unsafe fn from(file_buf: &[u8]) -> Option<&Elf64Ehdr> {
+        let header_size = mem::size_of::<Elf64Ehdr>();
+        let elf_header = &file_buf[..header_size] as *const _ as *const Elf64Ehdr;
+        elf_header.as_ref()
+    }
+
+    pub(crate) fn is_elf(&self) -> bool {
         &self.e_ident[..4] == b"\x7fELF"
     }
 }

@@ -346,7 +346,7 @@ impl Terminal {
                 if let Some(file_entry) =
                     fat::find_file(command, bpb.get_root_cluster() as u64, bpb)
                 {
-                    self.execute_file(file_entry, command, args, bpb);
+                    self.execute_file(file_entry, bpb);
                 } else {
                     writeln!(self, "no such command: {}", command).unwrap();
                 }
@@ -354,42 +354,36 @@ impl Terminal {
         }
     }
 
-    fn execute_file(
-        &mut self,
-        file_entry: &DirectoryEntry,
-        command: &str,
-        args: Vec<&str>,
-        boot_volume_image: &Bpb,
-    ) {
+    fn execute_file(&mut self, file_entry: &DirectoryEntry, boot_volume_image: &Bpb) {
         let mut cluster = file_entry.first_cluster() as u64;
         let mut remain_bytes = file_entry.file_size() as u64;
-
         let mut file_buf: Vec<u8> = vec![0; remain_bytes as usize];
-        let mut p = &mut file_buf[..];
 
+        let mut p = file_buf.as_mut_slice();
         while cluster != 0 && cluster != fat::END_OF_CLUSTER_CHAIN {
-            let copy_bytes = if fat::global::bytes_per_cluster() < remain_bytes {
-                fat::global::bytes_per_cluster()
-            } else {
-                remain_bytes
-            };
-
+            let copy_bytes = cmp::min(fat::global::bytes_per_cluster(), remain_bytes);
             let sector = boot_volume_image.get_sector_by_cluster::<u8>(cluster);
-            p.copy_from_slice(&sector[..copy_bytes as usize]);
+
+            let size = copy_bytes as usize;
+            p[..size].copy_from_slice(&sector[..size]);
+
             remain_bytes -= copy_bytes;
             p = &mut p[copy_bytes as usize..];
             cluster = boot_volume_image.next_cluster(cluster);
         }
 
-        let elf_header = &file_buf as *const _ as *const Elf64Ehdr;
-        let elf_header = unsafe { elf_header.as_ref() }.unwrap();
+        let elf_header = unsafe { Elf64Ehdr::from(&file_buf) }.unwrap();
         if !elf_header.is_elf() {
             let f = &file_buf as *const _ as *const fn() -> ();
             unsafe { f.as_ref() }.unwrap()();
             return;
         }
 
-        todo!();
+        let entry_addr = elf_header.e_entry + &file_buf[0] as *const _ as usize;
+        let f = &entry_addr as *const _ as *const fn() -> i32;
+        let f = unsafe { f.as_ref() }.unwrap();
+        let ret = f();
+        self.write_fmt(format_args!("app exited. ret = {}\n", ret));
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {

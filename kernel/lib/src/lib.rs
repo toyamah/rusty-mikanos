@@ -8,6 +8,7 @@ use crate::window::Window;
 pub mod acpi;
 pub mod asm;
 pub mod console;
+mod elf;
 pub mod error;
 pub mod fat;
 mod font;
