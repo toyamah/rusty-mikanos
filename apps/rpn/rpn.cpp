@@ -1,4 +1,3 @@
-//extern "C" int main(int argc, char** argv) {
-extern "C" int main() {
-    return 11;
+extern "C" int main(int argc) {
+    return argc;
 }

@@ -259,13 +259,14 @@ impl Terminal {
 
     fn execute_line(&mut self, w: &mut Window) {
         let line_buf = mem::take(&mut self.line_buf);
-        let command = parse_command(line_buf.as_str());
-        if command.is_none() {
+        let args = if let Some(args) = parse_command(line_buf.as_str()) {
+            args
+        } else {
             return;
-        }
-        let (command, args) = command.unwrap();
+        };
+        let command = args.first().unwrap().to_string();
 
-        match command {
+        match command.as_str() {
             "echo" => {
                 if let Some(&arg) = args.get(0) {
                     self.print(arg, w);
@@ -344,9 +345,9 @@ impl Terminal {
             _ => {
                 let bpb = fat::global::boot_volume_image();
                 if let Some(file_entry) =
-                    fat::find_file(command, bpb.get_root_cluster() as u64, bpb)
+                    fat::find_file(command.as_str(), bpb.get_root_cluster() as u64, bpb)
                 {
-                    self.execute_file(file_entry, bpb);
+                    self.execute_file(file_entry, args, bpb);
                 } else {
                     writeln!(self, "no such command: {}", command).unwrap();
                 }
@@ -354,7 +355,12 @@ impl Terminal {
         }
     }
 
-    fn execute_file(&mut self, file_entry: &DirectoryEntry, boot_volume_image: &Bpb) {
+    fn execute_file(
+        &mut self,
+        file_entry: &DirectoryEntry,
+        args: Vec<&str>,
+        boot_volume_image: &Bpb,
+    ) {
         let mut cluster = file_entry.first_cluster() as u64;
         let mut remain_bytes = file_entry.file_size() as u64;
         let mut file_buf: Vec<u8> = vec![0; remain_bytes as usize];
@@ -380,9 +386,9 @@ impl Terminal {
         }
 
         let entry_addr = elf_header.e_entry + &file_buf[0] as *const _ as usize;
-        let f = &entry_addr as *const _ as *const fn() -> i32;
+        let f = &entry_addr as *const _ as *const fn(usize) -> i32;
         let f = unsafe { f.as_ref() }.unwrap();
-        let ret = f();
+        let ret = f(args.len());
         self.write_fmt(format_args!("app exited. ret = {}\n", ret));
     }
 
@@ -532,14 +538,13 @@ fn draw_terminal<W: PixelWriter>(w: &mut W, pos: Vector2D<i32>, size: Vector2D<i
     );
 }
 
-fn parse_command(s: &str) -> Option<(&str, Vec<&str>)> {
+fn parse_command(s: &str) -> Option<Vec<&str>> {
     let mut parsed = s.trim().split_whitespace().collect::<VecDeque<_>>();
     if parsed.is_empty() {
         return None;
     }
 
-    let command = parsed.pop_front().unwrap();
-    Some((command, Vec::from(parsed)))
+    Some(Vec::from(parsed))
 }
 
 fn string_trimming_null(bytes: &[u8]) -> String {
@@ -643,19 +648,19 @@ mod tests {
 
     #[test]
     fn parse_command_no_args() {
-        assert_eq!(parse_command("echo"), Some(("echo", Vec::new())));
+        assert_eq!(parse_command("echo"), Some(vec!["echo"]));
     }
 
     #[test]
     fn parse_command_one_arg() {
-        assert_eq!(parse_command("echo a\\aa"), Some(("echo", vec!["a\\aa"])));
+        assert_eq!(parse_command("echo a\\aa"), Some((vec!["echo", "a\\aa"])));
     }
 
     #[test]
     fn parse_command_args() {
         assert_eq!(
             parse_command("ls -l | sort"),
-            Some(("ls", vec!["-l", "|", "sort"]))
+            Some((vec!["ls", "-l", "|", "sort"]))
         );
     }
 }
