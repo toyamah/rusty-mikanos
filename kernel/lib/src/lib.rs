@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(dead_code)]
 #![feature(const_btree_new)]
+#![feature(slice_internals)]
 
 extern crate alloc;
 
@@ -8,6 +9,7 @@ use crate::window::Window;
 pub mod acpi;
 pub mod asm;
 pub mod console;
+mod cstring;
 mod elf;
 pub mod error;
 pub mod fat;
