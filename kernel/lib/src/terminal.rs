@@ -6,6 +6,8 @@ use crate::graphics::{
     COLOR_BLACK, COLOR_WHITE,
 };
 use crate::layer::{LayerID, LayerManager};
+use crate::rust_official::cchar::c_char;
+use crate::rust_official::cstring::cstring_new;
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, Window};
 use alloc::collections::VecDeque;
@@ -259,16 +261,16 @@ impl Terminal {
 
     fn execute_line(&mut self, w: &mut Window) {
         let line_buf = mem::take(&mut self.line_buf);
-        let args = if let Some(args) = parse_command(line_buf.as_str()) {
-            args
+        let argv = if let Some(argv) = parse_command(line_buf.as_str()) {
+            argv
         } else {
             return;
         };
-        let command = args.first().unwrap().to_string();
+        let command = argv.first().unwrap().to_string();
 
         match command.as_str() {
             "echo" => {
-                if let Some(&arg) = args.get(0) {
+                if let Some(&arg) = argv.get(0) {
                     self.print(arg, w);
                 }
                 self.print("\n", w);
@@ -317,7 +319,7 @@ impl Terminal {
             }
             "cat" => {
                 let bpb = fat::global::boot_volume_image();
-                let first_arg = args.get(0).unwrap_or(&"").deref();
+                let first_arg = argv.get(0).unwrap_or(&"").deref();
                 let file_entry = fat::find_file(first_arg, bpb.get_root_cluster() as u64, bpb);
                 if let Some(file_entry) = file_entry {
                     let mut cluster = file_entry.first_cluster() as u64;
@@ -347,7 +349,7 @@ impl Terminal {
                 if let Some(file_entry) =
                     fat::find_file(command.as_str(), bpb.get_root_cluster() as u64, bpb)
                 {
-                    self.execute_file(file_entry, args, bpb);
+                    self.execute_file(file_entry, argv, bpb);
                 } else {
                     writeln!(self, "no such command: {}", command).unwrap();
                 }
@@ -358,7 +360,7 @@ impl Terminal {
     fn execute_file(
         &mut self,
         file_entry: &DirectoryEntry,
-        args: Vec<&str>,
+        argv: Vec<&str>,
         boot_volume_image: &Bpb,
     ) {
         let mut cluster = file_entry.first_cluster() as u64;
@@ -386,9 +388,13 @@ impl Terminal {
         }
 
         let entry_addr = elf_header.e_entry + &file_buf[0] as *const _ as usize;
-        let f = &entry_addr as *const _ as *const fn(usize) -> i32;
+        let f = &entry_addr as *const _ as *const fn(usize, *const *const c_char) -> i32;
         let f = unsafe { f.as_ref() }.unwrap();
-        let ret = f(args.len());
+        let c_argv = argv
+            .iter()
+            .map(|&s| cstring_new(s).unwrap().into_raw())
+            .collect::<Vec<_>>();
+        let ret = f(c_argv.len(), &c_argv[0] as *const _ as *const *const c_char);
         self.write_fmt(format_args!("app exited. ret = {}\n", ret));
     }
 
