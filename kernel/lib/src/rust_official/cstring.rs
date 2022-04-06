@@ -1,7 +1,7 @@
 // Note: Code in this file was borrowed and modified from the official Rust std library
 // https://github.com/rust-lang/rust/blob/master/library/std/src/ffi/c_str.rs
 
-// These lines are modified from the original
+// Note: These lines are modified from the original
 use crate::rust_official::cchar::c_char;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -104,7 +104,7 @@ pub struct CString {
     inner: Box<[u8]>,
 }
 
-// I picked some functions I needed out from the original.
+// Note: I picked some functions I needed out from the original.
 impl CString {
     fn _new(bytes: Vec<u8>) -> Result<CString, NulError> {
         match memchr::memchr(0, &bytes) {

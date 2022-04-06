@@ -1,2 +1,2 @@
-mod cchar;
-mod cstring;
+pub(crate) mod cchar;
+pub(crate) mod cstring;
