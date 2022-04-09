@@ -1,7 +1,7 @@
 // Note: Code in this file was borrowed and modified from the official Rust std library
 // https://github.com/rust-lang/rust/blob/master/library/std/src/ffi/c_str.rs
 
-// Note: These lines are modified from the original
+// Note: These lines were modified from the original.
 use crate::rust_official::cchar::c_char;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -104,9 +104,10 @@ pub struct CString {
     inner: Box<[u8]>,
 }
 
-// Note: I picked some functions I needed out from the original.
+// Note: I picked out some needed functions from `impl CString` block of the original.
 impl CString {
-    fn _new(bytes: Vec<u8>) -> Result<CString, NulError> {
+    // Note: I added `pub` which is not included in the official.
+    pub fn _new(bytes: Vec<u8>) -> Result<CString, NulError> {
         match memchr::memchr(0, &bytes) {
             Some(i) => Err(NulError(i, bytes)),
             None => Ok(unsafe { CString::from_vec_unchecked(bytes) }),
@@ -210,11 +211,6 @@ impl CString {
 /// let _: NulError = CString::new(b"f\0oo".to_vec()).unwrap_err();
 /// ```
 #[derive(Clone, PartialEq, Eq, Debug)]
-// Note: This line was modified from the original
+// Note: This line was modified from the original.
 // #[stable(feature = "rust1", since = "1.0.0")]
 pub struct NulError(usize, Vec<u8>);
-
-// Note: This function was added by me and not included in the original.
-pub fn cstring_new(str: &str) -> Result<CString, NulError> {
-    CString::_new(str.as_bytes().to_vec())
-}

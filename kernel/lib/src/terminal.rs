@@ -7,7 +7,7 @@ use crate::graphics::{
 };
 use crate::layer::{LayerID, LayerManager};
 use crate::rust_official::cchar::c_char;
-use crate::rust_official::cstring::cstring_new;
+use crate::rust_official::cstring::{CString, NulError};
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, Window};
 use alloc::collections::VecDeque;
@@ -390,10 +390,7 @@ impl Terminal {
         let entry_addr = elf_header.e_entry + &file_buf[0] as *const _ as usize;
         let f = &entry_addr as *const _ as *const fn(usize, *const *const c_char) -> i32;
         let f = unsafe { f.as_ref() }.unwrap();
-        let c_argv = argv
-            .iter()
-            .map(|&s| cstring_new(s).unwrap().into_raw())
-            .collect::<Vec<_>>();
+        let c_argv = new_cstring_vec(argv);
         let ret = f(c_argv.len(), &c_argv[0] as *const _ as *const *const c_char);
         self.write_fmt(format_args!("app exited. ret = {}\n", ret));
     }
@@ -556,6 +553,16 @@ fn parse_command(s: &str) -> Option<Vec<&str>> {
 fn string_trimming_null(bytes: &[u8]) -> String {
     let vec: Vec<u8> = bytes.iter().take_while(|&&v| v != 0x00).copied().collect();
     String::from_utf8(vec).unwrap()
+}
+
+fn new_cstring(str: &str) -> Result<CString, NulError> {
+    CString::_new(str.as_bytes().to_vec())
+}
+
+fn new_cstring_vec(strs: Vec<&str>) -> Vec<*mut c_char> {
+    strs.iter()
+        .map(|&s| new_cstring(s).unwrap().into_raw())
+        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]
