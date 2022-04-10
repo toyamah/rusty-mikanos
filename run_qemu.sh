@@ -12,18 +12,29 @@ build_and_run() {
   export RUSTFLAGS="-C link-arg=$LDFLAGS"
 
   # run clippy instead of run on Github Actions because setting up the environment is bothersome.
-  cargo clippy -- -Dwarnings
+#  cargo clippy -- -Dwarnings
 
   cargo build --release # build in release mode to optimize code
 #  cargo build
 
+  cd apps
+  cargo build --bin rpn
+  cd -
+
   make -C apps/onlyhlt/ onlyhlt
+#  make -C apps/rpn/ rpn
 
   MIKANOS_DIR=$PWD $HOME/osbook/devenv/run_mikanos.sh
 }
 
 build_and_run_official() {
   official_dir="$script_dir"/official
+
+#  cd "$script_dir"
+#  export RUSTFLAGS="-C link-arg=$LDFLAGS"
+#  cd apps
+#  cargo build --bin aa
+#  cp rpn/rpn $official_dir/apps/rpn
 
   cd "$official_dir"
   ./build.sh run
