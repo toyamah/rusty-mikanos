@@ -3,5 +3,6 @@ members = [
     "kernel",
     "kernel/lib",
     "shared",
-    "apps"
+    "apps",
+    "apps/rpn"
 ]
