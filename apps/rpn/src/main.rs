@@ -1,10 +1,10 @@
 #![no_std]
 #![no_main]
 
-use apps::rust_official::cchar::c_char;
-use apps::rust_official::cstr::CStr;
 use core::arch::asm;
 use core::panic::PanicInfo;
+use shared_lib::rust_official::cchar::c_char;
+use shared_lib::rust_official::cstr::CStr;
 
 #[no_mangle]
 pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
