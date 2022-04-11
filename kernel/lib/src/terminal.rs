@@ -1,3 +1,4 @@
+use crate::elf::Elf64Ehdr;
 use crate::fat::{Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
@@ -5,6 +6,8 @@ use crate::graphics::{
     COLOR_BLACK, COLOR_WHITE,
 };
 use crate::layer::{LayerID, LayerManager};
+use crate::rust_official::cchar::c_char;
+use crate::rust_official::cstring::{CString, NulError};
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, Window};
 use alloc::collections::VecDeque;
@@ -258,15 +261,16 @@ impl Terminal {
 
     fn execute_line(&mut self, w: &mut Window) {
         let line_buf = mem::take(&mut self.line_buf);
-        let command = parse_command(line_buf.as_str());
-        if command.is_none() {
+        let argv = if let Some(argv) = parse_command(line_buf.as_str()) {
+            argv
+        } else {
             return;
-        }
-        let (command, args) = command.unwrap();
+        };
+        let command = argv.first().unwrap().deref();
 
         match command {
             "echo" => {
-                if let Some(&arg) = args.get(0) {
+                if let Some(&arg) = argv.get(0) {
                     self.print(arg, w);
                 }
                 self.print("\n", w);
@@ -315,7 +319,7 @@ impl Terminal {
             }
             "cat" => {
                 let bpb = fat::global::boot_volume_image();
-                let first_arg = args.get(0).unwrap_or(&"").deref();
+                let first_arg = argv.get(0).unwrap_or(&"").deref();
                 let file_entry = fat::find_file(first_arg, bpb.get_root_cluster() as u64, bpb);
                 if let Some(file_entry) = file_entry {
                     let mut cluster = file_entry.first_cluster() as u64;
@@ -345,7 +349,7 @@ impl Terminal {
                 if let Some(file_entry) =
                     fat::find_file(command, bpb.get_root_cluster() as u64, bpb)
                 {
-                    self.execute_file(file_entry, bpb);
+                    self.execute_file(file_entry, argv.as_slice(), bpb);
                 } else {
                     writeln!(self, "no such command: {}", command).unwrap();
                 }
@@ -353,29 +357,53 @@ impl Terminal {
         }
     }
 
-    fn execute_file(&self, file_entry: &DirectoryEntry, boot_volume_image: &Bpb) {
+    fn execute_file(
+        &mut self,
+        file_entry: &DirectoryEntry,
+        argv: &[&str],
+        boot_volume_image: &Bpb,
+    ) {
         let mut cluster = file_entry.first_cluster() as u64;
         let mut remain_bytes = file_entry.file_size() as u64;
-
         let mut file_buf: Vec<u8> = vec![0; remain_bytes as usize];
-        let mut p = &mut file_buf[..];
 
+        let mut p = file_buf.as_mut_slice();
         while cluster != 0 && cluster != fat::END_OF_CLUSTER_CHAIN {
-            let copy_bytes = if fat::global::bytes_per_cluster() < remain_bytes {
-                fat::global::bytes_per_cluster()
-            } else {
-                remain_bytes
-            };
-
+            let copy_bytes = cmp::min(fat::global::bytes_per_cluster(), remain_bytes);
             let sector = boot_volume_image.get_sector_by_cluster::<u8>(cluster);
-            p.copy_from_slice(&sector[..copy_bytes as usize]);
+
+            let size = copy_bytes as usize;
+            p[..size].copy_from_slice(&sector[..size]);
+
             remain_bytes -= copy_bytes;
             p = &mut p[copy_bytes as usize..];
             cluster = boot_volume_image.next_cluster(cluster);
         }
 
-        let f = &file_buf as *const _ as *const fn() -> ();
-        unsafe { f.as_ref() }.unwrap()();
+        let elf_header = unsafe { Elf64Ehdr::from(&file_buf) }.unwrap();
+        if !elf_header.is_elf() {
+            let f = &file_buf as *const _ as *const fn() -> ();
+            unsafe { f.as_ref() }.unwrap()();
+            return;
+        }
+
+        let entry_addr = elf_header.e_entry + &file_buf[0] as *const _ as usize;
+        let f = &entry_addr as *const _ as *const fn(usize, *const *const c_char) -> i32;
+        let f = unsafe { f.as_ref() }.unwrap();
+        let cstr_vec = new_cstring_vec(argv);
+
+        let c_argv = cstr_vec
+            .into_iter()
+            .map(|c| c.into_raw())
+            .collect::<Vec<_>>();
+        let ret = f(c_argv.len(), &c_argv[0] as *const _ as *const *const c_char);
+        // retake pointers to free memory
+        for c_arg in c_argv {
+            let _ = unsafe { CString::from_raw(c_arg) };
+        }
+
+        self.write_fmt(format_args!("app exited. ret = {}\n", ret))
+            .unwrap();
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {
@@ -524,19 +552,28 @@ fn draw_terminal<W: PixelWriter>(w: &mut W, pos: Vector2D<i32>, size: Vector2D<i
     );
 }
 
-fn parse_command(s: &str) -> Option<(&str, Vec<&str>)> {
-    let mut parsed = s.trim().split_whitespace().collect::<VecDeque<_>>();
+fn parse_command(s: &str) -> Option<Vec<&str>> {
+    let parsed = s.trim().split_whitespace().collect::<VecDeque<_>>();
     if parsed.is_empty() {
         return None;
     }
 
-    let command = parsed.pop_front().unwrap();
-    Some((command, Vec::from(parsed)))
+    Some(Vec::from(parsed))
 }
 
 fn string_trimming_null(bytes: &[u8]) -> String {
     let vec: Vec<u8> = bytes.iter().take_while(|&&v| v != 0x00).copied().collect();
     String::from_utf8(vec).unwrap()
+}
+
+fn new_cstring(str: &str) -> Result<CString, NulError> {
+    CString::_new(str.as_bytes().to_vec())
+}
+
+fn new_cstring_vec(strs: &[&str]) -> Vec<CString> {
+    strs.iter()
+        .map(|&s| new_cstring(s).unwrap())
+        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]
@@ -635,19 +672,19 @@ mod tests {
 
     #[test]
     fn parse_command_no_args() {
-        assert_eq!(parse_command("echo"), Some(("echo", Vec::new())));
+        assert_eq!(parse_command("echo"), Some(vec!["echo"]));
     }
 
     #[test]
     fn parse_command_one_arg() {
-        assert_eq!(parse_command("echo a\\aa"), Some(("echo", vec!["a\\aa"])));
+        assert_eq!(parse_command("echo a\\aa"), Some((vec!["echo", "a\\aa"])));
     }
 
     #[test]
     fn parse_command_args() {
         assert_eq!(
             parse_command("ls -l | sort"),
-            Some(("ls", vec!["-l", "|", "sort"]))
+            Some((vec!["ls", "-l", "|", "sort"]))
         );
     }
 }

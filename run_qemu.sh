@@ -12,10 +12,16 @@ build_and_run() {
   export RUSTFLAGS="-C link-arg=$LDFLAGS"
 
   # run clippy instead of run on Github Actions because setting up the environment is bothersome.
+  cd kernel # run in only kernel because borrowed stdlib code in apps/shared_lib needs to be fixed.
   cargo clippy -- -Dwarnings
+  cd -
 
   cargo build --release # build in release mode to optimize code
 #  cargo build
+
+  cd apps/rpn
+  cargo build --release
+  cd -
 
   make -C apps/onlyhlt/ onlyhlt
 
@@ -24,6 +30,13 @@ build_and_run() {
 
 build_and_run_official() {
   official_dir="$script_dir"/official
+
+#  cd "$script_dir"
+#  export RUSTFLAGS="-C link-arg=$LDFLAGS"
+#  cd apps/rpn
+#  cargo build --release
+#  cd -
+#  cp rpn/rpn $official_dir/apps/rpn
 
   cd "$official_dir"
   ./build.sh run
