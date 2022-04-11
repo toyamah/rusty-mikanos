@@ -33,8 +33,9 @@ build_and_run_official() {
 
 #  cd "$script_dir"
 #  export RUSTFLAGS="-C link-arg=$LDFLAGS"
-#  cd apps
-#  cargo build --bin aa
+#  cd apps/rpn
+#  cargo build --release
+#  cd -
 #  cp rpn/rpn $official_dir/apps/rpn
 
   cd "$official_dir"
