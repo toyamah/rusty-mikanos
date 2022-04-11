@@ -3,8 +3,10 @@
 
 // Note: I modified these lines.
 use crate::rust_official::cchar::c_char;
+use crate::rust_official::strlen;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::ptr::slice_from_raw_parts_mut;
 use core::slice::memchr;
 use core::{mem, ptr};
 
@@ -139,6 +141,73 @@ impl CString {
         v.push(0);
         CString {
             inner: v.into_boxed_slice(),
+        }
+    }
+
+    /// Retakes ownership of a `CString` that was transferred to C via
+    /// [`CString::into_raw`].
+    ///
+    /// Additionally, the length of the string will be recalculated from the pointer.
+    ///
+    /// # Safety
+    ///
+    /// This should only ever be called with a pointer that was earlier
+    /// obtained by calling [`CString::into_raw`]. Other usage (e.g., trying to take
+    /// ownership of a string that was allocated by foreign code) is likely to lead
+    /// to undefined behavior or allocator corruption.
+    ///
+    /// It should be noted that the length isn't just "recomputed," but that
+    /// the recomputed length must match the original length from the
+    /// [`CString::into_raw`] call. This means the [`CString::into_raw`]/`from_raw`
+    /// methods should not be used when passing the string to C functions that can
+    /// modify the string's length.
+    ///
+    /// > **Note:** If you need to borrow a string that was allocated by
+    /// > foreign code, use [`CStr`]. If you need to take ownership of
+    /// > a string that was allocated by foreign code, you will need to
+    /// > make your own provisions for freeing it appropriately, likely
+    /// > with the foreign code's API to do that.
+    ///
+    /// # Examples
+    ///
+    /// Creates a `CString`, pass ownership to an `extern` function (via raw pointer), then retake
+    /// ownership with `from_raw`:
+    ///
+    /// ```ignore (extern-declaration)
+    /// use std::ffi::CString;
+    /// use std::os::raw::c_char;
+    ///
+    /// extern "C" {
+    ///     fn some_extern_function(s: *mut c_char);
+    /// }
+    ///
+    /// let c_string = CString::new("Hello!").expect("CString::new failed");
+    /// let raw = c_string.into_raw();
+    /// unsafe {
+    ///     some_extern_function(raw);
+    ///     let c_string = CString::from_raw(raw);
+    /// }
+    /// ```
+    // Note: I disabled these lines.
+    // #[must_use = "call `drop(from_raw(ptr))` if you intend to drop the `CString`"]
+    // #[stable(feature = "cstr_memory", since = "1.4.0")]
+    pub unsafe fn from_raw(ptr: *mut c_char) -> CString {
+        // SAFETY: This is called with a pointer that was obtained from a call
+        // to `CString::into_raw` and the length has not been modified. As such,
+        // we know there is a NUL byte (and only one) at the end and that the
+        // information about the size of the allocation is correct on Rust's
+        // side.
+
+        // Note: I replaced this unsafe block with the next lines.
+        // unsafe {
+        //     let len = sys::strlen(ptr) + 1; // Including the NUL byte
+        //     let slice = slice::from_raw_parts_mut(ptr, len as usize);
+        //     CString { inner: Box::from_raw(slice as *mut [c_char] as *mut [u8]) }
+        // }
+        let len = strlen(ptr) + 1; // Including the NUL byte
+        let slice = &mut *slice_from_raw_parts_mut(ptr, len as usize);
+        CString {
+            inner: Box::from_raw(slice as *mut [c_char] as *mut [u8]),
         }
     }
 
