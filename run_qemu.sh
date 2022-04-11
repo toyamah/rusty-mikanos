@@ -17,12 +17,11 @@ build_and_run() {
   cargo build --release # build in release mode to optimize code
 #  cargo build
 
-  cd apps
-  cargo build --bin rpn
+  cd apps/rpn
+  cargo build --release
   cd -
 
   make -C apps/onlyhlt/ onlyhlt
-#  make -C apps/rpn/ rpn
 
   MIKANOS_DIR=$PWD $HOME/osbook/devenv/run_mikanos.sh
 }

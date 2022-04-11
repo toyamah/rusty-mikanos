@@ -187,6 +187,61 @@ impl CStr {
         unsafe { &*(bytes as *const [u8] as *const CStr) }
     }
 
+    /// Returns the inner pointer to this C string.
+    ///
+    /// The returned pointer will be valid for as long as `self` is, and points
+    /// to a contiguous region of memory terminated with a 0 byte to represent
+    /// the end of the string.
+    ///
+    /// **WARNING**
+    ///
+    /// The returned pointer is read-only; writing to it (including passing it
+    /// to C code that writes to it) causes undefined behavior.
+    ///
+    /// It is your responsibility to make sure that the underlying memory is not
+    /// freed too early. For example, the following code will cause undefined
+    /// behavior when `ptr` is used inside the `unsafe` block:
+    ///
+    /// ```no_run
+    /// # #![allow(unused_must_use)] #![allow(temporary_cstring_as_ptr)]
+    /// use std::ffi::CString;
+    ///
+    /// let ptr = CString::new("Hello").expect("CString::new failed").as_ptr();
+    /// unsafe {
+    ///     // `ptr` is dangling
+    ///     *ptr;
+    /// }
+    /// ```
+    ///
+    /// This happens because the pointer returned by `as_ptr` does not carry any
+    /// lifetime information and the [`CString`] is deallocated immediately after
+    /// the `CString::new("Hello").expect("CString::new failed").as_ptr()`
+    /// expression is evaluated.
+    /// To fix the problem, bind the `CString` to a local variable:
+    ///
+    /// ```no_run
+    /// # #![allow(unused_must_use)]
+    /// use std::ffi::CString;
+    ///
+    /// let hello = CString::new("Hello").expect("CString::new failed");
+    /// let ptr = hello.as_ptr();
+    /// unsafe {
+    ///     // `ptr` is valid because `hello` is in scope
+    ///     *ptr;
+    /// }
+    /// ```
+    ///
+    /// This way, the lifetime of the [`CString`] in `hello` encompasses
+    /// the lifetime of `ptr` and the `unsafe` block.
+    #[inline]
+    #[must_use]
+    // Note: These lines were modified from the original.
+    // #[stable(feature = "rust1", since = "1.0.0")]
+    // #[rustc_const_stable(feature = "const_str_as_ptr", since = "1.32.0")]
+    pub const fn as_ptr(&self) -> *const c_char {
+        self.inner.as_ptr()
+    }
+
     /// Converts this C string to a byte slice.
     ///
     /// The returned slice will **not** contain the trailing nul terminator that this C
