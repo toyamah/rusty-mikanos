@@ -1,7 +1,7 @@
-// Note: Code in this file was borrowed and modified from the official Rust std library
+// Note: I borrowed and modified Code in this file from the official Rust std library
 // https://github.com/rust-lang/rust/blob/master/library/std/src/ffi/c_str.rs
 
-// Note: These lines were modified from the original.
+// Note: I modified these lines.
 use crate::rust_official::cchar::c_char;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -94,7 +94,7 @@ use core::{mem, ptr};
 /// of `CString` instances can lead to invalid memory accesses, memory leaks,
 /// and other memory errors.
 #[derive(PartialEq, PartialOrd, Eq, Ord, Hash, Clone)]
-// Note: These two lines were modified from the original.
+// Note: I disabled these lines.
 // #[cfg_attr(not(test), rustc_diagnostic_item = "cstring_type")]
 // #[stable(feature = "rust1", since = "1.0.0")]
 pub struct CString {
@@ -177,7 +177,7 @@ impl CString {
     /// ```
     #[inline]
     #[must_use = "`self` will be dropped if the result is not used"]
-    // Note: This line was modified from the original.
+    // Note: I disabled this line.
     // #[stable(feature = "cstr_memory", since = "1.4.0")]
     pub fn into_raw(self) -> *mut c_char {
         Box::into_raw(self.into_inner()) as *mut c_char
@@ -211,6 +211,6 @@ impl CString {
 /// let _: NulError = CString::new(b"f\0oo".to_vec()).unwrap_err();
 /// ```
 #[derive(Clone, PartialEq, Eq, Debug)]
-// Note: This line was modified from the original.
+// Note: I disabled this line
 // #[stable(feature = "rust1", since = "1.0.0")]
 pub struct NulError(usize, Vec<u8>);

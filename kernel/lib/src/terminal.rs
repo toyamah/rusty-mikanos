@@ -392,7 +392,8 @@ impl Terminal {
         let f = unsafe { f.as_ref() }.unwrap();
         let c_argv = new_cstring_vec(argv);
         let ret = f(c_argv.len(), &c_argv[0] as *const _ as *const *const c_char);
-        self.write_fmt(format_args!("app exited. ret = {}\n", ret));
+        self.write_fmt(format_args!("app exited. ret = {}\n", ret))
+            .unwrap();
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {
@@ -542,7 +543,7 @@ fn draw_terminal<W: PixelWriter>(w: &mut W, pos: Vector2D<i32>, size: Vector2D<i
 }
 
 fn parse_command(s: &str) -> Option<Vec<&str>> {
-    let mut parsed = s.trim().split_whitespace().collect::<VecDeque<_>>();
+    let parsed = s.trim().split_whitespace().collect::<VecDeque<_>>();
     if parsed.is_empty() {
         return None;
     }

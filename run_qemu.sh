@@ -12,7 +12,9 @@ build_and_run() {
   export RUSTFLAGS="-C link-arg=$LDFLAGS"
 
   # run clippy instead of run on Github Actions because setting up the environment is bothersome.
-#  cargo clippy -- -Dwarnings
+  cd kernel # run in only kernel because borrowed stdlib code in apps/shared_lib needs to be fixed.
+  cargo clippy -- -Dwarnings
+  cd -
 
   cargo build --release # build in release mode to optimize code
 #  cargo build

@@ -1,7 +1,7 @@
-// Note: Code in this file was borrowed and modified from the official Rust std library
+// Note: I borrowed and modified Code in this file was borrowed from the official Rust std library
 // https://github.com/rust-lang/rust/blob/master/library/std/src/ffi/c_str.rs
 
-// Note: These lines were modified from the original.
+// Note: I modified these lines.
 use crate::rust_official::cchar::c_char;
 use crate::strlen;
 use core::ptr::slice_from_raw_parts;
@@ -74,7 +74,7 @@ use core::ptr::slice_from_raw_parts;
 ///
 /// [str]: prim@str "str"
 #[derive(Hash)]
-// Note: These lines were modified from the original.
+// Note: I disabled these lines.
 // #[cfg_attr(not(test), rustc_diagnostic_item = "CStr")]
 // #[stable(feature = "rust1", since = "1.0.0")]
 // FIXME:
@@ -132,8 +132,7 @@ impl CStr {
     /// ```
     #[inline]
     #[must_use]
-    // Note: This line was modified from the original.
-    // #[stable(feature = "rust1", since = "1.0.0")]
+    // #[stable(feature = "rust1", since = "1.0.0")] // Note: I disabled this line.
     pub unsafe fn from_ptr<'a>(ptr: *const c_char) -> &'a CStr {
         // SAFETY: The caller has provided a pointer that points to a valid C
         // string with a NUL terminator of size less than `isize::MAX`, whose
@@ -145,15 +144,16 @@ impl CStr {
         // the call to `from_bytes_with_nul_unchecked` is correct.
         //
         // The cast from c_char to u8 is ok because a c_char is always one byte.
-        unsafe {
-            // Note: These lines were modified from the original.
-            // let len: usize = sys::strlen(ptr);
-            // let len = 1;
-            let len = strlen(ptr);
-            let ptr = ptr as *const u8;
-            let bytes = unsafe { &*slice_from_raw_parts(ptr, len as usize + 1) };
-            CStr::from_bytes_with_nul_unchecked(bytes)
-        }
+        // Note: I replaced this unsafe block with the next lines.
+        // unsafe {
+        //     let len = sys::strlen(ptr);
+        //     let ptr = ptr as *const u8;
+        //     Self::_from_bytes_with_nul_unchecked(slice::from_raw_parts(ptr, len as usize + 1))
+        // }
+        let len = strlen(ptr);
+        let ptr = ptr as *const u8;
+        let bytes = &*slice_from_raw_parts(ptr, len as usize + 1);
+        CStr::from_bytes_with_nul_unchecked(bytes)
     }
 
     /// Unsafely creates a C string wrapper from a byte slice.
@@ -175,7 +175,7 @@ impl CStr {
     /// ```
     #[inline]
     #[must_use]
-    // Note: These lines were modified from the original.
+    // Note: I disabled these lines.
     // #[stable(feature = "cstr_from_bytes", since = "1.10.0")]
     // #[rustc_const_stable(feature = "const_cstr_unchecked", since = "1.59.0")]
     pub const unsafe fn from_bytes_with_nul_unchecked(bytes: &[u8]) -> &CStr {
@@ -184,7 +184,9 @@ impl CStr {
         // Dereferencing the obtained pointer is safe because it comes from a
         // reference. Making a reference is then safe because its lifetime
         // is bound by the lifetime of the given `bytes`.
-        unsafe { &*(bytes as *const [u8] as *const CStr) }
+        // Note: I modified the first line to the second line
+        // unsafe { &*(bytes as *const [u8] as *const CStr) }
+        &*(bytes as *const [u8] as *const CStr)
     }
 
     /// Returns the inner pointer to this C string.
@@ -235,7 +237,7 @@ impl CStr {
     /// the lifetime of `ptr` and the `unsafe` block.
     #[inline]
     #[must_use]
-    // Note: These lines were modified from the original.
+    // Note: I disabled these lines.
     // #[stable(feature = "rust1", since = "1.0.0")]
     // #[rustc_const_stable(feature = "const_str_as_ptr", since = "1.32.0")]
     pub const fn as_ptr(&self) -> *const c_char {
@@ -260,7 +262,7 @@ impl CStr {
     /// assert_eq!(cstr.to_bytes(), b"foo");
     /// ```
     #[inline]
-    // Note: These lines were modified from the original.
+    // Note: I disabled these lines.
     // #[must_use = "this returns the result of the operation, \
     //               without modifying the original"]
     // #[stable(feature = "rust1", since = "1.0.0")]
@@ -288,7 +290,7 @@ impl CStr {
     /// assert_eq!(cstr.to_bytes_with_nul(), b"foo\0");
     /// ```
     #[inline]
-    // Note: These lines were modified from the original.
+    // Note: I disabled these lines.
     // #[must_use = "this returns the result of the operation, \
     //               without modifying the original"]
     // #[stable(feature = "rust1", since = "1.0.0")]
