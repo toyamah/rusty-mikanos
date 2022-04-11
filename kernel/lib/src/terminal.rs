@@ -266,9 +266,9 @@ impl Terminal {
         } else {
             return;
         };
-        let command = argv.first().unwrap().to_string();
+        let command = argv.first().unwrap().deref();
 
-        match command.as_str() {
+        match command {
             "echo" => {
                 if let Some(&arg) = argv.get(0) {
                     self.print(arg, w);
@@ -347,9 +347,9 @@ impl Terminal {
             _ => {
                 let bpb = fat::global::boot_volume_image();
                 if let Some(file_entry) =
-                    fat::find_file(command.as_str(), bpb.get_root_cluster() as u64, bpb)
+                    fat::find_file(command, bpb.get_root_cluster() as u64, bpb)
                 {
-                    self.execute_file(file_entry, argv, bpb);
+                    self.execute_file(file_entry, argv.as_slice(), bpb);
                 } else {
                     writeln!(self, "no such command: {}", command).unwrap();
                 }
@@ -360,7 +360,7 @@ impl Terminal {
     fn execute_file(
         &mut self,
         file_entry: &DirectoryEntry,
-        argv: Vec<&str>,
+        argv: &[&str],
         boot_volume_image: &Bpb,
     ) {
         let mut cluster = file_entry.first_cluster() as u64;
@@ -570,7 +570,7 @@ fn new_cstring(str: &str) -> Result<CString, NulError> {
     CString::_new(str.as_bytes().to_vec())
 }
 
-fn new_cstring_vec(strs: Vec<&str>) -> Vec<CString> {
+fn new_cstring_vec(strs: &[&str]) -> Vec<CString> {
     strs.iter()
         .map(|&s| new_cstring(s).unwrap())
         .collect::<Vec<_>>()
