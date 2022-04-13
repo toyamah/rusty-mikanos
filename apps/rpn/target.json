@@ -19,7 +19,7 @@
       "-lc++",
       "--entry", "main",
       "-z", "norelro",
-      "--image-base", "0",
+      "--image-base", "0xffff800000000000",
       "-o", "apps/rpn/rpn",
       "--static"
     ]
