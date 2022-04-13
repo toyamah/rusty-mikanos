@@ -1,3 +1,5 @@
+use bit_field::BitField;
+
 /// https://wiki.osdev.org/Paging#64-Bit_Paging
 
 /// Number of page directories to be reserved statically
@@ -27,6 +29,78 @@ struct PDPTable([u64; 512]);
 /// https://wiki.osdev.org/Paging#Page_Table
 #[repr(align(4096))]
 struct PageDirectory([[u64; 512]; PAGE_DIRECTORY_COUNT]);
+
+#[repr(transparent)]
+pub struct PageMapEntry(u64);
+
+impl PageMapEntry {
+    // uint64_t present : 1;
+    pub fn present(&self) -> u64 {
+        self.0.get_bits(..1) as u64
+    }
+
+    // uint64_t writable : 1;
+    pub fn writable(&self) -> u64 {
+        self.0.get_bits(1..2) as u64
+    }
+
+    // uint64_t user : 1;
+    pub fn user(&self) -> u64 {
+        self.0.get_bits(2..3) as u64
+    }
+
+    // uint64_t write_through : 1;
+    pub fn write_through(&self) -> u64 {
+        self.0.get_bits(3..4) as u64
+    }
+
+    // uint64_t cache_disable : 1;
+    pub fn cache_disable(&self) -> u64 {
+        self.0.get_bits(4..5) as u64
+    }
+    // uint64_t accessed : 1;
+    pub fn accessed(&self) -> u64 {
+        self.0.get_bits(5..6) as u64
+    }
+    // uint64_t dirty : 1;
+    pub fn dirty(&self) -> u64 {
+        self.0.get_bits(6..7) as u64
+    }
+    // uint64_t huge_page : 1;
+    pub fn huge_page(&self) -> u64 {
+        self.0.get_bits(7..8) as u64
+    }
+    // uint64_t global : 1;
+    pub fn global(&self) -> u64 {
+        self.0.get_bits(8..9) as u64
+    }
+
+    // uint64_t : 3;
+    // pub fn _a(&self) {
+    //     self.0.get_bits(9..12) as u64
+    // }
+
+    // uint64_t addr : 40;
+    pub fn addr(&self) -> u64 {
+        self.0.get_bits(12..52) as u64
+    }
+    pub fn set_addr(&mut self, addr: u64) {
+        self.0.set_bits(12..52, addr);
+    }
+
+    // uint64_t : 12;
+    // pub fn _b(&self) {
+    //     self.0.get_bits(52..64) as u64
+    // }
+
+    fn pointer(&self) -> *const PageMapEntry {
+        (self.addr() << 12) as *const _ as *const PageMapEntry
+    }
+
+    fn set_pointer(&mut self, p: &PageMapEntry) {
+        self.set_addr(p.0 >> 12)
+    }
+}
 
 pub mod global {
     use super::{
