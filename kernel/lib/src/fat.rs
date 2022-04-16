@@ -1,5 +1,5 @@
 use core::mem::size_of;
-use core::{mem, slice};
+use core::{cmp, mem, slice};
 
 pub mod global {
     use crate::fat::Bpb;
@@ -230,6 +230,30 @@ impl DirectoryEntry {
         }
 
         self.name == name83
+    }
+
+    pub fn load_file(&self, buf: &mut [u8], bpb: &Bpb) -> usize {
+        fn is_valid_cluster(c: u64) -> bool {
+            c != 0 && c != END_OF_CLUSTER_CHAIN
+        }
+
+        let mut cluster = self.first_cluster() as u64;
+        let buffer_len = buf.len();
+        let mut p = &mut buf[..];
+
+        let mut remain_bytes = buffer_len;
+        let bytes_per_cluster = bpb.bytes_per_cluster() as usize;
+        while is_valid_cluster(cluster) {
+            let copy_bytes = cmp::min(bytes_per_cluster, remain_bytes);
+            let sector = bpb.get_sector_by_cluster::<u8>(cluster as u64);
+            p[..copy_bytes].copy_from_slice(&sector[..copy_bytes]);
+
+            remain_bytes -= copy_bytes;
+            p = &mut p[copy_bytes..];
+            cluster = bpb.next_cluster(cluster);
+        }
+
+        p.len()
     }
 }
 
