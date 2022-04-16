@@ -100,16 +100,18 @@ impl PageMapEntry {
     }
 
     // uint64_t : 12;
-    // pub fn _b(&self) {
-    //     self.0.get_bits(52..64) as u64
-    // }
+    // each bit must be the same bit as 47th bit
 
-    fn pointer(&self) -> *mut PageMapEntry {
+    pub fn pointer(&self) -> *mut PageMapEntry {
         (self.addr() << 12) as *const _ as *mut PageMapEntry
     }
 
     fn set_pointer(&mut self, p: *const PageMapEntry) {
         self.set_addr(p.0 >> 12)
+    }
+
+    pub fn reset(&mut self) {
+        self.0 = 0;
     }
 
     pub fn set_new_page_map_if_not_present(
