@@ -1,9 +1,9 @@
-use crate::asm::global::get_cr3;
 use crate::error::Error;
-use crate::memory_manager::BitmapMemoryManager;
+use crate::memory_manager::{BitmapMemoryManager, BYTES_PER_FRAME};
 use bit_field::BitField;
-use core::ffi::c_void;
-use core::intrinsics::size_of;
+use core::fmt::Write;
+use core::mem;
+use core::ptr::write_bytes;
 
 /// https://wiki.osdev.org/Paging#64-Bit_Paging
 
@@ -36,7 +36,7 @@ struct PDPTable([u64; 512]);
 struct PageDirectory([[u64; 512]; PAGE_DIRECTORY_COUNT]);
 
 #[repr(transparent)]
-pub struct PageMapEntry(u64);
+pub struct PageMapEntry(pub u64);
 
 impl PageMapEntry {
     // uint64_t present : 1;
@@ -103,11 +103,13 @@ impl PageMapEntry {
     // each bit must be the same bit as 47th bit
 
     pub fn pointer(&self) -> *mut PageMapEntry {
-        (self.addr() << 12) as *const _ as *mut PageMapEntry
+        (self.addr() << 12) as *const u64 as *mut PageMapEntry
     }
 
     fn set_pointer(&mut self, p: *const PageMapEntry) {
-        self.set_addr(p.0 >> 12)
+        let p = p as usize as u64;
+        let addr = p >> 12;
+        self.set_addr(addr);
     }
 
     pub fn reset(&mut self) {
@@ -123,58 +125,70 @@ impl PageMapEntry {
         }
 
         let child_map_result = Self::new_page_map(memory_manager);
+        if child_map_result.is_ok() {}
         child_map_result.inspect(|&child| {
             self.set_pointer(child);
             self.set_present(1);
         })
+        // // Ok(self)
+        // Err(make_error!(Code::AlreadyAllocated))
     }
 
     pub fn new_page_map(
         memory_manager: &mut BitmapMemoryManager,
     ) -> Result<*mut PageMapEntry, Error> {
-        //TODO: check leak
         let frame = memory_manager.allocate(1);
-        frame.map(|id| {
-            let entry = id.frame() as *mut PageMapEntry;
-            unsafe { memset(entry as *mut c_void, 0, size_of::<u64>() * 512) };
-            entry
-        })
+        if frame.is_err() {
+            return Err(frame.unwrap_err());
+        }
+        let frame = frame.unwrap();
+
+        unsafe {
+            write_bytes(
+                (frame.id() * BYTES_PER_FRAME) as *mut u8,
+                0,
+                mem::size_of::<u64>() * 512,
+            );
+        }
+
+        let e = (frame.id() * BYTES_PER_FRAME) as *mut PageMapEntry;
+        Ok(e)
     }
 
     pub fn setup_page_map(
         page_map: *mut PageMapEntry,
         page_map_level: i32,
-        //TODO: ref or value?
         mut addr: LinearAddress4Level,
         mut num_4kpages: usize,
         memory_manager: &mut BitmapMemoryManager,
     ) -> (usize, Option<Error>) {
         while num_4kpages > 0 {
             let entry_index = addr.part(page_map_level);
-            let page_map_ref = unsafe { page_map.as_mut() }.unwrap();
 
+            let p = unsafe { page_map.add(entry_index as usize) };
+            let page_map_ref = unsafe { p.as_mut() }.expect("failed to as mut MapEntry");
             let child_map_result = page_map_ref.set_new_page_map_if_not_present(memory_manager);
+
             if child_map_result.is_err() {
                 return (num_4kpages, Some(child_map_result.unwrap_err()));
             }
             let child_map = child_map_result.unwrap();
-            unsafe { page_map.add(entry_index as usize).set_writable(1) };
+            unsafe { page_map_ref.set_writable(1) };
 
             if page_map_level == 1 {
                 num_4kpages -= 1;
             } else {
-                let result = Self::setup_page_map(
+                let (num_remain_pages, error) = Self::setup_page_map(
                     child_map,
                     page_map_level - 1,
                     addr,
                     num_4kpages,
                     memory_manager,
                 );
-                if let Some(num_remain_pages) = result {
-                    num_4kpages = num_remain_pages;
-                } else {
-                    return (num_4kpages, Some(result.unwrap_err()));
+                if error.is_some() {
+                    return (num_4kpages, error);
                 }
+                num_4kpages = num_remain_pages;
             }
 
             if entry_index == 511 {
@@ -193,10 +207,10 @@ impl PageMapEntry {
     pub fn setup_page_maps(
         addr: LinearAddress4Level,
         num4_kpages: usize,
-        cr_3: usize,
+        cr_3: u64,
         memory_manager: &mut BitmapMemoryManager,
     ) -> Result<(), Error> {
-        let pml4_table = cr_3 as *mut _ as *mut PageMapEntry;
+        let pml4_table = cr_3 as *mut u64 as *mut PageMapEntry;
         let (_, error) = Self::setup_page_map(pml4_table, 4, addr, num4_kpages, memory_manager);
         match error {
             None => Ok(()),
@@ -207,9 +221,13 @@ impl PageMapEntry {
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct LinearAddress4Level(u64);
+pub struct LinearAddress4Level(pub u64);
 
 impl LinearAddress4Level {
+    pub fn new(v: u64) -> Self {
+        Self(v)
+    }
+
     // uint64_t offset : 12;
     pub fn offset(&self) -> u64 {
         self.0.get_bits(0..12)
@@ -275,10 +293,6 @@ impl LinearAddress4Level {
             _ => {}
         }
     }
-}
-
-extern "C" {
-    pub fn memset(dest: *mut c_void, c: i32, n: usize) -> *mut c_void;
 }
 
 pub mod global {

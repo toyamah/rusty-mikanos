@@ -9,6 +9,7 @@ use crate::graphics::{
 };
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
+use crate::paging::LinearAddress4Level;
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::cstring::{CString, NulError};
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
@@ -371,19 +372,19 @@ impl Terminal {
         let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
         file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image);
 
-        let elf_header = unsafe { Elf64Ehdr::from(&file_buf) }.unwrap();
+        let elf_header = unsafe { Elf64Ehdr::from_mut(&mut file_buf) }.unwrap();
         if !elf_header.is_elf() {
             let f = &file_buf as *const _ as *const fn() -> ();
             unsafe { f.as_ref() }.unwrap()();
             return Ok(());
         }
 
-        let load_result = elf_header.load_elf(get_cr3(), memory_manager(), self);
+        let load_result = elf_header.load_elf(get_cr3(), memory_manager());
         if load_result.is_err() {
             return load_result;
         }
 
-        let entry_addr = elf_header.e_entry + &file_buf[0] as *const _ as usize;
+        let entry_addr = elf_header.e_entry;
         let f = &entry_addr as *const _ as *const fn(usize, *const *const c_char) -> i32;
         let f = unsafe { f.as_ref() }.unwrap();
         let cstr_vec = new_cstring_vec(argv);
@@ -401,7 +402,13 @@ impl Terminal {
 
         self.write_fmt(format_args!("app exited. ret = {}\n", ret))
             .unwrap();
-        Ok(())
+
+        let addr_first = unsafe { elf_header.get_first_load_address() };
+        Elf64Ehdr::clean_page_maps(
+            LinearAddress4Level(addr_first as u64),
+            get_cr3(),
+            memory_manager(),
+        )
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {
