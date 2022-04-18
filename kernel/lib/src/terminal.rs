@@ -1,5 +1,6 @@
-use crate::elf::{Elf64Ehdr, ET_EXEC};
-use crate::error::{Code, Error};
+use crate::asm::global::get_cr3;
+use crate::elf::Elf64Ehdr;
+use crate::error::Error;
 use crate::fat::{Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
@@ -7,10 +8,11 @@ use crate::graphics::{
     COLOR_BLACK, COLOR_WHITE,
 };
 use crate::layer::{LayerID, LayerManager};
+use crate::memory_manager::global::memory_manager;
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::cstring::{CString, NulError};
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
-use crate::{fat, make_error, Window};
+use crate::{fat, Window};
 use alloc::collections::VecDeque;
 use alloc::string::{String, ToString};
 use alloc::vec;
@@ -350,7 +352,9 @@ impl Terminal {
                 if let Some(file_entry) =
                     fat::find_file(command, bpb.get_root_cluster() as u64, bpb)
                 {
-                    self.execute_file(file_entry, argv.as_slice(), bpb);
+                    if let Some(e) = self.execute_file(file_entry, argv.as_slice(), bpb).err() {
+                        writeln!(self, "failed to exec file: {}", e).unwrap();
+                    }
                 } else {
                     writeln!(self, "no such command: {}", command).unwrap();
                 }
@@ -363,7 +367,7 @@ impl Terminal {
         file_entry: &DirectoryEntry,
         argv: &[&str],
         boot_volume_image: &Bpb,
-    ) {
+    ) -> Result<(), Error> {
         let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
         file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image);
 
@@ -371,7 +375,12 @@ impl Terminal {
         if !elf_header.is_elf() {
             let f = &file_buf as *const _ as *const fn() -> ();
             unsafe { f.as_ref() }.unwrap()();
-            return;
+            return Ok(());
+        }
+
+        let load_result = elf_header.load_elf(get_cr3(), memory_manager(), self);
+        if load_result.is_err() {
+            return load_result;
         }
 
         let entry_addr = elf_header.e_entry + &file_buf[0] as *const _ as usize;
@@ -383,6 +392,7 @@ impl Terminal {
             .into_iter()
             .map(|c| c.into_raw())
             .collect::<Vec<_>>();
+
         let ret = f(c_argv.len(), &c_argv[0] as *const _ as *const *const c_char);
         // retake pointers to free memory
         for c_arg in c_argv {
@@ -391,6 +401,7 @@ impl Terminal {
 
         self.write_fmt(format_args!("app exited. ret = {}\n", ret))
             .unwrap();
+        Ok(())
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {
