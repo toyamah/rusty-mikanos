@@ -130,8 +130,6 @@ impl PageMapEntry {
             self.set_pointer(child);
             self.set_present(1);
         })
-        // // Ok(self)
-        // Err(make_error!(Code::AlreadyAllocated))
     }
 
     pub fn new_page_map(
