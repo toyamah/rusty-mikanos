@@ -379,10 +379,7 @@ impl Terminal {
             return Ok(());
         }
 
-        let load_result = elf_header.load_elf(get_cr3(), memory_manager());
-        if load_result.is_err() {
-            return load_result;
-        }
+        elf_header.load_elf(get_cr3(), memory_manager())?;
 
         let entry_addr = elf_header.e_entry;
         let f = &entry_addr as *const _ as *const fn(usize, *const *const c_char) -> i32;

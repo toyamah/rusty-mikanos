@@ -69,7 +69,7 @@ impl Elf64Ehdr {
             }
             return p.p_vaddr;
         }
-        return 0;
+        0
     }
 
     pub fn copy_load_segment(
@@ -86,11 +86,7 @@ impl Elf64Ehdr {
 
             let dest_addr = LinearAddress4Level::new(p.p_vaddr as u64);
             let num_4kpages: usize = ((p.p_memsz + 4095) / 4096) as usize;
-            let result =
-                PageMapEntry::setup_page_maps(dest_addr, num_4kpages, cr_3, memory_manager);
-            if result.is_err() {
-                return result;
-            }
+            PageMapEntry::setup_page_maps(dest_addr, num_4kpages, cr_3, memory_manager)?;
 
             let src = unsafe { (self as *mut _ as *mut u8).offset(p.p_offset as isize) };
             let dst = p.p_vaddr as *mut Elf64Addr as *mut u8;
@@ -127,25 +123,18 @@ impl Elf64Ehdr {
         memory_manager: &mut BitmapMemoryManager,
     ) -> Result<(), Error> {
         for i in 0..512 {
-            let mut entry = unsafe { page_map.add(i).as_mut() }.unwrap();
+            let entry = unsafe { page_map.add(i).as_mut() }.unwrap();
             if entry.present() == 0 {
                 continue; // no need to clean this page map entry
             }
 
             if page_map_level > 1 {
-                let result =
-                    Self::clean_page_map(entry.pointer(), page_map_level - 1, memory_manager);
-                if result.is_err() {
-                    return result;
-                }
+                Self::clean_page_map(entry.pointer(), page_map_level - 1, memory_manager)?;
             }
 
             let entry_addr = entry.pointer() as usize;
             let map_frame = FrameID::new(entry_addr / BYTES_PER_FRAME);
-            let result = memory_manager.free(map_frame, 1);
-            if result.is_err() {
-                return result;
-            }
+            memory_manager.free(map_frame, 1)?;
 
             entry.reset();
         }
@@ -165,10 +154,7 @@ impl Elf64Ehdr {
             .unwrap()
             .reset();
 
-        let result = Self::clean_page_map(pdp_table, 3, memory_manager);
-        if result.is_err() {
-            return result;
-        }
+        Self::clean_page_map(pdp_table, 3, memory_manager)?;
 
         let pdp_addr = pdp_table as usize;
         let pdp_frame = FrameID::new(pdp_addr / BYTES_PER_FRAME);

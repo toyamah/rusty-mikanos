@@ -239,7 +239,7 @@ impl DirectoryEntry {
 
         let mut cluster = self.first_cluster() as u64;
         let buffer_len = buf.len();
-        let mut p = &mut buf[..];
+        let mut p = buf;
 
         let mut remain_bytes = buffer_len;
         let bytes_per_cluster = bpb.bytes_per_cluster() as usize;

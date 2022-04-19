@@ -1,7 +1,6 @@
 use crate::error::Error;
 use crate::memory_manager::{BitmapMemoryManager, BYTES_PER_FRAME};
 use bit_field::BitField;
-use core::fmt::Write;
 use core::mem;
 use core::ptr::write_bytes;
 
@@ -136,8 +135,8 @@ impl PageMapEntry {
         memory_manager: &mut BitmapMemoryManager,
     ) -> Result<*mut PageMapEntry, Error> {
         let frame = memory_manager.allocate(1);
-        if frame.is_err() {
-            return Err(frame.unwrap_err());
+        if let Err(e) = frame {
+            return Err(e);
         }
         let frame = frame.unwrap();
 
@@ -153,7 +152,7 @@ impl PageMapEntry {
         Ok(e)
     }
 
-    pub fn setup_page_map(
+    fn setup_page_map(
         page_map: *mut PageMapEntry,
         page_map_level: i32,
         mut addr: LinearAddress4Level,
@@ -166,12 +165,12 @@ impl PageMapEntry {
             let p = unsafe { page_map.add(entry_index as usize) };
             let page_map_ref = unsafe { p.as_mut() }.expect("failed to as mut MapEntry");
             let child_map_result = page_map_ref.set_new_page_map_if_not_present(memory_manager);
-
-            if child_map_result.is_err() {
-                return (num_4kpages, Some(child_map_result.unwrap_err()));
+            if let Err(e) = child_map_result {
+                return (num_4kpages, Some(e));
             }
+
             let child_map = child_map_result.unwrap();
-            unsafe { page_map_ref.set_writable(1) };
+            page_map_ref.set_writable(1);
 
             if page_map_level == 1 {
                 num_4kpages -= 1;
