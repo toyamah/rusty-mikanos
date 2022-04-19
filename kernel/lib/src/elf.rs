@@ -2,7 +2,6 @@ use crate::error::{Code, Error};
 use crate::make_error;
 use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use crate::paging::{LinearAddress4Level, PageMapEntry};
-use core::ffi::c_void;
 use core::mem;
 
 const EI_NIDENT: usize = 16;
@@ -130,7 +129,7 @@ impl Elf64Ehdr {
         for i in 0..512 {
             let mut entry = unsafe { page_map.add(i).as_mut() }.unwrap();
             if entry.present() == 0 {
-                continue;
+                continue; // no need to clean this page map entry
             }
 
             if page_map_level > 1 {
@@ -162,7 +161,7 @@ impl Elf64Ehdr {
         let pm4_table = cr3 as *mut u64 as *mut PageMapEntry;
         let pdp_table =
             unsafe { pm4_table.offset(addr.pml4() as isize).as_ref().unwrap() }.pointer();
-        unsafe { pdp_table.add(addr.pml4() as usize).as_mut() }
+        unsafe { pm4_table.offset(addr.pml4() as isize).as_mut() }
             .unwrap()
             .reset();
 
