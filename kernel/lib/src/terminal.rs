@@ -9,7 +9,7 @@ use crate::graphics::{
 };
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
-use crate::paging::LinearAddress4Level;
+use crate::paging::{LinearAddress4Level, PageMapEntry};
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::cstring::{CString, NulError};
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
@@ -401,7 +401,7 @@ impl Terminal {
             .unwrap();
 
         let addr_first = unsafe { elf_header.get_first_load_address() };
-        Elf64Ehdr::clean_page_maps(
+        PageMapEntry::clean_page_maps(
             LinearAddress4Level::new(addr_first as u64),
             get_cr3(),
             memory_manager(),

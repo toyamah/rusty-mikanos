@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::memory_manager::{BitmapMemoryManager, BYTES_PER_FRAME};
+use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use bit_field::BitField;
 use core::mem;
 use core::ptr::write_bytes;
@@ -115,41 +115,18 @@ impl PageMapEntry {
         self.0 = 0;
     }
 
-    pub fn set_new_page_map_if_not_present(
-        &mut self,
+    pub fn setup_page_maps(
+        addr: LinearAddress4Level,
+        num4_kpages: usize,
+        cr_3: u64,
         memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<*mut PageMapEntry, Error> {
-        if self.present() != 0 {
-            return Ok(self.pointer());
+    ) -> Result<(), Error> {
+        let pml4_table = cr_3 as *mut u64 as *mut PageMapEntry;
+        let (_, error) = Self::setup_page_map(pml4_table, 4, addr, num4_kpages, memory_manager);
+        match error {
+            None => Ok(()),
+            Some(e) => Err(e),
         }
-
-        let child_map_result = Self::new_page_map(memory_manager);
-        if let Ok(child) = child_map_result {
-            self.set_pointer(child);
-            self.set_present(1);
-        }
-        child_map_result
-    }
-
-    pub fn new_page_map(
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<*mut PageMapEntry, Error> {
-        let frame = memory_manager.allocate(1);
-        if let Err(e) = frame {
-            return Err(e);
-        }
-        let frame = frame.unwrap();
-
-        unsafe {
-            write_bytes(
-                (frame.id() * BYTES_PER_FRAME) as *mut u8,
-                0,
-                mem::size_of::<u64>() * 512,
-            );
-        }
-
-        let e = (frame.id() * BYTES_PER_FRAME) as *mut PageMapEntry;
-        Ok(e)
     }
 
     fn setup_page_map(
@@ -201,18 +178,83 @@ impl PageMapEntry {
         (num_4kpages, None)
     }
 
-    pub fn setup_page_maps(
+    fn set_new_page_map_if_not_present(
+        &mut self,
+        memory_manager: &mut BitmapMemoryManager,
+    ) -> Result<*mut PageMapEntry, Error> {
+        if self.present() != 0 {
+            return Ok(self.pointer());
+        }
+
+        let child_map_result = Self::new_page_map(memory_manager);
+        if let Ok(child) = child_map_result {
+            self.set_pointer(child);
+            self.set_present(1);
+        }
+        child_map_result
+    }
+
+    fn new_page_map(memory_manager: &mut BitmapMemoryManager) -> Result<*mut PageMapEntry, Error> {
+        let frame = memory_manager.allocate(1);
+        if let Err(e) = frame {
+            return Err(e);
+        }
+        let frame = frame.unwrap();
+
+        unsafe {
+            write_bytes(
+                (frame.id() * BYTES_PER_FRAME) as *mut u8,
+                0,
+                mem::size_of::<u64>() * 512,
+            );
+        }
+
+        let e = (frame.id() * BYTES_PER_FRAME) as *mut PageMapEntry;
+        Ok(e)
+    }
+
+    pub fn clean_page_maps(
         addr: LinearAddress4Level,
-        num4_kpages: usize,
-        cr_3: u64,
+        cr3: u64,
         memory_manager: &mut BitmapMemoryManager,
     ) -> Result<(), Error> {
-        let pml4_table = cr_3 as *mut u64 as *mut PageMapEntry;
-        let (_, error) = Self::setup_page_map(pml4_table, 4, addr, num4_kpages, memory_manager);
-        match error {
-            None => Ok(()),
-            Some(e) => Err(e),
+        let pm4_table = cr3 as *mut u64 as *mut PageMapEntry;
+        let pdp_table =
+            unsafe { pm4_table.offset(addr.pml4() as isize).as_ref().unwrap() }.pointer();
+        unsafe { pm4_table.offset(addr.pml4() as isize).as_mut() }
+            .unwrap()
+            .reset();
+
+        Self::clean_page_map(pdp_table, 3, memory_manager)?;
+
+        let pdp_addr = pdp_table as usize;
+        let pdp_frame = FrameID::new(pdp_addr / BYTES_PER_FRAME);
+        memory_manager.free(pdp_frame, 1)
+    }
+
+    fn clean_page_map(
+        page_map: *mut PageMapEntry,
+        page_map_level: i32,
+        memory_manager: &mut BitmapMemoryManager,
+    ) -> Result<(), Error> {
+        for i in 0..512 {
+            let entry = unsafe { page_map.add(i).as_mut() }.unwrap();
+            if entry.present() == 0 {
+                continue; // no need to clean this page map entry
+            }
+
+            if page_map_level > 1 {
+                Self::clean_page_map(entry.pointer(), page_map_level - 1, memory_manager)?;
+            }
+
+            let entry_addr = entry.pointer() as usize;
+            let map_frame = FrameID::new(entry_addr / BYTES_PER_FRAME);
+            memory_manager.free(map_frame, 1)?;
+
+            entry.reset();
         }
+
+        Ok(())
     }
 }
 

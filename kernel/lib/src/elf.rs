@@ -1,6 +1,6 @@
 use crate::error::{Code, Error};
 use crate::make_error;
-use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
+use crate::memory_manager::BitmapMemoryManager;
 use crate::paging::{LinearAddress4Level, PageMapEntry};
 use core::mem;
 
@@ -72,7 +72,24 @@ impl Elf64Ehdr {
         0
     }
 
-    pub fn copy_load_segment(
+    pub fn load_elf(
+        &mut self,
+        cr_3: u64,
+        memory_manager: &mut BitmapMemoryManager,
+    ) -> Result<(), Error> {
+        if self.e_type != ET_EXEC {
+            return Err(make_error!(Code::InvalidFormat));
+        }
+
+        let addr_first = unsafe { self.get_first_load_address() };
+        if addr_first < 0xffff_8000_0000_0000 {
+            return Err(make_error!(Code::InvalidFormat));
+        }
+
+        self.copy_load_segment(cr_3, memory_manager)
+    }
+
+    fn copy_load_segment(
         &mut self,
         cr_3: u64,
         memory_manager: &mut BitmapMemoryManager,
@@ -98,67 +115,6 @@ impl Elf64Ehdr {
             }
         }
         Ok(())
-    }
-
-    pub fn load_elf(
-        &mut self,
-        cr_3: u64,
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<(), Error> {
-        if self.e_type != ET_EXEC {
-            return Err(make_error!(Code::InvalidFormat));
-        }
-
-        let addr_first = unsafe { self.get_first_load_address() };
-        if addr_first < 0xffff_8000_0000_0000 {
-            return Err(make_error!(Code::InvalidFormat));
-        }
-
-        self.copy_load_segment(cr_3, memory_manager)
-    }
-
-    pub fn clean_page_map(
-        page_map: *mut PageMapEntry,
-        page_map_level: i32,
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<(), Error> {
-        for i in 0..512 {
-            let entry = unsafe { page_map.add(i).as_mut() }.unwrap();
-            if entry.present() == 0 {
-                continue; // no need to clean this page map entry
-            }
-
-            if page_map_level > 1 {
-                Self::clean_page_map(entry.pointer(), page_map_level - 1, memory_manager)?;
-            }
-
-            let entry_addr = entry.pointer() as usize;
-            let map_frame = FrameID::new(entry_addr / BYTES_PER_FRAME);
-            memory_manager.free(map_frame, 1)?;
-
-            entry.reset();
-        }
-
-        Ok(())
-    }
-
-    pub fn clean_page_maps(
-        addr: LinearAddress4Level,
-        cr3: u64,
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<(), Error> {
-        let pm4_table = cr3 as *mut u64 as *mut PageMapEntry;
-        let pdp_table =
-            unsafe { pm4_table.offset(addr.pml4() as isize).as_ref().unwrap() }.pointer();
-        unsafe { pm4_table.offset(addr.pml4() as isize).as_mut() }
-            .unwrap()
-            .reset();
-
-        Self::clean_page_map(pdp_table, 3, memory_manager)?;
-
-        let pdp_addr = pdp_table as usize;
-        let pdp_frame = FrameID::new(pdp_addr / BYTES_PER_FRAME);
-        memory_manager.free(pdp_frame, 1)
     }
 }
 
