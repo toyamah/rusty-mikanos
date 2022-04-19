@@ -36,7 +36,7 @@ struct PDPTable([u64; 512]);
 struct PageDirectory([[u64; 512]; PAGE_DIRECTORY_COUNT]);
 
 #[repr(transparent)]
-pub struct PageMapEntry(pub u64);
+pub struct PageMapEntry(u64);
 
 impl PageMapEntry {
     // uint64_t present : 1;
@@ -125,11 +125,11 @@ impl PageMapEntry {
         }
 
         let child_map_result = Self::new_page_map(memory_manager);
-        if child_map_result.is_ok() {}
-        child_map_result.inspect(|&child| {
+        if let Ok(child) = child_map_result {
             self.set_pointer(child);
             self.set_present(1);
-        })
+        }
+        child_map_result
     }
 
     pub fn new_page_map(
@@ -219,7 +219,7 @@ impl PageMapEntry {
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct LinearAddress4Level(pub u64);
+pub struct LinearAddress4Level(u64);
 
 impl LinearAddress4Level {
     pub fn new(v: u64) -> Self {

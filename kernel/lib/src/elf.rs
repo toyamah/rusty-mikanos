@@ -6,9 +6,9 @@ use core::mem;
 
 const EI_NIDENT: usize = 16;
 
-pub const ET_NONE: Elf64Half = 0;
+const ET_NONE: Elf64Half = 0;
 const ET_REL: Elf64Half = 1;
-pub const ET_EXEC: Elf64Half = 2;
+const ET_EXEC: Elf64Half = 2;
 const ET_DYN: Elf64Half = 3;
 const ET_CORE: Elf64Half = 4;
 

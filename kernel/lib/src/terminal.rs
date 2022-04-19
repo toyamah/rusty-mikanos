@@ -405,7 +405,7 @@ impl Terminal {
 
         let addr_first = unsafe { elf_header.get_first_load_address() };
         Elf64Ehdr::clean_page_maps(
-            LinearAddress4Level(addr_first as u64),
+            LinearAddress4Level::new(addr_first as u64),
             get_cr3(),
             memory_manager(),
         )
