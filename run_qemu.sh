@@ -22,6 +22,9 @@ build_and_run() {
   for cargo_manifest in $(ls apps/*/Cargo.toml)
   do
     app_dir=$(dirname $cargo_manifest)
+    if [ $app_dir == "apps/shared_lib" ]; then
+      continue
+    fi
     cd "${script_dir}/${app_dir}"
     cargo build --release
   done
