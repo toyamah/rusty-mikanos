@@ -49,6 +49,8 @@ pub enum Code {
     NoWaiter,
     NoPCIMSI,
     NoSuchTask,
+    InvalidFormat,
+    FrameTooSmall,
     LastOfCode,
 }
 

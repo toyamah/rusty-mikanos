@@ -1,4 +1,6 @@
+use crate::asm::global::get_cr3;
 use crate::elf::Elf64Ehdr;
+use crate::error::Error;
 use crate::fat::{Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
@@ -6,6 +8,8 @@ use crate::graphics::{
     COLOR_BLACK, COLOR_WHITE,
 };
 use crate::layer::{LayerID, LayerManager};
+use crate::memory_manager::global::memory_manager;
+use crate::paging::{LinearAddress4Level, PageMapEntry};
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::cstring::{CString, NulError};
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
@@ -349,7 +353,9 @@ impl Terminal {
                 if let Some(file_entry) =
                     fat::find_file(command, bpb.get_root_cluster() as u64, bpb)
                 {
-                    self.execute_file(file_entry, argv.as_slice(), bpb);
+                    if let Some(e) = self.execute_file(file_entry, argv.as_slice(), bpb).err() {
+                        writeln!(self, "failed to exec file: {}", e).unwrap();
+                    }
                 } else {
                     writeln!(self, "no such command: {}", command).unwrap();
                 }
@@ -362,32 +368,20 @@ impl Terminal {
         file_entry: &DirectoryEntry,
         argv: &[&str],
         boot_volume_image: &Bpb,
-    ) {
-        let mut cluster = file_entry.first_cluster() as u64;
-        let mut remain_bytes = file_entry.file_size() as u64;
-        let mut file_buf: Vec<u8> = vec![0; remain_bytes as usize];
+    ) -> Result<(), Error> {
+        let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
+        file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image);
 
-        let mut p = file_buf.as_mut_slice();
-        while cluster != 0 && cluster != fat::END_OF_CLUSTER_CHAIN {
-            let copy_bytes = cmp::min(fat::global::bytes_per_cluster(), remain_bytes);
-            let sector = boot_volume_image.get_sector_by_cluster::<u8>(cluster);
-
-            let size = copy_bytes as usize;
-            p[..size].copy_from_slice(&sector[..size]);
-
-            remain_bytes -= copy_bytes;
-            p = &mut p[copy_bytes as usize..];
-            cluster = boot_volume_image.next_cluster(cluster);
-        }
-
-        let elf_header = unsafe { Elf64Ehdr::from(&file_buf) }.unwrap();
+        let elf_header = unsafe { Elf64Ehdr::from_mut(&mut file_buf) }.unwrap();
         if !elf_header.is_elf() {
             let f = &file_buf as *const _ as *const fn() -> ();
             unsafe { f.as_ref() }.unwrap()();
-            return;
+            return Ok(());
         }
 
-        let entry_addr = elf_header.e_entry + &file_buf[0] as *const _ as usize;
+        elf_header.load_elf(get_cr3(), memory_manager())?;
+
+        let entry_addr = elf_header.e_entry;
         let f = &entry_addr as *const _ as *const fn(usize, *const *const c_char) -> i32;
         let f = unsafe { f.as_ref() }.unwrap();
         let cstr_vec = new_cstring_vec(argv);
@@ -396,6 +390,7 @@ impl Terminal {
             .into_iter()
             .map(|c| c.into_raw())
             .collect::<Vec<_>>();
+
         let ret = f(c_argv.len(), &c_argv[0] as *const _ as *const *const c_char);
         // retake pointers to free memory
         for c_arg in c_argv {
@@ -404,6 +399,13 @@ impl Terminal {
 
         self.write_fmt(format_args!("app exited. ret = {}\n", ret))
             .unwrap();
+
+        let addr_first = unsafe { elf_header.get_first_load_address() };
+        PageMapEntry::clean_page_maps(
+            LinearAddress4Level::new(addr_first as u64),
+            get_cr3(),
+            memory_manager(),
+        )
     }
 
     fn print(&mut self, s: &str, w: &mut Window) {

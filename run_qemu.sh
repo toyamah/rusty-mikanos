@@ -19,9 +19,17 @@ build_and_run() {
   cargo build --release # build in release mode to optimize code
 #  cargo build
 
-  cd apps/rpn
-  cargo build --release
-  cd -
+  for cargo_manifest in $(ls apps/*/Cargo.toml)
+  do
+    app_dir=$(dirname $cargo_manifest)
+    if [ $app_dir == "apps/shared_lib" ]; then
+      continue
+    fi
+    cd "${script_dir}/${app_dir}"
+    cargo build --release
+  done
+
+  cd $script_dir
 
   make -C apps/onlyhlt/ onlyhlt
 
@@ -32,9 +40,7 @@ build_and_run_official() {
   official_dir="$script_dir"/official
 
 #  cd "$script_dir"
-#  export RUSTFLAGS="-C link-arg=$LDFLAGS"
 #  cd apps/rpn
-#  cargo build
 #  cp rpn $official_dir/apps/rpn
 
   cd "$official_dir"
