@@ -270,6 +270,9 @@ impl LinearAddress4Level {
     pub fn new(v: u64) -> Self {
         Self(v)
     }
+    pub fn value(&self) -> u64 {
+        self.0
+    }
 
     // uint64_t offset : 12;
     pub fn offset(&self) -> u64 {
