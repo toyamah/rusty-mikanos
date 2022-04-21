@@ -386,12 +386,12 @@ impl Terminal {
         PageMapEntry::setup_page_maps(args_frame_addr, 1, get_cr3(), memory_manager())?;
         let argv = args_frame_addr.value() as *mut u64 as *mut *mut c_char;
         let argv_len = 32; // argv = 8x32 = 256 bytes
-        let p_p_cchar_size = unsafe { mem::size_of::<*const *const c_char>() };
+        let p_p_cchar_size = mem::size_of::<*const *const c_char>();
         let argbuf =
             (args_frame_addr.value() as usize + p_p_cchar_size * argv_len) as *const c_char;
         let argbuf_len = 4096 - p_p_cchar_size * argv_len;
 
-        let c_chars_vec = new_c_chars_vec(&args);
+        let c_chars_vec = new_c_chars_vec(args);
         let argc = make_argv(&c_chars_vec, argv, argv_len, argbuf, argbuf_len)?;
 
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_e000);

@@ -13,7 +13,6 @@ pub mod global {
         fn SetCR3(value: u64);
         fn GetCR3() -> u64;
         fn SwitchContext(next_ctx: *const c_void, current_ctx: *const c_void);
-        // void CallApp(int argc, char** argv, uint16_t cs, uint16_t ss, uint64_t rip, uint64_t rsp);
         fn CallApp(argc: i32, argv: *const *const c_char, cs: u16, ss: u16, rip: u64, rsp: u64);
     }
 
@@ -61,6 +60,8 @@ pub mod global {
         );
     }
 
+    /// # Safety
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn call_app(argc: i32, argv: *const *const c_char, cs: u16, ss: u16, rip: u64, rsp: u64) {
         unsafe { CallApp(argc, argv, cs, ss, rip, rsp) }
     }
