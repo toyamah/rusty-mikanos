@@ -58,6 +58,9 @@ impl PageMapEntry {
     pub fn user(&self) -> u64 {
         self.0.get_bits(2..3) as u64
     }
+    pub fn set_user(&mut self, v: u64) {
+        self.0.set_bits(2..3, v);
+    }
 
     // uint64_t write_through : 1;
     pub fn write_through(&self) -> u64 {
@@ -148,6 +151,7 @@ impl PageMapEntry {
 
             let child_map = child_map_result.unwrap();
             page_map_ref.set_writable(1);
+            page_map_ref.set_user(1);
 
             if page_map_level == 1 {
                 num_4kpages -= 1;
