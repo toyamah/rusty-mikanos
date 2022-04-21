@@ -11,7 +11,7 @@ use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
 use crate::paging::{LinearAddress4Level, PageMapEntry};
 use crate::rust_official::cchar::c_char;
-use crate::rust_official::cstring::{CString, NulError};
+use crate::rust_official::cstring::CString;
 use crate::rust_official::strlen;
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, make_error, Window};
@@ -391,7 +391,8 @@ impl Terminal {
             (args_frame_addr.value() as usize + p_p_cchar_size * argv_len) as *const c_char;
         let argbuf_len = 4096 - p_p_cchar_size * argv_len;
 
-        let argc = make_argv(&args, argv, argv_len, argbuf, argbuf_len)?;
+        let c_chars_vec = new_c_chars_vec(&args);
+        let argc = make_argv(&c_chars_vec, argv, argv_len, argbuf, argbuf_len)?;
 
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_e000);
         PageMapEntry::setup_page_maps(stack_frame_addr, 1, get_cr3(), memory_manager())?;
@@ -405,6 +406,11 @@ impl Terminal {
             entry_addr as u64,
             stack_frame_addr.value() + 4096 - 8,
         );
+
+        // // retake pointers to free memory
+        for c_arg in c_chars_vec {
+            let _ = unsafe { CString::from_raw(c_arg as *mut c_char) };
+        }
 
         // let f = &entry_addr as *const _ as *const fn(usize, *const *const c_char) -> i32;
         // let f = unsafe { f.as_ref() }.unwrap();
@@ -593,7 +599,7 @@ fn string_trimming_null(bytes: &[u8]) -> String {
 }
 
 fn make_argv(
-    args: &[&str],
+    c_chars_slice: &[*const c_char],
     argv: *mut *mut c_char,
     argv_len: usize,
     argbuf: *const c_char,
@@ -602,7 +608,6 @@ fn make_argv(
     let mut argc = 0;
     let mut argbuf_index = 0;
 
-    //TODO: free memory
     let mut push_to_argv = |s: *const c_char| {
         if argc >= argv_len || argbuf_index >= argbuf_len {
             Err(make_error!(Code::Full))
@@ -616,21 +621,17 @@ fn make_argv(
         }
     };
 
-    let cstrings = new_cstring_vec(args);
-    for cstring in cstrings {
-        push_to_argv(cstring.into_raw())?;
+    for &c_chars in c_chars_slice {
+        push_to_argv(c_chars)?;
     }
 
     Ok(argc)
 }
 
-fn new_cstring(str: &str) -> Result<CString, NulError> {
-    CString::_new(str.as_bytes().to_vec())
-}
-
-fn new_cstring_vec(strs: &[&str]) -> Vec<CString> {
+fn new_c_chars_vec(strs: &[&str]) -> Vec<*const c_char> {
     strs.iter()
-        .map(|&s| new_cstring(s).unwrap())
+        .map(|&s| CString::_new(s.as_bytes().to_vec()).unwrap())
+        .map(|c| c.into_raw() as *const c_char)
         .collect::<Vec<_>>()
 }
 
