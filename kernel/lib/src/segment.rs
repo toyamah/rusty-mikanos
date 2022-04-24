@@ -51,7 +51,7 @@ pub mod global {
         let tss_addr = (&unsafe { TSS }[0]) as *const _ as usize;
         unsafe {
             let i = (K_TSS >> 3) as usize;
-            GDT[i].set_system_segment2(
+            GDT[i].set_system_segment(
                 SegmentDescriptorType::TSSAvailable,
                 0,
                 (tss_addr & 0xffff_ffff) as u32,
@@ -89,7 +89,7 @@ impl SegmentDescriptor {
         self.set_limit_high((limit >> 16) & 0xf);
 
         self.set_type(type_);
-        self.set_system_segment(1); // 1: code & data segment
+        self._set_system_segment(1); // 1: code & data segment
         self.set_descriptor_privilege_level(descriptor_privilege_level as u64);
         self.set_present(1);
         self.set_available(0);
@@ -110,7 +110,7 @@ impl SegmentDescriptor {
         self.set_default_operation_size(1); // 32-bit stack segment
     }
 
-    pub fn set_system_segment2(
+    pub fn set_system_segment(
         &mut self,
         type_: SegmentDescriptorType,
         descriptor_privilege_level: u32,
@@ -118,7 +118,7 @@ impl SegmentDescriptor {
         limit: u32,
     ) {
         self.set_code_segment(type_, descriptor_privilege_level, base, limit);
-        self.set_system_segment(0);
+        self._set_system_segment(0);
         self.set_long_mode(0);
     }
 
@@ -142,7 +142,7 @@ impl SegmentDescriptor {
     }
 
     // uint64_t system_segment : 1; 44..45
-    fn set_system_segment(&mut self, v: u64) {
+    fn _set_system_segment(&mut self, v: u64) {
         self.0.set_bits(44..45, v);
     }
 
