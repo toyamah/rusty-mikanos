@@ -1,4 +1,3 @@
-use crate::asm::global::restore_context;
 use crate::error::{Code, Error};
 use crate::make_error;
 use crate::message::Message;
@@ -11,7 +10,7 @@ use core::mem;
 use core::ops::{Add, AddAssign, Not};
 
 pub mod global {
-    use crate::asm::global::{get_cr3, switch_context};
+    use crate::asm::global::{get_cr3, restore_context, switch_context};
     use crate::task::TaskManager;
     use crate::timer::global::timer_manager;
     use crate::timer::{Timer, TASK_TIMER_PERIOD, TASK_TIMER_VALUE};
@@ -23,7 +22,7 @@ pub mod global {
     }
 
     pub fn initialize() {
-        unsafe { TASK_MANAGER = Some(TaskManager::new(switch_context)) };
+        unsafe { TASK_MANAGER = Some(TaskManager::new(switch_context, restore_context)) };
         task_manager().initialize(get_cr3);
 
         unsafe { asm!("cli") };
@@ -147,12 +146,14 @@ pub struct TaskManager {
     current_level: PriorityLevel,
     level_changed: bool,
     switch_context: unsafe fn(next_ctx: &TaskContext, current_ctx: &TaskContext),
+    restore_context: unsafe fn(task_ctx: &TaskContext),
 }
 
 impl TaskManager {
     #[allow(clippy::new_without_default)]
     pub fn new(
         switch_context: unsafe fn(next_ctx: &TaskContext, current_ctx: &TaskContext),
+        restore_context: unsafe fn(task_ctx: &TaskContext),
     ) -> TaskManager {
         Self {
             tasks: vec![],
@@ -162,6 +163,7 @@ impl TaskManager {
             current_level: PriorityLevel::MAX,
             level_changed: false,
             switch_context,
+            restore_context,
         }
     }
 
@@ -235,7 +237,7 @@ impl TaskManager {
         let current_task_id = self.rotate_current_run_queue(false);
 
         if self.current_task().id != current_task_id {
-            unsafe { restore_context(&self.current_task().context) }
+            unsafe { (self.restore_context)(&self.current_task().context) }
         }
     }
 
@@ -488,7 +490,7 @@ mod tests {
 
     #[test]
     fn task_manager_sleep_running_task_id() {
-        let mut tm = TaskManager::new(|_, _| {});
+        let mut tm = TaskManager::new(|_, _| {}, |_| {});
         tm.initialize(|| 0);
 
         let t1_id = tm.new_task().set_level(PriorityLevel::MAX).id;
@@ -521,7 +523,7 @@ mod tests {
 
     #[test]
     fn task_manager_sleep_last_task_at_running_level() {
-        let mut tm = TaskManager::new(|_, _| {});
+        let mut tm = TaskManager::new(|_, _| {}, |_| {});
         tm.initialize(|| 0);
 
         let t1_id = tm.new_task().set_level(PriorityLevel::new(1)).id;
@@ -552,7 +554,7 @@ mod tests {
 
     #[test]
     fn task_manager_sleep_not_running_but_same_level() {
-        let mut tm = TaskManager::new(|_, _| {});
+        let mut tm = TaskManager::new(|_, _| {}, |_| {});
         tm.initialize(|| 0);
 
         let t1_id = tm.new_task().set_level(PriorityLevel::MAX).id;
@@ -587,7 +589,7 @@ mod tests {
 
     #[test]
     fn task_manager_sleep_level_different_from_current_level() {
-        let mut tm = TaskManager::new(|_, _| {});
+        let mut tm = TaskManager::new(|_, _| {}, |_| {});
         tm.initialize(|| 0);
 
         let t1_id = tm.new_task().set_level(PriorityLevel::MAX).id;
