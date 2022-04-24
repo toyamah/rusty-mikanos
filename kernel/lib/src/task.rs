@@ -1,3 +1,4 @@
+use crate::asm::global::restore_context;
 use crate::error::{Code, Error};
 use crate::make_error;
 use crate::message::Message;
@@ -188,13 +189,17 @@ impl TaskManager {
         self.tasks.iter_mut().last().unwrap()
     }
 
+    pub fn get_task(&self, task_id: TaskID) -> Option<&Task> {
+        self.tasks.get(task_id.as_usize())
+    }
+
     pub fn get_task_mut(&mut self, task_id: TaskID) -> Option<&mut Task> {
         self.tasks.get_mut(task_id.as_usize())
     }
 
-    pub fn current_task(&mut self) -> &Task {
+    pub fn current_task(&self) -> &Task {
         let task_id = self
-            .current_running_task_ids_mut()
+            .current_running_task_ids()
             .front()
             .expect("no such task id");
         let task_id = *task_id;
@@ -224,34 +229,14 @@ impl TaskManager {
             .expect("tasks do not contain main task")
     }
 
-    pub fn switch_task(&mut self) {
-        self._switch_task(false);
-    }
+    pub fn switch_task(&mut self, current_ctx: &TaskContext) {
+        self.current_task_mut().context.clone_from(current_ctx);
 
-    fn _switch_task(&mut self, current_sleep: bool) {
-        let current_task_id = self.current_running_task_ids_mut().pop_front().unwrap();
-        if !current_sleep {
-            self.current_running_task_ids_mut()
-                .push_back(current_task_id);
-        }
-        if self.current_running_task_ids_mut().is_empty() {
-            self.level_changed = true;
-        }
+        let current_task_id = self.rotate_current_run_queue(false);
 
-        if self.level_changed {
-            self.level_changed = false;
-            for level in (PriorityLevel::MIN.as_usize()..=PriorityLevel::MAX.as_usize()).rev() {
-                if self.running_task_ids[level].is_empty().not() {
-                    self.current_level = PriorityLevel::new(level as u8);
-                    break;
-                }
-            }
+        if self.current_task().id != current_task_id {
+            unsafe { restore_context(&self.current_task().context) }
         }
-
-        let next_task_id = *self.current_running_task_ids_mut().front().unwrap();
-        let next_task = self.tasks.get(next_task_id.as_usize()).unwrap();
-        let current_task = self.tasks.get(current_task_id.as_usize()).unwrap();
-        unsafe { (self.switch_context)(&next_task.context, &current_task.context) }
     }
 
     pub fn sleep(&mut self, task_id: TaskID) -> Result<(), Error> {
@@ -272,7 +257,13 @@ impl TaskManager {
             .map(|&index| index == task_id)
             .unwrap_or(false);
         if is_target_task_running {
-            self._switch_task(true);
+            let current_task_id = self.rotate_current_run_queue(true);
+            unsafe {
+                (self.switch_context)(
+                    &self.current_task().context,
+                    &self.get_task(current_task_id).unwrap().context,
+                )
+            };
         } else {
             erase_task_id(self.running_task_ids_mut(level), task_id);
         }
@@ -311,8 +302,44 @@ impl TaskManager {
         Ok(())
     }
 
+    pub fn rotate_current_run_queue(&mut self, current_sleep: bool) -> TaskID {
+        let current_task_id = self
+            .current_running_task_ids_mut()
+            .pop_front()
+            .expect("could not pop front");
+        if !current_sleep {
+            self.current_running_task_ids_mut()
+                .push_back(current_task_id);
+        }
+
+        if self.current_running_task_ids_mut().is_empty() {
+            self.level_changed = true;
+        }
+
+        if self.level_changed {
+            self.level_changed = false;
+
+            for level in (PriorityLevel::MIN.as_usize()..=PriorityLevel::MAX.as_usize()).rev() {
+                if self.running_task_ids[level].is_empty().not() {
+                    self.current_level = PriorityLevel::new(level as u8);
+                    break;
+                }
+            }
+        }
+
+        current_task_id
+    }
+
+    fn current_running_task_ids(&self) -> &VecDeque<TaskID> {
+        self.running_task_ids(self.current_level)
+    }
+
     fn current_running_task_ids_mut(&mut self) -> &mut VecDeque<TaskID> {
         self.running_task_ids_mut(self.current_level)
+    }
+
+    fn running_task_ids(&self, level: PriorityLevel) -> &VecDeque<TaskID> {
+        self.running_task_ids.get(level.as_usize()).unwrap()
     }
 
     fn running_task_ids_mut(&mut self, level: PriorityLevel) -> &mut VecDeque<TaskID> {
@@ -361,7 +388,7 @@ fn erase_task_id(queue: &mut VecDeque<TaskID>, target: TaskID) {
     queue.remove(index).unwrap();
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C, align(16))]
 pub struct TaskContext {
     // offset : 0x00

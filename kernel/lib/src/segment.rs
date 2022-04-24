@@ -11,10 +11,8 @@ pub mod global {
     use crate::asm::global::{load_gdt, load_tr, set_csss, set_ds_all};
     use crate::memory_manager::global::memory_manager;
     use crate::segment::K_TSS;
-    use crate::x86_descriptor::SystemDescriptorType::TSSAvailable;
-    use crate::x86_descriptor::{SegmentDescriptorType, SystemDescriptorType};
+    use crate::x86_descriptor::SegmentDescriptorType;
     use core::mem;
-    use log::info;
 
     static mut GDT: [SegmentDescriptor; 7] = [SegmentDescriptor::new(); 7];
     static mut TSS: [u32; 26] = [0; 26];
@@ -44,13 +42,13 @@ pub mod global {
         let stack0 = memory_manager()
             .allocate(k_rsp0frames)
             .expect("failed to allocate rsp0");
-        let rsp0 = stack0.frame() as u64 + k_rsp0frames * 4096;
+        let rsp0 = stack0.frame() as u64 + k_rsp0frames as u64 * 4096;
         unsafe {
             TSS[1] = (rsp0 & 0xffffffff) as u32;
             TSS[2] = (rsp0 >> 32) as u32;
         }
 
-        let tss_addr = &tss[0] as usize;
+        let tss_addr = (&unsafe { TSS }[0]) as *const _ as usize;
         unsafe {
             let i = (K_TSS >> 3) as usize;
             GDT[i].set_system_segment2(
