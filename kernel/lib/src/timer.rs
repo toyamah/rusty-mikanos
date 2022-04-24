@@ -1,5 +1,8 @@
+use crate::interrupt::global::notify_end_of_interrupt;
 use crate::message::{Message, MessageType};
-use crate::task::TaskManager;
+use crate::task::global::task_manager;
+use crate::task::{TaskContext, TaskManager};
+use crate::timer::global::timer_manager;
 use alloc::collections::BinaryHeap;
 use core::arch::asm;
 use core::cmp::Ordering;
@@ -14,9 +17,7 @@ pub const TASK_TIMER_VALUE: i32 = i32::MIN;
 pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
     use crate::acpi;
-    use crate::interrupt::global::notify_end_of_interrupt;
     use crate::interrupt::InterruptVectorNumber;
-    use crate::task::TaskManager;
 
     static mut TIMER_MANAGER: Option<TimerManager> = None;
     pub fn timer_manager() -> &'static mut TimerManager {
@@ -42,13 +43,16 @@ pub mod global {
             initial_count().write_volatile((lapic_timer_freq / TIMER_FREQ) as u32);
         }
     }
+}
 
-    pub fn lapic_timer_on_interrupt(task_manager: &mut TaskManager) {
-        let task_timer_timeout = timer_manager().tick(task_manager);
-        notify_end_of_interrupt();
-        if task_timer_timeout {
-            task_manager.switch_task();
-        }
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn LAPICTimerOnInterrupt(context_stack: *const TaskContext) {
+    let context_ref = unsafe { context_stack.as_ref() }.unwrap();
+    let task_timer_timeout = timer_manager().tick(task_manager());
+    notify_end_of_interrupt();
+    if task_timer_timeout {
+        task_manager().switch_task(context_ref);
     }
 }
 
@@ -199,7 +203,7 @@ mod tests {
         manager.add_timer(Timer::new(1, 1));
         manager.add_timer(Timer::new(2, 2));
         manager.add_timer(Timer::new(1, 11));
-        let mut task_manager = TaskManager::new(dummy_context);
+        let mut task_manager = TaskManager::new(dummy_context, |_| {});
         task_manager.initialize(|| 0);
 
         manager.tick(&mut task_manager);

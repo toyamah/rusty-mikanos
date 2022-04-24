@@ -4,13 +4,12 @@ use bit_field::BitField;
 
 pub mod global {
     use super::{InterruptDescriptor, InterruptDescriptorAttribute, InterruptVectorNumber};
-    use crate::asm::global::load_interrupt_descriptor_table;
+    use crate::asm::global::{load_interrupt_descriptor_table, IntHandlerLAPICTimer};
     use crate::graphics::global::pixel_writer;
     use crate::graphics::{PixelWriter, COLOR_WHITE};
     use crate::interrupt::InterruptFrame;
     use crate::message::{Message, MessageType};
     use crate::task::global::task_manager;
-    use crate::timer::global::lapic_timer_on_interrupt;
     use core::arch::asm;
 
     // IDT can have 256(0-255) descriptors
@@ -42,7 +41,7 @@ pub mod global {
         let idt = idt();
         idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(int_handler_xhci as usize);
         idt[InterruptVectorNumber::LAPICTimer as usize]
-            .set_idt_entry(int_handler_lapic_timer as usize);
+            .set_idt_entry(IntHandlerLAPICTimer as usize);
         idt[0].set_idt_entry(int_handler_de as usize);
         idt[1].set_idt_entry(int_handler_db as usize);
         idt[3].set_idt_entry(int_handler_bp as usize);
@@ -75,11 +74,6 @@ pub mod global {
                 Message::new(MessageType::InterruptXhci),
             )
             .unwrap();
-        notify_end_of_interrupt();
-    }
-
-    extern "x86-interrupt" fn int_handler_lapic_timer(_: *const InterruptFrame) {
-        lapic_timer_on_interrupt(task_manager());
         notify_end_of_interrupt();
     }
 

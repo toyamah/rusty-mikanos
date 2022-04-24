@@ -92,6 +92,7 @@ pub extern "C" fn KernelMainNewStack(
     segment::global::initialize();
     paging::global::initialize();
     memory_manager::global::initialize(&memory_map);
+    segment::global::initialize_tss();
     initialize_interrupt();
 
     fat::global::initialize(volume_image);

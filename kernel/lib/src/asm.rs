@@ -1,5 +1,6 @@
 pub mod global {
     use crate::rust_official::cchar::c_char;
+    use crate::task::TaskContext;
     use core::ffi::c_void;
 
     extern "C" {
@@ -8,12 +9,15 @@ pub mod global {
         fn GetCS() -> u16;
         fn LoadIDT(limit: u16, offset: u64);
         fn LoadGDT(limit: u16, offset: u64);
+        fn LoadTR(sel: u16);
         fn SetDSAll(value: u16);
         fn SetCSSS(cs: u16, ss: u16);
         fn SetCR3(value: u64);
         fn GetCR3() -> u64;
         fn SwitchContext(next_ctx: *const c_void, current_ctx: *const c_void);
+        fn RestoreContext(task_context: *const c_void);
         fn CallApp(argc: i32, argv: *const *const c_char, cs: u16, ss: u16, rip: u64, rsp: u64);
+        pub fn IntHandlerLAPICTimer();
     }
 
     pub fn io_out_32(addr: u16, data: u32) {
@@ -36,6 +40,10 @@ pub mod global {
         unsafe { LoadGDT(limit, offset) }
     }
 
+    pub fn load_tr(sel: u16) {
+        unsafe { LoadTR(sel) }
+    }
+
     pub fn set_ds_all(value: u16) {
         unsafe { SetDSAll(value) }
     }
@@ -53,11 +61,16 @@ pub mod global {
     }
 
     /// # Safety
-    pub unsafe fn switch_context<T>(next_ctx: &T, current_ctx: &T) {
+    pub unsafe fn switch_context(next_ctx: &TaskContext, current_ctx: &TaskContext) {
         SwitchContext(
             next_ctx as *const _ as *const c_void,
             current_ctx as *const _ as *const c_void,
         );
+    }
+
+    /// # Safety
+    pub unsafe fn restore_context(task_context: &TaskContext) {
+        RestoreContext(task_context as *const _ as *const c_void);
     }
 
     /// # Safety
