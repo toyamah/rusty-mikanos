@@ -6,7 +6,7 @@ pub mod global {
     use super::{InterruptDescriptor, InterruptDescriptorAttribute, InterruptVectorNumber};
     use crate::asm::global::{load_interrupt_descriptor_table, IntHandlerLAPICTimer};
     use crate::graphics::global::pixel_writer;
-    use crate::graphics::{PixelWriter, COLOR_WHITE};
+    use crate::graphics::{PixelWriter, COLOR_BLACK};
     use crate::interrupt::InterruptFrame;
     use crate::message::{Message, MessageType};
     use crate::task::global::task_manager;
@@ -135,7 +135,7 @@ pub mod global {
     fn _fault_handler_with_error(name: &str, frame: *const InterruptFrame, error_code: u64) {
         let f = unsafe { frame.as_ref() }.unwrap();
         print_frame(f, name);
-        pixel_writer().write_string(500, 16 * 4, "ERR", &COLOR_WHITE);
+        pixel_writer().write_string(500, 16 * 4, "ERR", &COLOR_BLACK);
         print_hex(error_code, 16, 500 + 8 * 4, 16 * 4);
         loop {
             unsafe { asm!("hlt") }
@@ -152,17 +152,17 @@ pub mod global {
 
     pub fn print_frame(f: &InterruptFrame, exp_name: &str) {
         let w = pixel_writer();
-        w.write_string(500, 0, exp_name, &COLOR_WHITE);
+        w.write_string(500, 0, exp_name, &COLOR_BLACK);
 
-        w.write_string(500, 16, "CS:RIP", &COLOR_WHITE);
+        w.write_string(500, 16, "CS:RIP", &COLOR_BLACK);
         print_hex(f.cs, 4, 500 + 8 * 7, 16);
         print_hex(f.rip, 16, 500 + 8 * 12, 16);
 
-        w.write_string(500, 16 * 2, "RFLAGS", &COLOR_WHITE);
+        w.write_string(500, 16 * 2, "RFLAGS", &COLOR_BLACK);
         print_hex(f.rflags, 16, 500 + 8 * 7, 16 * 2);
 
-        w.write_string(500, 16 * 3, "SS:RSP", &COLOR_WHITE);
-        print_hex(f.ss, 16, 500 + 8 * 7, 16 * 3);
+        w.write_string(500, 16 * 3, "SS:RSP", &COLOR_BLACK);
+        print_hex(f.ss, 4, 500 + 8 * 7, 16 * 3);
         print_hex(f.rsp, 16, 500 + 8 * 12, 16 * 3);
     }
 
@@ -175,7 +175,7 @@ pub mod global {
                 x += u64::from('0');
             }
 
-            pixel_writer().write_ascii(pos_x + (8 * i), pos_y, char::from(x as u8), &COLOR_WHITE);
+            pixel_writer().write_ascii(pos_x + (8 * i), pos_y, char::from(x as u8), &COLOR_BLACK);
         }
     }
 }
