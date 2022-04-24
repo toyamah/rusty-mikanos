@@ -203,7 +203,7 @@ mod tests {
         manager.add_timer(Timer::new(1, 1));
         manager.add_timer(Timer::new(2, 2));
         manager.add_timer(Timer::new(1, 11));
-        let mut task_manager = TaskManager::new(dummy_context);
+        let mut task_manager = TaskManager::new(dummy_context, |_| {});
         task_manager.initialize(|| 0);
 
         manager.tick(&mut task_manager);
