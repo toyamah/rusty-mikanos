@@ -7,6 +7,17 @@ use shared_lib::atol;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::rust_official::cstr::CStr;
 
+extern "C" {
+    fn SyscallLogString(level: i64, s: *const c_char) -> i64;
+}
+
+fn info(s: &str) {
+    unsafe {
+        let c_str = CStr::from_bytes_with_nul_unchecked(s.as_bytes());
+        SyscallLogString(3, c_str.as_ptr());
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
     let mut stack = Stack::new();
@@ -19,6 +30,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
         let bytes = c_str.to_bytes();
 
         if bytes == b"+" {
+            info("+");
             let b = stack.pop().unwrap();
             let a = stack.pop().unwrap();
             stack.push(a + b);

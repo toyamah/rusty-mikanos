@@ -401,8 +401,8 @@ impl Terminal {
         call_app(
             argc as i32,
             argv as *const *const c_char,
-            3 << 3 | 3,
             4 << 3 | 3,
+            3 << 3 | 3,
             entry_addr as u64,
             stack_frame_addr.value() + 4096 - 8,
         );

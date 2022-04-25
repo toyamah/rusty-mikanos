@@ -8,6 +8,7 @@ extern crate alloc;
 
 use crate::usb::global::xhci_controller;
 use alloc::format;
+use alloc::string::ToString;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
@@ -31,7 +32,7 @@ use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
 use lib::{
     acpi, console, fat, graphics, keyboard, layer, memory_manager, mouse, paging, pci, segment,
-    task, timer,
+    syscall, task, timer,
 };
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
@@ -116,6 +117,8 @@ pub extern "C" fn KernelMainNewStack(
     timer_manager().add_timer(Timer::new(timer_05_sec, text_box_cursor_timer));
     unsafe { asm!("sti") };
     let mut text_box_cursor_visible = false;
+
+    syscall::initialize_syscall();
 
     task::global::initialize();
     let main_task_id = task_manager().main_task_mut().id();
