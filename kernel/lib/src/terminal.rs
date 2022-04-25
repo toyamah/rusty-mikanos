@@ -10,8 +10,8 @@ use crate::graphics::{
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
 use crate::paging::{LinearAddress4Level, PageMapEntry};
+use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
-use crate::rust_official::cstring::CString;
 use crate::rust_official::strlen;
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, make_error, Window};
