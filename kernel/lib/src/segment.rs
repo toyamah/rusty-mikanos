@@ -27,7 +27,7 @@ pub mod global {
         unsafe {
             GDT[1].set_code_segment(SegmentDescriptorType::ExecuteRead, 0, 0, 0xfffff);
             GDT[2].set_data_segment(SegmentDescriptorType::ReadWrite, 0, 0, 0xfffff);
-            GDT[3].set_code_segment(SegmentDescriptorType::ReadWrite, 3, 0, 0xfffff);
+            GDT[3].set_data_segment(SegmentDescriptorType::ReadWrite, 3, 0, 0xfffff);
             GDT[4].set_code_segment(SegmentDescriptorType::ExecuteRead, 3, 0, 0xfffff);
             load_gdt(
                 core::mem::size_of_val(&GDT) as u16 - 1,
