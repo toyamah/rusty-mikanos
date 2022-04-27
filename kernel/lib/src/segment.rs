@@ -23,7 +23,7 @@ pub mod global {
             GDT[1].set_code_segment(SegmentDescriptorType::ExecuteRead, 0, 0, 0xfffff);
             GDT[2].set_data_segment(SegmentDescriptorType::ReadWrite, 0, 0, 0xfffff);
             GDT[3].set_code_segment(SegmentDescriptorType::ExecuteRead, 3, 0, 0xfffff);
-            GDT[4].set_code_segment(SegmentDescriptorType::ReadWrite, 3, 0, 0xfffff);
+            GDT[4].set_data_segment(SegmentDescriptorType::ReadWrite, 3, 0, 0xfffff);
             load_gdt(
                 (core::mem::size_of_val(&GDT) - 1) as u16,
                 &GDT[0] as *const _ as u64,
