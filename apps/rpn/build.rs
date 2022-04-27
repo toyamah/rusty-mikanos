@@ -3,12 +3,12 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    // let out_dir = env::var("OUT_DIR").unwrap();
-    // let current_dir = env::current_dir().unwrap();
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let current_dir = env::current_dir().unwrap();
 
-    // build_asm(&out_dir, &current_dir);
+    build_asm(&out_dir, &current_dir);
 
-    // println!("cargo:rustc-link-search=native={}", out_dir);
+    println!("cargo:rustc-link-search=native={}", out_dir);
 }
 
 fn build_asm(out_dir: &str, current_dir: &Path) {
