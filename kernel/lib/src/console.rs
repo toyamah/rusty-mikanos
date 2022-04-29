@@ -13,7 +13,6 @@ const COLUMNS: usize = 80;
 pub mod global {
     use super::Console;
     use crate::graphics::{DESKTOP_BG_COLOR, DESKTOP_FG_COLOR};
-    use alloc::format;
     use core::fmt;
     use core::fmt::Write;
 
@@ -27,13 +26,7 @@ pub mod global {
     }
 
     pub fn _printk(args: fmt::Arguments) {
-        // let time = measure_time(|| console().write_fmt(args).unwrap());
-        // console().write_fmt(format_args!("[{:#09}]", time)).unwrap();
-
-        // To draw text rapidly, avoid using write_fmt
-        // because write_fmt calls write_str for every argument and then LayoutManager.draw() is called as many times as the argument's size.
-        let text = format!("{}", args);
-        console().write_str(&text).unwrap();
+        console().write_fmt(args).unwrap();
     }
 }
 
