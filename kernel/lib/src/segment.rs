@@ -10,7 +10,7 @@ pub mod global {
     use crate::asm::global::{load_gdt, set_csss, set_ds_all};
     use crate::x86_descriptor::SegmentDescriptorType;
 
-    static mut GDT: [SegmentDescriptor; 3] = [SegmentDescriptor::new(); 3];
+    static mut GDT: [SegmentDescriptor; 5] = [SegmentDescriptor::new(); 5];
 
     pub fn initialize() {
         set_up_segment();
@@ -22,6 +22,8 @@ pub mod global {
         unsafe {
             GDT[1].set_code_segment(SegmentDescriptorType::ExecuteRead, 0, 0, 0xfffff);
             GDT[2].set_data_segment(SegmentDescriptorType::ReadWrite, 0, 0, 0xfffff);
+            GDT[3].set_code_segment(SegmentDescriptorType::ExecuteRead, 3, 0, 0xfffff);
+            GDT[4].set_data_segment(SegmentDescriptorType::ReadWrite, 3, 0, 0xfffff);
             load_gdt(
                 (core::mem::size_of_val(&GDT) - 1) as u16,
                 &GDT[0] as *const _ as u64,

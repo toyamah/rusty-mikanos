@@ -1,5 +1,7 @@
 pub mod global {
+    use crate::rust_official::cchar::c_char;
     use core::ffi::c_void;
+
     extern "C" {
         fn IoOut32(addr: u16, data: u32);
         fn IoIn32(addr: u16) -> u32;
@@ -11,6 +13,7 @@ pub mod global {
         fn SetCR3(value: u64);
         fn GetCR3() -> u64;
         fn SwitchContext(next_ctx: *const c_void, current_ctx: *const c_void);
+        fn CallApp(argc: i32, argv: *const *const c_char, cs: u16, ss: u16, rip: u64, rsp: u64);
     }
 
     pub fn io_out_32(addr: u16, data: u32) {
@@ -55,5 +58,11 @@ pub mod global {
             next_ctx as *const _ as *const c_void,
             current_ctx as *const _ as *const c_void,
         );
+    }
+
+    /// # Safety
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    pub fn call_app(argc: i32, argv: *const *const c_char, cs: u16, ss: u16, rip: u64, rsp: u64) {
+        unsafe { CallApp(argc, argv, cs, ss, rip, rsp) }
     }
 }

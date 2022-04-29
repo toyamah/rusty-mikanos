@@ -45,7 +45,8 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
         // }
     }
 
-    stack.pop().unwrap_or(0) as i32
+    loop {}
+    // stack.pop().unwrap_or(0) as i32
 }
 
 struct Stack {
