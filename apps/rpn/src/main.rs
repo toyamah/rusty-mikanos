@@ -49,8 +49,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
     }
 
     info("\nhello, this is rpn\n\0");
-
-    printf(format_args!("result = {}", stack.pop().unwrap_or(0)));
+    printf(format_args!("{}", stack.pop().unwrap_or(0)));
 
     loop {}
     // stack.pop().unwrap_or(0) as i32
