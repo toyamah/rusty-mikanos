@@ -1,11 +1,16 @@
+use crate::segment::KERNEL_CS;
 use crate::x86_descriptor::SystemDescriptorType;
 use bit_field::BitField;
 
 pub mod global {
     use super::{InterruptDescriptor, InterruptDescriptorAttribute, InterruptVectorNumber};
-    use crate::asm::global::load_interrupt_descriptor_table;
-    use crate::segment::KERNEL_CS;
-    use crate::x86_descriptor::SystemDescriptorType;
+    use crate::asm::global::{load_interrupt_descriptor_table, IntHandlerLAPICTimer};
+    use crate::graphics::global::pixel_writer;
+    use crate::graphics::{PixelWriter, COLOR_BLACK};
+    use crate::interrupt::InterruptFrame;
+    use crate::message::{Message, MessageType};
+    use crate::task::global::task_manager;
+    use core::arch::asm;
 
     // IDT can have 256(0-255) descriptors
     static mut IDT: [InterruptDescriptor; 256] = [InterruptDescriptor {
@@ -32,22 +37,146 @@ pub mod global {
         }
     }
 
-    pub fn initialize_interrupt(xhci_offset: usize, timer_offset: usize) {
+    pub fn initialize_interrupt() {
         let idt = idt();
-        idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(
-            InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
-            xhci_offset as u64,
-            KERNEL_CS,
-        );
-        idt[InterruptVectorNumber::LAPICTimer as usize].set_idt_entry(
-            InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
-            timer_offset as u64,
-            KERNEL_CS,
-        );
+        idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(int_handler_xhci as usize);
+        idt[InterruptVectorNumber::LAPICTimer as usize]
+            .set_idt_entry(IntHandlerLAPICTimer as usize);
+        idt[0].set_idt_entry(int_handler_de as usize);
+        idt[1].set_idt_entry(int_handler_db as usize);
+        idt[3].set_idt_entry(int_handler_bp as usize);
+        idt[4].set_idt_entry(int_handler_of as usize);
+        idt[5].set_idt_entry(int_handler_br as usize);
+        idt[6].set_idt_entry(int_handler_ud as usize);
+        idt[7].set_idt_entry(int_handler_nm as usize);
+        idt[8].set_idt_entry(int_handler_df as usize);
+        idt[10].set_idt_entry(int_handler_ts as usize);
+        idt[11].set_idt_entry(int_handler_np as usize);
+        idt[12].set_idt_entry(int_handler_ss as usize);
+        idt[13].set_idt_entry(int_handler_gp as usize);
+        idt[14].set_idt_entry(int_handler_pf as usize);
+        idt[16].set_idt_entry(int_handler_mf as usize);
+        idt[17].set_idt_entry(int_handler_ac as usize);
+        idt[18].set_idt_entry(int_handler_mc as usize);
+        idt[19].set_idt_entry(int_handler_xm as usize);
+        idt[20].set_idt_entry(int_handler_ve as usize);
+
         load_interrupt_descriptor_table(
             core::mem::size_of_val(idt) as u16,
             &idt[0] as *const InterruptDescriptor as u64,
         );
+    }
+
+    extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
+        task_manager()
+            .send_message(
+                task_manager().main_task().id(),
+                Message::new(MessageType::InterruptXhci),
+            )
+            .unwrap();
+        notify_end_of_interrupt();
+    }
+
+    extern "x86-interrupt" fn int_handler_de(frame: *const InterruptFrame) {
+        _fault_handler_no_error("#DE", frame);
+    }
+    extern "x86-interrupt" fn int_handler_db(frame: *const InterruptFrame) {
+        _fault_handler_no_error("#db", frame);
+    }
+    extern "x86-interrupt" fn int_handler_bp(frame: *const InterruptFrame) {
+        _fault_handler_no_error("#BP", frame);
+    }
+    extern "x86-interrupt" fn int_handler_of(frame: *const InterruptFrame) {
+        _fault_handler_no_error("#OF", frame);
+    }
+    extern "x86-interrupt" fn int_handler_br(frame: *const InterruptFrame) {
+        _fault_handler_no_error("#BR", frame);
+    }
+    extern "x86-interrupt" fn int_handler_ud(frame: *const InterruptFrame) {
+        _fault_handler_no_error("#UD", frame);
+    }
+    extern "x86-interrupt" fn int_handler_nm(frame: *const InterruptFrame) {
+        _fault_handler_no_error("#NM", frame);
+    }
+    extern "x86-interrupt" fn int_handler_df(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#DF", frame, error_code);
+    }
+    extern "x86-interrupt" fn int_handler_ts(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#TS", frame, error_code);
+    }
+    extern "x86-interrupt" fn int_handler_np(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#NP", frame, error_code);
+    }
+    extern "x86-interrupt" fn int_handler_ss(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#SS", frame, error_code);
+    }
+    extern "x86-interrupt" fn int_handler_gp(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#GP", frame, error_code);
+    }
+    extern "x86-interrupt" fn int_handler_pf(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#PF", frame, error_code);
+    }
+    extern "x86-interrupt" fn int_handler_mf(frame: *const InterruptFrame) {
+        _fault_handler_no_error("#MF", frame);
+    }
+    extern "x86-interrupt" fn int_handler_ac(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#AC", frame, error_code);
+    }
+    extern "x86-interrupt" fn int_handler_mc(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#MC", frame, error_code);
+    }
+    extern "x86-interrupt" fn int_handler_xm(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#XM", frame, error_code);
+    }
+    extern "x86-interrupt" fn int_handler_ve(frame: *const InterruptFrame, error_code: u64) {
+        _fault_handler_with_error("#VE", frame, error_code);
+    }
+
+    fn _fault_handler_with_error(name: &str, frame: *const InterruptFrame, error_code: u64) {
+        let f = unsafe { frame.as_ref() }.unwrap();
+        print_frame(f, name);
+        pixel_writer().write_string(500, 16 * 4, "ERR", &COLOR_BLACK);
+        print_hex(error_code, 16, 500 + 8 * 4, 16 * 4);
+        loop {
+            unsafe { asm!("hlt") }
+        }
+    }
+
+    fn _fault_handler_no_error(name: &str, frame: *const InterruptFrame) {
+        let f = unsafe { frame.as_ref() }.unwrap();
+        print_frame(f, name);
+        loop {
+            unsafe { asm!("hlt") }
+        }
+    }
+
+    pub fn print_frame(f: &InterruptFrame, exp_name: &str) {
+        let w = pixel_writer();
+        w.write_string(500, 0, exp_name, &COLOR_BLACK);
+
+        w.write_string(500, 16, "CS:RIP", &COLOR_BLACK);
+        print_hex(f.cs, 4, 500 + 8 * 7, 16);
+        print_hex(f.rip, 16, 500 + 8 * 12, 16);
+
+        w.write_string(500, 16 * 2, "RFLAGS", &COLOR_BLACK);
+        print_hex(f.rflags, 16, 500 + 8 * 7, 16 * 2);
+
+        w.write_string(500, 16 * 3, "SS:RSP", &COLOR_BLACK);
+        print_hex(f.ss, 4, 500 + 8 * 7, 16 * 3);
+        print_hex(f.rsp, 16, 500 + 8 * 12, 16 * 3);
+    }
+
+    pub fn print_hex(value: u64, width: i32, pos_x: i32, pos_y: i32) {
+        for i in 0..width {
+            let mut x = value >> (4 * (width - i - 1)) & 0xf;
+            if x >= 10 {
+                x += u64::from('a') - 10;
+            } else {
+                x += u64::from('0');
+            }
+
+            pixel_writer().write_ascii(pos_x + (8 * i), pos_y, char::from(x as u8), &COLOR_BLACK);
+        }
     }
 }
 
@@ -72,7 +201,15 @@ pub struct InterruptDescriptor {
 }
 
 impl InterruptDescriptor {
-    pub fn set_idt_entry(
+    fn set_idt_entry(&mut self, offset: usize) {
+        self._set_idt_entry(
+            InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
+            offset as u64,
+            KERNEL_CS,
+        );
+    }
+
+    fn _set_idt_entry(
         &mut self,
         attr: InterruptDescriptorAttribute,
         offset: u64,
@@ -91,7 +228,7 @@ impl InterruptDescriptor {
 pub struct InterruptDescriptorAttribute(u16);
 
 impl InterruptDescriptorAttribute {
-    pub fn new(
+    fn new(
         descriptor_type: SystemDescriptorType,
         descriptor_privilege_level: u8,
         present: bool,

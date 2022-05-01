@@ -11,13 +11,12 @@ use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
-use lib::asm::global::{get_cr3, IntHandlerLAPICTimer};
+use lib::asm::global::get_cr3;
 use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{
     fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
 };
-use lib::interrupt::global::{initialize_interrupt, notify_end_of_interrupt};
-use lib::interrupt::InterruptFrame;
+use lib::interrupt::global::initialize_interrupt;
 use lib::layer::global::{
     active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager, layer_task_map,
     screen_frame_buffer,
@@ -94,7 +93,7 @@ pub extern "C" fn KernelMainNewStack(
     paging::global::initialize();
     memory_manager::global::initialize(&memory_map);
     segment::global::initialize_tss();
-    initialize_interrupt(int_handler_xhci as usize, IntHandlerLAPICTimer as usize);
+    initialize_interrupt();
 
     fat::global::initialize(volume_image);
     pci::initialize();
@@ -243,16 +242,6 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
 
 extern "C" fn keyboard_observer(modifier: u8, keycode: u8) {
     keyboard::on_input(modifier, keycode, task_manager());
-}
-
-extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
-    task_manager()
-        .send_message(
-            task_manager().main_task().id(),
-            Message::new(MessageType::InterruptXhci),
-        )
-        .unwrap();
-    notify_end_of_interrupt();
 }
 
 fn initialize_main_window() {

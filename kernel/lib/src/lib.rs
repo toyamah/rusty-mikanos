@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 #![feature(const_btree_new)]
 #![feature(slice_internals)]
+#![feature(abi_x86_interrupt)]
 
 extern crate alloc;
 
