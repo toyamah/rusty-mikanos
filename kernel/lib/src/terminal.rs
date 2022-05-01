@@ -166,6 +166,10 @@ impl Terminal {
         }
     }
 
+    pub(crate) fn layer_id(&self) -> LayerID {
+        self.layer_id
+    }
+
     fn initialize(&mut self, layout_manager: &mut LayerManager, pixel_format: PixelFormat) {
         let mut window = Window::new_with_title(
             COLUMNS * 8 + 8 + Window::TITLED_WINDOW_MARGIN.x as usize,
@@ -457,7 +461,7 @@ impl Terminal {
         )
     }
 
-    fn print(&mut self, s: &str, w: &mut Window) {
+    pub(crate) fn print(&mut self, s: &str, w: &mut Window) {
         let prev_cursor = self.calc_cursor_pos();
         self.draw_cursor(false, w);
 
@@ -477,7 +481,7 @@ impl Terminal {
         }));
 
         unsafe { asm!("cli") };
-        task_manager().send_message(TaskID::new(1), msg);
+        task_manager().send_message(TaskID::new(1), msg).unwrap();
         unsafe { asm!("sti") };
     }
 
