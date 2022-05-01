@@ -3,30 +3,9 @@
 
 use core::arch::asm;
 use core::panic::PanicInfo;
-use shared_lib::atol;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::rust_official::cstr::CStr;
-
-extern "C" {
-    fn SyscallLogString(level: i64, s: *const c_char) -> CallResult;
-    fn SyscallPutString(fd: i32, buf: usize, count: usize) -> CallResult;
-}
-
-#[repr(C)]
-struct CallResult {
-    value: u64,
-    error: i32,
-}
-
-fn print(s: &str) {
-    unsafe { SyscallPutString(1, s.as_ptr() as usize, s.as_bytes().len()) };
-}
-
-fn info(s: &str) {
-    unsafe {
-        SyscallLogString(3, s.as_ptr() as *const c_char);
-    }
-}
+use shared_lib::{atol, info, print};
 
 #[no_mangle]
 pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
