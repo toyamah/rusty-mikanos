@@ -1,9 +1,12 @@
 #![no_std]
 
+use crate::byte_buffer::ByteBuffer;
 use crate::newlib_support::{write, CallResult};
 use crate::rust_official::cchar::c_char;
 use core::ffi::c_void;
+use core::fmt;
 
+mod byte_buffer;
 pub mod newlib_support;
 pub mod rust_official;
 
@@ -17,6 +20,12 @@ extern "C" {
 
 pub fn print(s: &str) {
     write(1, s.as_ptr() as *const c_void, s.as_bytes().len());
+}
+
+pub fn printf(args: fmt::Arguments) {
+    let mut buf = ByteBuffer::new();
+    fmt::write(&mut buf, args).expect("failed to write ByteBuffer");
+    write(1, buf.as_ptr(), buf.len());
 }
 
 pub fn info(s: &str) {

@@ -5,7 +5,7 @@ use core::arch::asm;
 use core::panic::PanicInfo;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::rust_official::cstr::CStr;
-use shared_lib::{atol, info, print};
+use shared_lib::{atol, info, printf};
 
 #[no_mangle]
 pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
@@ -48,9 +48,9 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
         // }
     }
 
-    print("test1");
     info("\nhello, this is rpn\n\0");
-    print("test2");
+
+    printf(format_args!("result = {}", stack.pop().unwrap_or(0)));
 
     loop {}
     // stack.pop().unwrap_or(0) as i32
