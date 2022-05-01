@@ -18,6 +18,8 @@ pub mod global {
         fn RestoreContext(task_context: *const c_void);
         fn CallApp(argc: i32, argv: *const *const c_char, cs: u16, ss: u16, rip: u64, rsp: u64);
         pub fn IntHandlerLAPICTimer();
+        fn WriteMSR(msr: u32, value: u64);
+        pub fn SyscallEntry();
     }
 
     pub fn io_out_32(addr: u16, data: u32) {
@@ -77,5 +79,9 @@ pub mod global {
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn call_app(argc: i32, argv: *const *const c_char, cs: u16, ss: u16, rip: u64, rsp: u64) {
         unsafe { CallApp(argc, argv, cs, ss, rip, rsp) }
+    }
+
+    pub fn write_msr(msr: u32, value: u64) {
+        unsafe { WriteMSR(msr, value) }
     }
 }

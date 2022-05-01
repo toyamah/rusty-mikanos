@@ -16,8 +16,10 @@ build_and_run() {
   cargo clippy -- -Dwarnings
   cd -
 
+  cd kernel
   cargo build --release # build in release mode to optimize code
 #  cargo build
+  cd -
 
   for cargo_manifest in $(ls apps/*/Cargo.toml)
   do
