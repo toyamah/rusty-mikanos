@@ -481,7 +481,9 @@ impl Terminal {
         }));
 
         unsafe { asm!("cli") };
-        task_manager().send_message(TaskID::new(1), msg).unwrap();
+        task_manager()
+            .send_message(task_manager().main_task().id(), msg)
+            .unwrap();
         unsafe { asm!("sti") };
     }
 
