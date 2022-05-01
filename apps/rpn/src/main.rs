@@ -50,7 +50,6 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
 
     info("\nhello, this is rpn\n\0");
     printf(format_args!("{}", stack.pop().unwrap_or(0)));
-
     loop {}
     // stack.pop().unwrap_or(0) as i32
 }
@@ -119,11 +118,4 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {
         unsafe { asm!("hlt") }
     }
-}
-
-macro_rules! println {
-    () => ($crate::print!("\n"));
-    ($($arg:tt)*) => ({
-        $crate::io::_print($crate::format_args_nl!($($arg)*));
-    })
 }
