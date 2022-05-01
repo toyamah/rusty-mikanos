@@ -9,8 +9,12 @@ pub mod global {
     use crate::graphics::{PixelWriter, COLOR_BLACK};
     use crate::interrupt::InterruptFrame;
     use crate::message::{Message, MessageType};
+    use crate::segment::KERNEL_CS;
     use crate::task::global::task_manager;
+    use crate::x86_descriptor::SystemDescriptorType;
     use core::arch::asm;
+
+    pub(crate) const IST_FOR_TIMER: u8 = 0; // index of the interrupt stack table
 
     // IDT can have 256(0-255) descriptors
     static mut IDT: [InterruptDescriptor; 256] = [InterruptDescriptor {
@@ -40,8 +44,16 @@ pub mod global {
     pub fn initialize_interrupt() {
         let idt = idt();
         idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(int_handler_xhci as usize);
-        idt[InterruptVectorNumber::LAPICTimer as usize]
-            .set_idt_entry(IntHandlerLAPICTimer as usize);
+        idt[InterruptVectorNumber::LAPICTimer as usize]._set_idt_entry(
+            InterruptDescriptorAttribute::new(
+                SystemDescriptorType::InterruptGate,
+                0,
+                true,
+                IST_FOR_TIMER,
+            ),
+            IntHandlerLAPICTimer as usize as u64,
+            KERNEL_CS,
+        );
         idt[0].set_idt_entry(int_handler_de as usize);
         idt[1].set_idt_entry(int_handler_db as usize);
         idt[3].set_idt_entry(int_handler_bp as usize);

@@ -9,6 +9,7 @@ const K_TSS: u16 = 5 << 3;
 pub mod global {
     use super::{SegmentDescriptor, KERNEL_CS, KERNEL_DS, KERNEL_SS};
     use crate::asm::global::{load_gdt, load_tr, set_csss, set_ds_all};
+    use crate::interrupt::global::IST_FOR_TIMER;
     use crate::memory_manager::global::memory_manager;
     use crate::memory_manager::BYTES_PER_FRAME;
     use crate::segment::K_TSS;
@@ -39,6 +40,7 @@ pub mod global {
 
     pub fn initialize_tss() {
         set_tss(1, allocate_stack_area(8));
+        set_tss(7 + 2 * IST_FOR_TIMER as usize, allocate_stack_area(8));
 
         let tss_addr = unsafe { &TSS[0] as *const _ as usize };
         unsafe {
