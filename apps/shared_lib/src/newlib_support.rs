@@ -1,16 +1,16 @@
 use core::ffi::c_void;
 
 extern "C" {
-    pub(crate) fn SyscallPutString(fd: i32, buf: usize, count: usize) -> CallResult;
+    pub(crate) fn SyscallPutString(fd: i32, buf: usize, count: usize) -> SyscallResult;
 }
 
 #[repr(C)]
-pub(crate) struct CallResult {
+pub(crate) struct SyscallResult {
     value: u64,
     error: i32,
 }
 
-impl CallResult {
+impl SyscallResult {
     fn is_ok(&self) -> bool {
         self.error == 0
     }

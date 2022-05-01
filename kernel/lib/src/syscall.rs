@@ -4,9 +4,9 @@ use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
 use crate::terminal::global::{get_terminal_mut_by, terminal_window};
-use log::{info, log, Level};
+use log::{log, Level};
 
-type SyscallFuncType = fn(u64, u64, u64, u64, u64, u64) -> CallResult;
+type SyscallFuncType = fn(u64, u64, u64, u64, u64, u64) -> SyscallResult;
 
 // Execute command `errno -l` to see each error number
 const EPERM: i32 = 1; // Operation not permitted (POSIX.1-2001).
@@ -14,12 +14,12 @@ const E2BIG: i32 = 7; // Argument list too long
 const EBADF: i32 = 9; // Bad file descriptor
 
 #[repr(C)]
-struct CallResult {
+struct SyscallResult {
     value: u64,
     error: i32,
 }
 
-impl CallResult {
+impl SyscallResult {
     fn err(value: u64, error: i32) -> Self {
         Self { value, error }
     }
@@ -29,29 +29,29 @@ impl CallResult {
     }
 }
 
-fn log_string(log_level: u64, s: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> CallResult {
+fn log_string(log_level: u64, s: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
     let log_level = match log_level {
         1 => Level::Error,
         2 => Level::Warn,
         3 => Level::Info,
         4 => Level::Debug,
         5 => Level::Trace,
-        _ => return CallResult::err(0, EPERM),
+        _ => return SyscallResult::err(0, EPERM),
     };
 
     let c_str = unsafe { c_str_from(s) };
     let len = c_str.to_bytes().len();
     if len > 1024 {
-        return CallResult::err(0, E2BIG);
+        return SyscallResult::err(0, E2BIG);
     }
     let str = str_from(c_str.to_bytes());
     log!(log_level, "{}", str);
-    CallResult::ok(len as u64)
+    SyscallResult::ok(len as u64)
 }
 
-fn put_string(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> CallResult {
+fn put_string(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
     if count > 1024 {
-        return CallResult::err(0, E2BIG);
+        return SyscallResult::err(0, E2BIG);
     }
 
     let c_str = unsafe { c_str_from(buf) };
@@ -62,10 +62,10 @@ fn put_string(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Ca
         let terminal = get_terminal_mut_by(task_id).expect("failed to get terminal");
         let layer_id = terminal.layer_id();
         terminal.print(str, terminal_window(layer_id));
-        return CallResult::ok(count);
+        return SyscallResult::ok(count);
     }
 
-    CallResult::err(0, EBADF)
+    SyscallResult::err(0, EBADF)
 }
 
 unsafe fn c_str_from<'a>(p: u64) -> &'a CStr {
