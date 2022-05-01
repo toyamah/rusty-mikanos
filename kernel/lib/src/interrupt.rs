@@ -201,7 +201,7 @@ pub struct InterruptDescriptor {
 }
 
 impl InterruptDescriptor {
-    pub fn set_idt_entry(&mut self, offset: usize) {
+    fn set_idt_entry(&mut self, offset: usize) {
         self._set_idt_entry(
             InterruptDescriptorAttribute::new(SystemDescriptorType::InterruptGate, 0, true, 0),
             offset as u64,
@@ -209,7 +209,7 @@ impl InterruptDescriptor {
         );
     }
 
-    pub fn _set_idt_entry(
+    fn _set_idt_entry(
         &mut self,
         attr: InterruptDescriptorAttribute,
         offset: u64,
@@ -228,7 +228,7 @@ impl InterruptDescriptor {
 pub struct InterruptDescriptorAttribute(u16);
 
 impl InterruptDescriptorAttribute {
-    pub fn new(
+    fn new(
         descriptor_type: SystemDescriptorType,
         descriptor_privilege_level: u8,
         present: bool,
