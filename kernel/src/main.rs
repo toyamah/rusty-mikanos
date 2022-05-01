@@ -11,7 +11,7 @@ use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
-use lib::asm::global::get_cr3;
+use lib::asm::global::{get_cr3, IntHandlerLAPICTimer};
 use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{
     fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
@@ -27,7 +27,7 @@ use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
 use lib::terminal::global::task_terminal;
-use lib::timer::global::{lapic_timer_on_interrupt, timer_manager};
+use lib::timer::global::timer_manager;
 use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
 use lib::{
@@ -93,7 +93,8 @@ pub extern "C" fn KernelMainNewStack(
     segment::global::initialize();
     paging::global::initialize();
     memory_manager::global::initialize(&memory_map);
-    initialize_interrupt(int_handler_xhci as usize, int_handler_lapic_timer as usize);
+    segment::global::initialize_tss();
+    initialize_interrupt(int_handler_xhci as usize, IntHandlerLAPICTimer as usize);
 
     fat::global::initialize(volume_image);
     pci::initialize();
@@ -251,11 +252,6 @@ extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
             Message::new(MessageType::InterruptXhci),
         )
         .unwrap();
-    notify_end_of_interrupt();
-}
-
-extern "x86-interrupt" fn int_handler_lapic_timer(_: *const InterruptFrame) {
-    lapic_timer_on_interrupt(task_manager());
     notify_end_of_interrupt();
 }
 

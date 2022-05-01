@@ -16,5 +16,6 @@ pub enum SystemDescriptorType {
 pub enum SegmentDescriptorType {
     // code & data segment types
     ReadWrite = 2,
+    TSSAvailable = 9,
     ExecuteRead = 10,
 }
