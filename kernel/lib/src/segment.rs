@@ -38,16 +38,7 @@ pub mod global {
     }
 
     pub fn initialize_tss() {
-        let k_rsp0frames = 8;
-
-        let stack0 = memory_manager()
-            .allocate(k_rsp0frames)
-            .expect("failed to allocate rsp0");
-        let rsp0 = (stack0.id() * BYTES_PER_FRAME + k_rsp0frames * 4096) as u64;
-        unsafe {
-            TSS[1] = (rsp0 & 0xffffffff) as u32;
-            TSS[2] = (rsp0 >> 32) as u32;
-        }
+        set_tss(1, allocate_stack_area(8));
 
         let tss_addr = unsafe { &TSS[0] as *const _ as usize };
         unsafe {
@@ -61,6 +52,21 @@ pub mod global {
             GDT[i + 1] = SegmentDescriptor(0);
         }
         load_tr(K_TSS);
+    }
+
+    fn set_tss(index: usize, value: u64) {
+        unsafe {
+            TSS[index] = (value & 0xffffffff) as u32;
+            TSS[index + 1] = (value >> 32) as u32;
+        }
+    }
+
+    fn allocate_stack_area(num_4kframes: usize) -> u64 {
+        if let Ok(frame_id) = memory_manager().allocate(num_4kframes) {
+            (frame_id.id() * BYTES_PER_FRAME + num_4kframes * 4096) as u64
+        } else {
+            panic!("failed to allocate stack area. num = {}", num_4kframes);
+        }
     }
 }
 
