@@ -3,19 +3,9 @@
 
 use core::arch::asm;
 use core::panic::PanicInfo;
-use shared_lib::atol;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::rust_official::cstr::CStr;
-
-extern "C" {
-    fn SyscallLogString(level: i64, s: *const c_char) -> i64;
-}
-
-fn info(s: &str) {
-    unsafe {
-        SyscallLogString(3, s.as_ptr() as *const c_char);
-    }
-}
+use shared_lib::{atol, info, printf};
 
 #[no_mangle]
 pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
@@ -59,7 +49,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
     }
 
     info("\nhello, this is rpn\n\0");
-
+    printf(format_args!("{}", stack.pop().unwrap_or(0)));
     loop {}
     // stack.pop().unwrap_or(0) as i32
 }

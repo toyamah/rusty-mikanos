@@ -9,16 +9,20 @@ use crate::graphics::{
 };
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
+use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
 use crate::paging::{LinearAddress4Level, PageMapEntry};
 use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
+use crate::task::global::task_manager;
+use crate::task::TaskID;
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, make_error, Window};
 use alloc::collections::VecDeque;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+use core::arch::asm;
 use core::fmt::Write;
 use core::ops::Deref;
 use core::{cmp, fmt, mem};
@@ -34,26 +38,39 @@ pub mod global {
     use crate::task::TaskID;
     use crate::terminal::Terminal;
     use crate::Window;
+    use alloc::collections::BTreeMap;
     use core::arch::asm;
+
+    static mut TERMINALS: BTreeMap<TaskID, Terminal> = BTreeMap::new();
+
+    pub(crate) fn get_terminal_mut_by(task_id: TaskID) -> Option<&'static mut Terminal> {
+        unsafe { TERMINALS.get_mut(&task_id) }
+    }
 
     pub fn task_terminal(task_id: u64, _: usize) {
         unsafe { asm!("cli") };
         let task_id = TaskID::new(task_id);
         let current_task_id = task_manager().current_task().id();
-        let mut terminal = Terminal::new();
-        terminal.initialize(layer_manager(), frame_buffer_config().pixel_format);
-        layer_manager().move_(
-            terminal.layer_id,
-            Vector2D::new(100, 200),
-            screen_frame_buffer(),
-        );
-        active_layer().activate(
-            Some(terminal.layer_id),
-            layer_manager(),
-            screen_frame_buffer(),
-        );
-        layer_task_map().insert(terminal.layer_id, task_id);
+        {
+            // Initialize Terminal
+            let mut terminal = Terminal::new(task_id);
+            terminal.initialize(layer_manager(), frame_buffer_config().pixel_format);
+            layer_manager().move_(
+                terminal.layer_id,
+                Vector2D::new(100, 200),
+                screen_frame_buffer(),
+            );
+            active_layer().activate(
+                Some(terminal.layer_id),
+                layer_manager(),
+                screen_frame_buffer(),
+            );
+            layer_task_map().insert(terminal.layer_id, task_id);
+            unsafe { TERMINALS.insert(task_id, terminal) };
+        }
         unsafe { asm!("sti") };
+
+        let terminal = || unsafe { TERMINALS.get_mut(&task_id).expect("no such terminal") };
 
         loop {
             unsafe { asm!("cli") };
@@ -75,10 +92,10 @@ pub mod global {
                     timeout: _,
                     value: _,
                 } => {
-                    let area = terminal.blink_cursor(terminal_window(terminal.layer_id));
+                    let area = terminal().blink_cursor(terminal_window(terminal().layer_id));
 
                     let msg = Message::new(MessageType::Layer(LayerMessage {
-                        layer_id: terminal.layer_id,
+                        layer_id: terminal().layer_id,
                         op: LayerOperation::DrawArea(area),
                         src_task_id: task_id,
                     }));
@@ -93,14 +110,14 @@ pub mod global {
                     keycode,
                     ascii,
                 } => {
-                    let area = terminal.input_key(
+                    let area = terminal().input_key(
                         modifier,
                         keycode,
                         ascii,
-                        terminal_window(terminal.layer_id),
+                        terminal_window(terminal().layer_id),
                     );
                     let msg = Message::new(MessageType::Layer(LayerMessage {
-                        layer_id: terminal.layer_id,
+                        layer_id: terminal().layer_id,
                         op: LayerOperation::DrawArea(area),
                         src_task_id: task_id,
                     }));
@@ -128,7 +145,8 @@ const ROWS: usize = 15;
 const COLUMNS: usize = 60;
 const LINE_MAX: usize = 128;
 
-struct Terminal {
+pub(crate) struct Terminal {
+    task_id: TaskID,
     layer_id: LayerID,
     cursor: Vector2D<i32>,
     is_cursor_visible: bool,
@@ -137,14 +155,19 @@ struct Terminal {
 }
 
 impl Terminal {
-    fn new() -> Terminal {
+    fn new(task_id: TaskID) -> Terminal {
         Self {
+            task_id,
             layer_id: LayerID::MAX,
             cursor: Vector2D::new(0, 0),
             is_cursor_visible: false,
             line_buf: String::with_capacity(LINE_MAX),
             command_history: CommandHistory::new(),
         }
+    }
+
+    pub(crate) fn layer_id(&self) -> LayerID {
+        self.layer_id
     }
 
     fn initialize(&mut self, layout_manager: &mut LayerManager, pixel_format: PixelFormat) {
@@ -438,14 +461,30 @@ impl Terminal {
         )
     }
 
-    fn print(&mut self, s: &str, w: &mut Window) {
+    pub(crate) fn print(&mut self, s: &str, w: &mut Window) {
+        let prev_cursor = self.calc_cursor_pos();
         self.draw_cursor(false, w);
 
         for char in s.chars() {
             self.print_char(char, w);
         }
 
-        self.draw_cursor(false, w);
+        self.draw_cursor(true, w);
+        let current_cursor = self.calc_cursor_pos();
+
+        let draw_pos = Vector2D::new(TITLED_WINDOW_TOP_LEFT_MARGIN.x, prev_cursor.y);
+        let draw_size = Vector2D::new(w.inner_size().x, current_cursor.y - prev_cursor.y + 16);
+        let msg = Message::new(MessageType::Layer(LayerMessage {
+            layer_id: self.layer_id,
+            op: LayerOperation::DrawArea(Rectangle::new(draw_pos, draw_size)),
+            src_task_id: self.task_id,
+        }));
+
+        unsafe { asm!("cli") };
+        task_manager()
+            .send_message(task_manager().main_task().id(), msg)
+            .unwrap();
+        unsafe { asm!("sti") };
     }
 
     fn print_char(&mut self, c: char, w: &mut Window) {
