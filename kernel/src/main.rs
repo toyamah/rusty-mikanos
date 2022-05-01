@@ -8,7 +8,6 @@ extern crate alloc;
 
 use crate::usb::global::xhci_controller;
 use alloc::format;
-use alloc::string::ToString;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
