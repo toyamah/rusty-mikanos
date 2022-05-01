@@ -10,6 +10,7 @@ pub mod global {
     use super::{SegmentDescriptor, KERNEL_CS, KERNEL_DS, KERNEL_SS};
     use crate::asm::global::{load_gdt, load_tr, set_csss, set_ds_all};
     use crate::memory_manager::global::memory_manager;
+    use crate::memory_manager::BYTES_PER_FRAME;
     use crate::segment::K_TSS;
     use crate::x86_descriptor::SegmentDescriptorType;
     use core::mem;
@@ -28,7 +29,7 @@ pub mod global {
             GDT[1].set_code_segment(SegmentDescriptorType::ExecuteRead, 0, 0, 0xfffff);
             GDT[2].set_data_segment(SegmentDescriptorType::ReadWrite, 0, 0, 0xfffff);
             GDT[3].set_code_segment(SegmentDescriptorType::ExecuteRead, 3, 0, 0xfffff);
-            GDT[4].set_code_segment(SegmentDescriptorType::ReadWrite, 3, 0, 0xfffff);
+            GDT[4].set_data_segment(SegmentDescriptorType::ReadWrite, 3, 0, 0xfffff);
             load_gdt(
                 core::mem::size_of_val(&GDT) as u16 - 1,
                 &GDT[0] as *const _ as u64,
@@ -42,13 +43,13 @@ pub mod global {
         let stack0 = memory_manager()
             .allocate(k_rsp0frames)
             .expect("failed to allocate rsp0");
-        let rsp0 = stack0.frame() as u64 + k_rsp0frames as u64 * 4096;
+        let rsp0 = (stack0.id() * BYTES_PER_FRAME + k_rsp0frames * 4096) as u64;
         unsafe {
             TSS[1] = (rsp0 & 0xffffffff) as u32;
             TSS[2] = (rsp0 >> 32) as u32;
         }
 
-        let tss_addr = (&unsafe { TSS }[0]) as *const _ as usize;
+        let tss_addr = unsafe { &TSS[0] as *const _ as usize };
         unsafe {
             let i = (K_TSS >> 3) as usize;
             GDT[i].set_system_segment(
