@@ -13,7 +13,7 @@ extern "C" {
 
 fn info(s: &str) {
     unsafe {
-        SyscallLogString(4, s.as_ptr() as *const c_char);
+        SyscallLogString(3, s.as_ptr() as *const c_char);
     }
 }
 
@@ -32,16 +32,16 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
             let b = stack.pop().unwrap();
             let a = stack.pop().unwrap();
             stack.push(a + b);
-            unsafe { SyscallLogString(4, b"+\0" as *const _ as *const c_char) };
+            info("+\0");
         } else if bytes == b"-" {
             let b = stack.pop().unwrap();
             let a = stack.pop().unwrap();
             stack.push(a - b);
-            unsafe { SyscallLogString(4, b"-\0" as *const _ as *const c_char) };
+            info("-\0");
         } else {
             let a = unsafe { atol(ptr) };
             stack.push(a);
-            unsafe { SyscallLogString(4, b"#\0" as *const _ as *const c_char) };
+            info("#\0");
         }
 
         // if unsafe { strcmp(ptr, plus.as_ptr()) } == 0 {
@@ -58,7 +58,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
         // }
     }
 
-    unsafe { SyscallLogString(4, b"\nhello, this is rpn\n\0" as *const _ as *const c_char) };
+    info("\nhello, this is rpn\n\0");
 
     loop {}
     // stack.pop().unwrap_or(0) as i32
