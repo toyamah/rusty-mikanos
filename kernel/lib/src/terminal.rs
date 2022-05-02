@@ -439,21 +439,6 @@ impl Terminal {
             let _ = unsafe { CString::from_raw(c_arg as *mut c_char) };
         }
 
-        // let f = &entry_addr as *const _ as *const fn(usize, *const *const c_char) -> i32;
-        // let f = unsafe { f.as_ref() }.unwrap();
-        // let cstr_vec = new_cstring_vec(args);
-        //
-        // let c_argv = cstr_vec
-        //     .into_iter()
-        //     .map(|c| c.into_raw())
-        //     .collect::<Vec<_>>();
-        //
-        // let ret = f(c_argv.len(), &c_argv[0] as *const _ as *const *const c_char);
-        // // retake pointers to free memory
-        // for c_arg in c_argv {
-        //     let _ = unsafe { CString::from_raw(c_arg) };
-        // }
-        //
         self.write_fmt(format_args!("app exited. ret = {}\n", ret))
             .unwrap();
 
