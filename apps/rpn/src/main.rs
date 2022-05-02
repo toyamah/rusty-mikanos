@@ -3,6 +3,7 @@
 
 use core::arch::asm;
 use core::panic::PanicInfo;
+use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::rust_official::cstr::CStr;
 use shared_lib::{atol, info, printf};
@@ -49,7 +50,9 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
     }
 
     info("\nhello, this is rpn\n\0");
-    printf(format_args!("{}", stack.pop().unwrap_or(0)));
+    let result = stack.pop().unwrap_or(0);
+    printf(format_args!("{}\n", result));
+    exit(result as i32);
     loop {}
     // stack.pop().unwrap_or(0) as i32
 }
