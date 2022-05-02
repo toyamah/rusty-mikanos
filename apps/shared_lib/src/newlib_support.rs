@@ -2,6 +2,7 @@ use core::ffi::c_void;
 
 extern "C" {
     pub(crate) fn SyscallPutString(fd: i32, buf: usize, count: usize) -> SyscallResult;
+    fn SyscallExit(exit_code: i32);
 }
 
 #[repr(C)]
@@ -27,4 +28,8 @@ pub fn write(fd: i32, buf: *const c_void, count: usize) -> isize {
         unsafe { ERRNO = res.error };
         -1
     }
+}
+
+pub fn exit(status: i32) {
+    unsafe { SyscallExit(status) };
 }

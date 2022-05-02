@@ -65,6 +65,7 @@ pub struct Task {
     id: TaskID,
     stack: Vec<TaskID>,
     context: TaskContext,
+    os_stack_ptr: u64,
     messages: VecDeque<Message>,
     level: PriorityLevel,
     is_running: bool,
@@ -77,10 +78,15 @@ impl Task {
             id,
             stack: vec![],
             context: TaskContext::default_(),
+            os_stack_ptr: 0,
             messages: VecDeque::new(),
             level,
             is_running: false,
         }
+    }
+
+    pub fn os_stack_pointer(&self) -> &u64 {
+        &self.os_stack_ptr
     }
 
     pub fn init_context(

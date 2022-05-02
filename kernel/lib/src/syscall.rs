@@ -4,6 +4,7 @@ use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
 use crate::terminal::global::{get_terminal_mut_by, terminal_window};
+use core::arch::asm;
 use log::{log, Level};
 
 type SyscallFuncType = fn(u64, u64, u64, u64, u64, u64) -> SyscallResult;
@@ -20,6 +21,10 @@ struct SyscallResult {
 }
 
 impl SyscallResult {
+    fn new(value: u64, error: i32) -> Self {
+        Self { value, error }
+    }
+
     fn err(value: u64, error: i32) -> Self {
         Self { value, error }
     }
@@ -68,20 +73,27 @@ fn put_string(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sy
     SyscallResult::err(0, EBADF)
 }
 
-unsafe fn c_str_from<'a>(p: u64) -> &'a CStr {
-    CStr::from_ptr(p as *const u64 as *const c_char)
-}
-
-fn str_from(bytes: &[u8]) -> &str {
-    core::str::from_utf8(bytes).expect("could not convert to str")
+fn exit(status: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
+    unsafe { asm!("cli") };
+    let task = task_manager().current_task();
+    unsafe { asm!("sti") };
+    SyscallResult::new(*task.os_stack_pointer(), status as i32)
 }
 
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 2] = [log_string, put_string];
+static mut syscall_table: [SyscallFuncType; 3] = [log_string, put_string, exit];
 
 pub fn initialize_syscall() {
     write_msr(IA32_EFFR, 0x0501);
     write_msr(IA32_LSTAR, SyscallEntry as usize as u64);
     write_msr(IA32_STAR, 8 << 32 | (16 | 3) << 48);
     write_msr(IA32_FMASK, 0);
+}
+
+unsafe fn c_str_from<'a>(p: u64) -> &'a CStr {
+    CStr::from_ptr(p as *const u64 as *const c_char)
+}
+
+fn str_from(bytes: &[u8]) -> &str {
+    core::str::from_utf8(bytes).expect("could not convert to str")
 }

@@ -420,38 +420,27 @@ impl Terminal {
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_e000);
         PageMapEntry::setup_page_maps(stack_frame_addr, 1, get_cr3(), memory_manager())?;
 
+        unsafe { asm!("cli") };
+        let task = task_manager().current_task();
+        unsafe { asm!("sti") };
+
         let entry_addr = elf_header.e_entry;
-        call_app(
+        let ret = call_app(
             argc as i32,
             argv as *const *const c_char,
-            4 << 3 | 3,
             3 << 3 | 3,
             entry_addr as u64,
             stack_frame_addr.value() + 4096 - 8,
+            task.os_stack_pointer() as *const _,
         );
 
-        // // retake pointers to free memory
+        // retake pointers to free memory
         for c_arg in c_chars_vec {
             let _ = unsafe { CString::from_raw(c_arg as *mut c_char) };
         }
 
-        // let f = &entry_addr as *const _ as *const fn(usize, *const *const c_char) -> i32;
-        // let f = unsafe { f.as_ref() }.unwrap();
-        // let cstr_vec = new_cstring_vec(args);
-        //
-        // let c_argv = cstr_vec
-        //     .into_iter()
-        //     .map(|c| c.into_raw())
-        //     .collect::<Vec<_>>();
-        //
-        // let ret = f(c_argv.len(), &c_argv[0] as *const _ as *const *const c_char);
-        // // retake pointers to free memory
-        // for c_arg in c_argv {
-        //     let _ = unsafe { CString::from_raw(c_arg) };
-        // }
-        //
-        // self.write_fmt(format_args!("app exited. ret = {}\n", ret))
-        //     .unwrap();
+        self.write_fmt(format_args!("app exited. ret = {}\n", ret))
+            .unwrap();
 
         let addr_first = unsafe { elf_header.get_first_load_address() };
         PageMapEntry::clean_page_maps(
