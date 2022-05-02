@@ -4,7 +4,7 @@ use core::ffi::c_void;
 static mut ERRNO: i32 = 0;
 
 pub fn write(fd: i32, buf: *const c_void, count: usize) -> isize {
-    let res = unsafe { SyscallPutString(fd, buf as usize, count) };
+    let res = unsafe { SyscallPutString(fd, buf, count) };
 
     if res.is_ok() {
         res.value as isize
