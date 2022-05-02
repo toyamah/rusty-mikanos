@@ -14,6 +14,6 @@ pub fn write(fd: i32, buf: *const c_void, count: usize) -> isize {
     }
 }
 
-pub fn exit(status: i32) {
-    unsafe { SyscallExit(status) };
+pub fn exit(status: i32) -> ! {
+    unsafe { SyscallExit(status) }
 }

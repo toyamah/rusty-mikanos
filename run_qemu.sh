@@ -41,9 +41,18 @@ build_and_run() {
 build_and_run_official() {
   official_dir="$script_dir"/official
 
-#  cd "$script_dir"
-#  cd apps/rpn
-#  cp rpn $official_dir/apps/rpn
+#  export RUSTFLAGS="-C link-arg=$LDFLAGS"
+#  for cargo_manifest in $(ls apps/*/Cargo.toml)
+#  do
+#    app_dir=$(dirname $cargo_manifest)
+#    if [ $app_dir == "apps/shared_lib" ]; then
+#      continue
+#    fi
+#    app=$(basename $app_dir)
+#    cd "${script_dir}/${app_dir}"
+#    cargo build --release
+#    cp ${app} $official_dir/apps/${app}/
+#  done
 
   cd "$official_dir"
   ./build.sh run
