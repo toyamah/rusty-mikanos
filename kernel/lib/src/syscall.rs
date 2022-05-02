@@ -1,7 +1,9 @@
 use crate::asm::global::{write_msr, SyscallEntry};
+use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
-use crate::graphics::Vector2D;
+use crate::graphics::{PixelColor, Vector2D};
 use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
+use crate::layer::LayerID;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
@@ -106,8 +108,44 @@ fn open_window(w: u64, h: u64, x: u64, y: u64, title: u64, _a6: u64) -> SyscallR
     SyscallResult::ok(layer_id.value() as u64)
 }
 
+fn win_write_string(
+    layer_id: u64,
+    x: u64,
+    y: u64,
+    color: u64,
+    text: u64,
+    _a6: u64,
+) -> SyscallResult {
+    let layer_id = LayerID::new(layer_id as u32);
+    let color = PixelColor::from(color as u32);
+    let c_str = unsafe { c_str_from(text) };
+    let str = str_from(c_str.to_bytes());
+
+    unsafe { asm!("cli") };
+    let layer = layer_manager().get_layer_mut(layer_id);
+    unsafe { asm!("sti") };
+
+    match layer {
+        None => return SyscallResult::err(0, EBADF),
+        Some(l) => write_string(
+            &mut l.get_window_mut().normal_window_writer(),
+            x as i32,
+            y as i32,
+            str,
+            &color,
+        ),
+    }
+
+    unsafe { asm!("cli") };
+    layer_manager().draw_layer_of(layer_id, screen_frame_buffer());
+    unsafe { asm!("sti") };
+
+    SyscallResult::ok(0)
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 4] = [log_string, put_string, exit, open_window];
+static mut syscall_table: [SyscallFuncType; 5] =
+    [log_string, put_string, exit, open_window, win_write_string];
 
 pub fn initialize_syscall() {
     write_msr(IA32_EFFR, 0x0501);

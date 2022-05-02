@@ -361,6 +361,10 @@ pub struct LayerID(u32);
 impl LayerID {
     pub const MAX: LayerID = LayerID(u32::MAX);
 
+    pub fn new(v: u32) -> Self {
+        Self(v)
+    }
+
     pub fn as_usize(&self) -> usize {
         self.0 as usize
     }
