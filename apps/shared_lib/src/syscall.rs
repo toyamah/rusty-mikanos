@@ -14,7 +14,7 @@ extern "C" {
     ) -> SyscallResult;
 
     pub(crate) fn SyscallWinWriteString(
-        layer_id: u64,
+        layer_id: u32,
         x: i32,
         y: i32,
         color: u32,
