@@ -1,3 +1,4 @@
+use crate::c_char;
 use core::ffi::c_void;
 use core::fmt;
 use core::fmt::Write;
@@ -16,8 +17,17 @@ impl ByteBuffer {
         }
     }
 
-    pub(crate) fn as_ptr(&self) -> *const c_void {
+    pub(crate) fn as_ptr_void(&self) -> *const c_void {
         &self.buf as *const _ as *const c_void
+    }
+
+    pub(crate) fn as_ptr_c_char(&self) -> *const c_char {
+        &self.buf as *const _ as *const c_char
+    }
+
+    pub(crate) fn write_str_with_nul(&mut self, s: &str) {
+        self.write_str(s).unwrap();
+        self.write_str("\0").unwrap();
     }
 
     pub(crate) fn len(&self) -> usize {

@@ -4,7 +4,7 @@
 use crate::byte_buffer::ByteBuffer;
 use crate::newlib_support::write;
 use crate::rust_official::cchar::c_char;
-use crate::syscall::SyscallLogString;
+use crate::syscall::{SyscallLogString, SyscallOpenWindow};
 use core::ffi::c_void;
 use core::fmt;
 
@@ -26,13 +26,19 @@ pub fn print(s: &str) {
 pub fn printf(args: fmt::Arguments) {
     let mut buf = ByteBuffer::new();
     fmt::write(&mut buf, args).expect("failed to write ByteBuffer");
-    write(1, buf.as_ptr(), buf.len());
+    write(1, buf.as_ptr_void(), buf.len());
 }
 
 pub fn info(s: &str) {
     unsafe {
         SyscallLogString(3, s.as_ptr() as *const c_char);
     }
+}
+
+pub fn open_window(w: i32, h: i32, x: i32, y: i32, title: &str) {
+    let mut buf = ByteBuffer::new();
+    buf.write_str_with_nul(title);
+    unsafe { SyscallOpenWindow(w, h, x, y, buf.as_ptr_c_char()) };
 }
 
 #[macro_export]

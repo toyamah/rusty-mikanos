@@ -1,9 +1,13 @@
 use crate::asm::global::{write_msr, SyscallEntry};
+use crate::graphics::global::frame_buffer_config;
+use crate::graphics::Vector2D;
+use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
 use crate::terminal::global::{get_terminal_mut_by, terminal_window};
+use crate::Window;
 use core::arch::asm;
 use log::{log, Level};
 
@@ -80,8 +84,30 @@ fn exit(status: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> Syscal
     SyscallResult::new(*task.os_stack_pointer(), status as i32)
 }
 
+fn open_window(w: u64, h: u64, x: u64, y: u64, title: u64, _a6: u64) -> SyscallResult {
+    let c_str = unsafe { c_str_from(title) };
+    let str = str_from(c_str.to_bytes());
+    let window = Window::new_with_title(
+        w as usize,
+        h as usize,
+        frame_buffer_config().pixel_format,
+        str,
+    );
+
+    unsafe { asm!("cli") };
+    let layer_id = layer_manager()
+        .new_layer(window)
+        .set_draggable(true)
+        .move_(Vector2D::new(x as i32, y as i32))
+        .id();
+    active_layer().activate(Some(layer_id), layer_manager(), screen_frame_buffer());
+    unsafe { asm!("sti") };
+
+    SyscallResult::ok(layer_id.value() as u64)
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 3] = [log_string, put_string, exit];
+static mut syscall_table: [SyscallFuncType; 4] = [log_string, put_string, exit, open_window];
 
 pub fn initialize_syscall() {
     write_msr(IA32_EFFR, 0x0501);

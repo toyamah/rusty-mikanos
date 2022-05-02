@@ -4,6 +4,14 @@ extern "C" {
     pub(crate) fn SyscallPutString(fd: i32, buf: usize, count: usize) -> SyscallResult;
     pub(crate) fn SyscallExit(exit_code: i32);
     pub(crate) fn SyscallLogString(level: i64, s: *const c_char) -> SyscallResult;
+
+    pub(crate) fn SyscallOpenWindow(
+        w: i32,
+        h: i32,
+        x: i32,
+        y: i32,
+        title: *const c_char,
+    ) -> SyscallResult;
 }
 
 #[repr(C)]
