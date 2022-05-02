@@ -1,12 +1,13 @@
 #![no_std]
 #![no_main]
+#![feature(format_args_nl)]
 
 use core::arch::asm;
 use core::panic::PanicInfo;
 use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::rust_official::cstr::CStr;
-use shared_lib::{atol, printf};
+use shared_lib::{atol, println};
 
 #[no_mangle]
 pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
@@ -51,7 +52,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
 
     // info("\nhello, this is rpn\n\0");
     let result = stack.pop().unwrap_or(0);
-    printf(format_args!("{}\n", result));
+    println!("{}", result);
     exit(result as i32);
 }
 

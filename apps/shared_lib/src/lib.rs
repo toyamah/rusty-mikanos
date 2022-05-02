@@ -1,3 +1,4 @@
+#![feature(format_args_nl)]
 #![no_std]
 
 use crate::byte_buffer::ByteBuffer;
@@ -32,4 +33,12 @@ pub fn info(s: &str) {
     unsafe {
         SyscallLogString(3, s.as_ptr() as *const c_char);
     }
+}
+
+#[macro_export]
+macro_rules! println {
+    () => ($crate::print("\n"));
+    ($($arg:tt)*) => ({
+        $crate::printf(format_args_nl!($($arg)*));
+    })
 }
