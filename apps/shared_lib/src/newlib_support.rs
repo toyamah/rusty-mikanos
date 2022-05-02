@@ -1,4 +1,4 @@
-use crate::syscall::{SyscallExit, SyscallPutString};
+use crate::syscall::SyscallPutString;
 use core::ffi::c_void;
 
 static mut ERRNO: i32 = 0;
