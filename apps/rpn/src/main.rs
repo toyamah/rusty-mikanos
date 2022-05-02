@@ -4,10 +4,11 @@
 
 use core::arch::asm;
 use core::panic::PanicInfo;
+use shared_lib::libc::atol;
 use shared_lib::newlib_support::exit;
+use shared_lib::println;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::rust_official::cstr::CStr;
-use shared_lib::{atol, println};
 
 #[no_mangle]
 pub extern "C" fn main(argc: i32, argv: *const *const c_char) {

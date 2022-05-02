@@ -1,7 +1,8 @@
 use crate::c_char;
+use core::ffi::c_void;
 
 extern "C" {
-    pub(crate) fn SyscallPutString(fd: i32, buf: usize, count: usize) -> SyscallResult;
+    pub(crate) fn SyscallPutString(fd: i32, buf: *const c_void, count: usize) -> SyscallResult;
     pub(crate) fn SyscallExit(exit_code: i32) -> !;
     pub(crate) fn SyscallLogString(level: i64, s: *const c_char) -> SyscallResult;
 

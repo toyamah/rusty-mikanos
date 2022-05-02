@@ -2,8 +2,8 @@
 // https://github.com/rust-lang/rust/blob/master/library/std/src/ffi/c_str.rs
 
 // Note: I modified these lines.
+use crate::libc::strlen;
 use crate::rust_official::cchar::c_char;
-use crate::strlen;
 use core::ptr::slice_from_raw_parts;
 
 /// Representation of a borrowed C string.
