@@ -6,10 +6,10 @@ use core::panic::PanicInfo;
 use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::rust_official::cstr::CStr;
-use shared_lib::{atol, info, printf};
+use shared_lib::{atol, printf};
 
 #[no_mangle]
-pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
+pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
     let mut stack = Stack::new();
     // let plus = unsafe { CStr::from_bytes_with_nul_unchecked(b"+") };
     // let minus = unsafe { CStr::from_bytes_with_nul_unchecked(b"-") };
@@ -23,16 +23,16 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
             let b = stack.pop().unwrap();
             let a = stack.pop().unwrap();
             stack.push(a + b);
-            info("+\0");
+            // info("+\0");
         } else if bytes == b"-" {
             let b = stack.pop().unwrap();
             let a = stack.pop().unwrap();
             stack.push(a - b);
-            info("-\0");
+            // info("-\0");
         } else {
             let a = unsafe { atol(ptr) };
             stack.push(a);
-            info("#\0");
+            // info("#\0");
         }
 
         // if unsafe { strcmp(ptr, plus.as_ptr()) } == 0 {
@@ -49,12 +49,10 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) -> i32 {
         // }
     }
 
-    info("\nhello, this is rpn\n\0");
+    // info("\nhello, this is rpn\n\0");
     let result = stack.pop().unwrap_or(0);
     printf(format_args!("{}\n", result));
     exit(result as i32);
-    loop {}
-    // stack.pop().unwrap_or(0) as i32
 }
 
 struct Stack {

@@ -16,7 +16,14 @@ pub mod global {
         fn GetCR3() -> u64;
         fn SwitchContext(next_ctx: *const c_void, current_ctx: *const c_void);
         fn RestoreContext(task_context: *const c_void);
-        fn CallApp(argc: i32, argv: *const *const c_char, cs: u16, ss: u16, rip: u64, rsp: u64);
+        pub fn CallApp(
+            argc: i32,
+            argv: *const *const c_char,
+            ss: u16,
+            rip: u64,
+            rsp: u64,
+            os_stack_ptr: *const u64,
+        ) -> i32;
         pub fn IntHandlerLAPICTimer();
         fn WriteMSR(msr: u32, value: u64);
         pub fn SyscallEntry();
@@ -77,8 +84,15 @@ pub mod global {
 
     /// # Safety
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn call_app(argc: i32, argv: *const *const c_char, cs: u16, ss: u16, rip: u64, rsp: u64) {
-        unsafe { CallApp(argc, argv, cs, ss, rip, rsp) }
+    pub fn call_app(
+        argc: i32,
+        argv: *const *const c_char,
+        ss: u16,
+        rip: u64,
+        rsp: u64,
+        os_stack_ptr: *const u64,
+    ) -> i32 {
+        unsafe { CallApp(argc, argv, ss, rip, rsp, os_stack_ptr) }
     }
 
     pub fn write_msr(msr: u32, value: u64) {
