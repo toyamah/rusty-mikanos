@@ -1,6 +1,6 @@
 use crate::font;
 use core::cmp::{max, min};
-use core::fmt::Debug;
+use core::fmt::{Debug, Display, Formatter};
 use core::ops::{Add, AddAssign, BitAnd, Sub};
 use shared::{FrameBufferConfig, PixelFormat};
 
@@ -135,6 +135,15 @@ where
     }
 }
 
+impl<T> Display for Vector2D<T>
+where
+    T: Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{{{},{}}}", self.x, self.y)
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Rectangle<T> {
     pub pos: Vector2D<T>,
@@ -181,6 +190,15 @@ where
         let new_pos = lhs.pos.element_max(rhs.pos);
         let new_size = lhs_end.element_min(rhs_end) - new_pos;
         Rectangle::new(new_pos, new_size)
+    }
+}
+
+impl<T> Display for Rectangle<T>
+where
+    T: Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}-{}", self.pos, self.size)
     }
 }
 
