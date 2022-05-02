@@ -20,7 +20,7 @@ extern "C" {
 }
 
 #[derive(Copy, Clone)]
-pub struct LayerId(u32);
+pub struct LayerID(u32);
 
 pub fn print(s: &str) {
     write(1, s.as_ptr() as *const c_void, s.as_bytes().len());
@@ -38,14 +38,14 @@ pub fn info(s: &str) {
     }
 }
 
-pub fn open_window(w: i32, h: i32, x: i32, y: i32, title: &str) -> Result<LayerId, SyscallError> {
+pub fn open_window(w: i32, h: i32, x: i32, y: i32, title: &str) -> Result<LayerID, SyscallError> {
     let mut buf = ByteBuffer::new();
     buf.write_str_with_nul(title);
     let result = unsafe { SyscallOpenWindow(w, h, x, y, buf.as_ptr_c_char()) };
-    result.to_result().map(|v| LayerId(v as u32))
+    result.to_result().map(|v| LayerID(v as u32))
 }
 
-pub fn write_string_to_window(layer_id: LayerId, x: i32, y: i32, color: u32, text: &str) {
+pub fn write_string_to_window(layer_id: LayerID, x: i32, y: i32, color: u32, text: &str) {
     let mut buf = ByteBuffer::new();
     buf.write_str_with_nul(text);
     unsafe {
