@@ -4,14 +4,16 @@
 use core::arch::asm;
 use core::panic::PanicInfo;
 use shared_lib::atol;
+use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
 
 const TABLE: [u8; 3 * 1024 * 1024] = [0; 3 * 1024 * 1024];
 
 #[no_mangle]
-pub extern "C" fn main(_argc: i32, argv: *const *const c_char) -> i32 {
+pub extern "C" fn main(_argc: i32, argv: *const *const c_char) {
     let arg1 = unsafe { *argv.add(1 as usize) };
-    (unsafe { atol(arg1) }) as i32
+    let result = unsafe { atol(arg1) };
+    exit(result as i32);
 }
 
 #[panic_handler]
