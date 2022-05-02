@@ -364,6 +364,10 @@ impl LayerID {
     pub fn as_usize(&self) -> usize {
         self.0 as usize
     }
+
+    pub fn value(&self) -> u32 {
+        self.0
+    }
 }
 
 impl Display for LayerID {
