@@ -1,21 +1,5 @@
+use crate::syscall::{SyscallExit, SyscallPutString};
 use core::ffi::c_void;
-
-extern "C" {
-    pub(crate) fn SyscallPutString(fd: i32, buf: usize, count: usize) -> SyscallResult;
-    fn SyscallExit(exit_code: i32);
-}
-
-#[repr(C)]
-pub(crate) struct SyscallResult {
-    value: u64,
-    error: i32,
-}
-
-impl SyscallResult {
-    fn is_ok(&self) -> bool {
-        self.error == 0
-    }
-}
 
 static mut ERRNO: i32 = 0;
 
