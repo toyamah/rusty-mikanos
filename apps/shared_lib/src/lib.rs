@@ -9,6 +9,7 @@ use core::ffi::c_void;
 use core::fmt;
 
 mod byte_buffer;
+mod libc;
 pub mod newlib_support;
 pub mod rust_official;
 mod syscall;
