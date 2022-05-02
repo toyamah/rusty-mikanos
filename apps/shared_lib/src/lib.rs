@@ -7,7 +7,6 @@ use crate::rust_official::cchar::c_char;
 use crate::syscall::{SyscallLogString, SyscallOpenWindow};
 use core::ffi::c_void;
 use core::fmt;
-use core::fmt::Write;
 
 mod byte_buffer;
 pub mod newlib_support;

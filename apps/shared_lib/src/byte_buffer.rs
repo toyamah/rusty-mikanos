@@ -17,10 +17,6 @@ impl ByteBuffer {
         }
     }
 
-    pub(crate) fn as_ptr(&self) -> *const u8 {
-        &self.buf as *const _
-    }
-
     pub(crate) fn as_ptr_void(&self) -> *const c_void {
         &self.buf as *const _ as *const c_void
     }
