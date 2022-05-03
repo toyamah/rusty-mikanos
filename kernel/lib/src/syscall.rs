@@ -159,8 +159,19 @@ fn get_current_tick(_a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) 
     SyscallResult::new(timer_manager().current_tick(), TIMER_FREQ as i32)
 }
 
+fn win_redraw(
+    layer_id_flags: u64,
+    _a2: u64,
+    _a3: u64,
+    _a4: u64,
+    _a5: u64,
+    _a6: u64,
+) -> SyscallResult {
+    do_win_func(layer_id_flags, |_| SyscallResult::ok(0))
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 7] = [
+static mut syscall_table: [SyscallFuncType; 8] = [
     log_string,
     put_string,
     exit,
@@ -168,6 +179,7 @@ static mut syscall_table: [SyscallFuncType; 7] = [
     win_write_string,
     win_fill_rectangle,
     get_current_tick,
+    win_redraw,
 ];
 
 pub fn initialize_syscall() {

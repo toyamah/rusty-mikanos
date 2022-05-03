@@ -1,11 +1,11 @@
-use crate::syscall::SyscallWinFillRectangle;
+use crate::syscall::{SyscallWinFillRectangle, SyscallWinRedraw};
 use crate::{ByteBuffer, SyscallError, SyscallOpenWindow, SyscallWinWriteString};
 
 #[derive(Copy, Clone)]
 struct LayerID(u32);
 
 const TITLE_OFFSET: (i32, i32) = (8, 28);
-pub const WINDOW_NO_REDRAW: u64 = 0x00000001 << 32;
+pub const FLAG_NO_DRAW: u64 = 0x00000001 << 32;
 
 pub struct Window {
     layer_id: LayerID,
@@ -43,6 +43,12 @@ impl Window {
     pub fn fill_rectangle(&mut self, xy: (i32, i32), wh: (i32, i32), color: u32, flag: u64) {
         unsafe {
             SyscallWinFillRectangle(self.layer_id_flags(flag), xy.0, xy.1, wh.0, wh.1, color);
+        }
+    }
+
+    pub fn draw(&mut self) {
+        unsafe {
+            SyscallWinRedraw(self.layer_id_flags(0));
         }
     }
 

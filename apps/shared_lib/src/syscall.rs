@@ -32,6 +32,8 @@ extern "C" {
     ) -> SyscallResult;
 
     pub(crate) fn SyscallGetCurrentTick() -> SyscallResult;
+
+    pub(crate) fn SyscallWinRedraw(layer_id_flags: u64) -> SyscallResult;
 }
 
 #[repr(C)]
