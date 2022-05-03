@@ -15,7 +15,7 @@ extern "C" {
     ) -> SyscallResult;
 
     pub(crate) fn SyscallWinWriteString(
-        layer_id: u32,
+        layer_id_flags: u64,
         x: i32,
         y: i32,
         color: u32,
@@ -23,7 +23,7 @@ extern "C" {
     ) -> SyscallResult;
 
     pub(crate) fn SyscallWinFillRectangle(
-        layer_id: u32,
+        layer_id_flags: u64,
         x: i32,
         y: i32,
         w: i32,

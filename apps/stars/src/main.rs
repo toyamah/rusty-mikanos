@@ -24,7 +24,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
         Err(e) => exit(e.error_number()),
     };
 
-    window.fill_rectangle((4, 24), (WIDTH, HEIGHT), 0x000000);
+    window.fill_rectangle((4, 24), (WIDTH, HEIGHT), 0x000000, 0);
 
     let num_stars = if args.len() <= 1 {
         100
@@ -38,7 +38,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
     for _ in 0..num_stars {
         let x: i32 = rng.gen_range(0..WIDTH - 2);
         let y: i32 = rng.gen_range(0..HEIGHT - 2);
-        window.fill_rectangle((4 + x, 24 + y), (2, 2), 0xfff100);
+        window.fill_rectangle((4 + x, 24 + y), (2, 2), 0xfff100, 0);
     }
 
     println!(
