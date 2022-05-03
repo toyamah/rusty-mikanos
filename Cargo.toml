@@ -7,5 +7,6 @@ members = [
     "apps/rpn",
     "apps/large",
     "apps/winhello",
-    "apps/stars"
+    "apps/stars",
+    "apps/lines"
 ]
