@@ -11,6 +11,7 @@ use shared_lib::args::Args;
 use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::window::Window;
+use shared_lib::{current_tick_millis, println};
 
 const WIDTH: i32 = 100;
 const HEIGHT: i32 = 100;
@@ -31,12 +32,20 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
         usize::from_str(args.get(1)).unwrap()
     };
 
+    let tick_start = current_tick_millis();
+
     let mut rng = SmallRng::from_seed([0; 32]);
     for _ in 0..num_stars {
         let x: i32 = rng.gen_range(0..WIDTH - 2);
         let y: i32 = rng.gen_range(0..HEIGHT - 2);
         window.fill_rectangle((4 + x, 24 + y), (2, 2), 0xfff100);
     }
+
+    println!(
+        "{} stars in {} ms.",
+        num_stars,
+        current_tick_millis() - tick_start
+    );
 
     exit(0)
 }

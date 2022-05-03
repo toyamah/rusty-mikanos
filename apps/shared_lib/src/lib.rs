@@ -4,7 +4,9 @@
 use crate::byte_buffer::ByteBuffer;
 use crate::newlib_support::write;
 use crate::rust_official::cchar::c_char;
-use crate::syscall::{SyscallError, SyscallLogString, SyscallOpenWindow, SyscallWinWriteString};
+use crate::syscall::{
+    SyscallError, SyscallGetCurrentTick, SyscallLogString, SyscallOpenWindow, SyscallWinWriteString,
+};
 use core::ffi::c_void;
 use core::fmt;
 
@@ -30,6 +32,12 @@ pub fn info(s: &str) {
     unsafe {
         SyscallLogString(3, s.as_ptr() as *const c_char);
     }
+}
+
+pub fn current_tick_millis() -> u64 {
+    let result = unsafe { SyscallGetCurrentTick() };
+    let timer_freq = result.error;
+    result.value * 1000 / timer_freq as u64
 }
 
 #[macro_export]

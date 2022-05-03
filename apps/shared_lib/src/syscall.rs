@@ -30,6 +30,8 @@ extern "C" {
         h: i32,
         color: u32,
     ) -> SyscallResult;
+
+    pub(crate) fn SyscallGetCurrentTick() -> SyscallResult;
 }
 
 #[repr(C)]
