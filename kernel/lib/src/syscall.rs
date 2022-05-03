@@ -38,6 +38,10 @@ impl SyscallResult {
     fn ok(value: u64) -> Self {
         Self { value, error: 0 }
     }
+
+    fn is_err(&self) -> bool {
+        self.error != 0
+    }
 }
 
 fn log_string(log_level: u64, s: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
@@ -121,26 +125,16 @@ fn win_write_string(
     let c_str = unsafe { c_str_from(text) };
     let str = str_from(c_str.to_bytes());
 
-    unsafe { asm!("cli") };
-    let layer = layer_manager().get_layer_mut(layer_id);
-    unsafe { asm!("sti") };
-
-    match layer {
-        None => return SyscallResult::err(0, EBADF),
-        Some(l) => write_string(
-            &mut l.get_window_mut().normal_window_writer(),
+    do_win_func(layer_id, |window| {
+        write_string(
+            &mut window.normal_window_writer(),
             x as i32,
             y as i32,
             str,
             &color,
-        ),
-    }
-
-    unsafe { asm!("cli") };
-    layer_manager().draw_layer_of(layer_id, screen_frame_buffer());
-    unsafe { asm!("sti") };
-
-    SyscallResult::ok(0)
+        );
+        SyscallResult::ok(0)
+    })
 }
 
 #[no_mangle]
@@ -160,4 +154,27 @@ unsafe fn c_str_from<'a>(p: u64) -> &'a CStr {
 
 fn str_from(bytes: &[u8]) -> &str {
     core::str::from_utf8(bytes).expect("could not convert to str")
+}
+
+fn do_win_func<F>(layer_id: LayerID, f: F) -> SyscallResult
+where
+    F: FnOnce(&mut Window) -> SyscallResult,
+{
+    unsafe { asm!("cli") };
+    let layer = layer_manager().get_layer_mut(layer_id);
+    unsafe { asm!("sti") };
+
+    let res = match layer {
+        None => SyscallResult::err(0, EBADF),
+        Some(l) => f(l.get_window_mut()),
+    };
+    if res.is_err() {
+        return res;
+    }
+
+    unsafe { asm!("cli") };
+    layer_manager().draw_layer_of(layer_id, screen_frame_buffer());
+    unsafe { asm!("sti") };
+
+    res
 }
