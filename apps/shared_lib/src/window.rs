@@ -40,9 +40,9 @@ impl Window {
         }
     }
 
-    pub fn fill_rectangle(&mut self, xy: (i32, i32), wh: (i32, i32), color: u32, flag: u64) {
+    pub fn fill_rectangle(&mut self, xy: (i32, i32), wh: (i32, i32), color: u32, flags: u64) {
         unsafe {
-            SyscallWinFillRectangle(self.layer_id_flags(flag), xy.0, xy.1, wh.0, wh.1, color);
+            SyscallWinFillRectangle(self.layer_id_flags(flags), xy.0, xy.1, wh.0, wh.1, color);
         }
     }
 
