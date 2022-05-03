@@ -1,7 +1,7 @@
 use crate::asm::global::{write_msr, SyscallEntry};
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
-use crate::graphics::{PixelColor, Vector2D};
+use crate::graphics::{fill_rectangle, PixelColor, Vector2D};
 use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
 use crate::layer::LayerID;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
@@ -137,9 +137,26 @@ fn win_write_string(
     })
 }
 
+fn win_fill_rectangle(layer_id: u64, x: u64, y: u64, w: u64, h: u64, color: u64) -> SyscallResult {
+    let layer_id = LayerID::new(layer_id as u32);
+    let color = PixelColor::from(color as u32);
+    let pos = Vector2D::new(x as i32, y as i32);
+    let size = Vector2D::new(w as i32, h as i32);
+    do_win_func(layer_id, |window| {
+        fill_rectangle(&mut window.normal_window_writer(), &pos, &size, &color);
+        SyscallResult::ok(0)
+    })
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 5] =
-    [log_string, put_string, exit, open_window, win_write_string];
+static mut syscall_table: [SyscallFuncType; 6] = [
+    log_string,
+    put_string,
+    exit,
+    open_window,
+    win_write_string,
+    win_fill_rectangle,
+];
 
 pub fn initialize_syscall() {
     write_msr(IA32_EFFR, 0x0501);
