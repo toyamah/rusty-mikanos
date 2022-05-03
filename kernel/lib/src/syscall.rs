@@ -9,6 +9,8 @@ use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
 use crate::terminal::global::{get_terminal_mut_by, terminal_window};
+use crate::timer::global::timer_manager;
+use crate::timer::TIMER_FREQ;
 use crate::Window;
 use core::arch::asm;
 use log::{log, Level};
@@ -148,14 +150,19 @@ fn win_fill_rectangle(layer_id: u64, x: u64, y: u64, w: u64, h: u64, color: u64)
     })
 }
 
+fn get_current_tick(_a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
+    SyscallResult::new(timer_manager().current_tick(), TIMER_FREQ as i32)
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 6] = [
+static mut syscall_table: [SyscallFuncType; 7] = [
     log_string,
     put_string,
     exit,
     open_window,
     win_write_string,
     win_fill_rectangle,
+    get_current_tick,
 ];
 
 pub fn initialize_syscall() {
