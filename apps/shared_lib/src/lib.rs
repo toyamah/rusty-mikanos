@@ -8,6 +8,7 @@ use crate::syscall::{SyscallError, SyscallLogString, SyscallOpenWindow, SyscallW
 use core::ffi::c_void;
 use core::fmt;
 
+pub mod args;
 mod byte_buffer;
 pub mod libc;
 pub mod newlib_support;
