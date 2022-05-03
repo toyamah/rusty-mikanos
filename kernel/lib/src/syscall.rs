@@ -1,7 +1,7 @@
 use crate::asm::global::{write_msr, SyscallEntry};
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
-use crate::graphics::{PixelColor, Vector2D};
+use crate::graphics::{fill_rectangle, PixelColor, Vector2D};
 use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
 use crate::layer::LayerID;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
@@ -37,6 +37,10 @@ impl SyscallResult {
 
     fn ok(value: u64) -> Self {
         Self { value, error: 0 }
+    }
+
+    fn is_err(&self) -> bool {
+        self.error != 0
     }
 }
 
@@ -121,31 +125,38 @@ fn win_write_string(
     let c_str = unsafe { c_str_from(text) };
     let str = str_from(c_str.to_bytes());
 
-    unsafe { asm!("cli") };
-    let layer = layer_manager().get_layer_mut(layer_id);
-    unsafe { asm!("sti") };
-
-    match layer {
-        None => return SyscallResult::err(0, EBADF),
-        Some(l) => write_string(
-            &mut l.get_window_mut().normal_window_writer(),
+    do_win_func(layer_id, |window| {
+        write_string(
+            &mut window.normal_window_writer(),
             x as i32,
             y as i32,
             str,
             &color,
-        ),
-    }
+        );
+        SyscallResult::ok(0)
+    })
+}
 
-    unsafe { asm!("cli") };
-    layer_manager().draw_layer_of(layer_id, screen_frame_buffer());
-    unsafe { asm!("sti") };
-
-    SyscallResult::ok(0)
+fn win_fill_rectangle(layer_id: u64, x: u64, y: u64, w: u64, h: u64, color: u64) -> SyscallResult {
+    let layer_id = LayerID::new(layer_id as u32);
+    let color = PixelColor::from(color as u32);
+    let pos = Vector2D::new(x as i32, y as i32);
+    let size = Vector2D::new(w as i32, h as i32);
+    do_win_func(layer_id, |window| {
+        fill_rectangle(&mut window.normal_window_writer(), &pos, &size, &color);
+        SyscallResult::ok(0)
+    })
 }
 
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 5] =
-    [log_string, put_string, exit, open_window, win_write_string];
+static mut syscall_table: [SyscallFuncType; 6] = [
+    log_string,
+    put_string,
+    exit,
+    open_window,
+    win_write_string,
+    win_fill_rectangle,
+];
 
 pub fn initialize_syscall() {
     write_msr(IA32_EFFR, 0x0501);
@@ -160,4 +171,27 @@ unsafe fn c_str_from<'a>(p: u64) -> &'a CStr {
 
 fn str_from(bytes: &[u8]) -> &str {
     core::str::from_utf8(bytes).expect("could not convert to str")
+}
+
+fn do_win_func<F>(layer_id: LayerID, f: F) -> SyscallResult
+where
+    F: FnOnce(&mut Window) -> SyscallResult,
+{
+    unsafe { asm!("cli") };
+    let layer = layer_manager().get_layer_mut(layer_id);
+    unsafe { asm!("sti") };
+
+    let res = match layer {
+        None => SyscallResult::err(0, EBADF),
+        Some(l) => f(l.get_window_mut()),
+    };
+    if res.is_err() {
+        return res;
+    }
+
+    unsafe { asm!("cli") };
+    layer_manager().draw_layer_of(layer_id, screen_frame_buffer());
+    unsafe { asm!("sti") };
+
+    res
 }

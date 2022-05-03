@@ -21,6 +21,15 @@ extern "C" {
         color: u32,
         s: *const c_char,
     ) -> SyscallResult;
+
+    pub(crate) fn SyscallWinFillRectangle(
+        layer_id: u32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        color: u32,
+    ) -> SyscallResult;
 }
 
 #[repr(C)]
