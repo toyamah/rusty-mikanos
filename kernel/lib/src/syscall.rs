@@ -115,19 +115,18 @@ fn open_window(w: u64, h: u64, x: u64, y: u64, title: u64, _a6: u64) -> SyscallR
 }
 
 fn win_write_string(
-    layer_id: u64,
+    layer_id_flags: u64,
     x: u64,
     y: u64,
     color: u64,
     text: u64,
     _a6: u64,
 ) -> SyscallResult {
-    let layer_id = LayerID::new(layer_id as u32);
     let color = PixelColor::from(color as u32);
     let c_str = unsafe { c_str_from(text) };
     let str = str_from(c_str.to_bytes());
 
-    do_win_func(layer_id, |window| {
+    do_win_func(layer_id_flags, |window| {
         write_string(
             &mut window.normal_window_writer(),
             x as i32,
@@ -139,12 +138,18 @@ fn win_write_string(
     })
 }
 
-fn win_fill_rectangle(layer_id: u64, x: u64, y: u64, w: u64, h: u64, color: u64) -> SyscallResult {
-    let layer_id = LayerID::new(layer_id as u32);
+fn win_fill_rectangle(
+    layer_id_flags: u64,
+    x: u64,
+    y: u64,
+    w: u64,
+    h: u64,
+    color: u64,
+) -> SyscallResult {
     let color = PixelColor::from(color as u32);
     let pos = Vector2D::new(x as i32, y as i32);
     let size = Vector2D::new(w as i32, h as i32);
-    do_win_func(layer_id, |window| {
+    do_win_func(layer_id_flags, |window| {
         fill_rectangle(&mut window.normal_window_writer(), &pos, &size, &color);
         SyscallResult::ok(0)
     })
@@ -154,8 +159,19 @@ fn get_current_tick(_a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) 
     SyscallResult::new(timer_manager().current_tick(), TIMER_FREQ as i32)
 }
 
+fn win_redraw(
+    layer_id_flags: u64,
+    _a2: u64,
+    _a3: u64,
+    _a4: u64,
+    _a5: u64,
+    _a6: u64,
+) -> SyscallResult {
+    do_win_func(layer_id_flags, |_| SyscallResult::ok(0))
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 7] = [
+static mut syscall_table: [SyscallFuncType; 8] = [
     log_string,
     put_string,
     exit,
@@ -163,6 +179,7 @@ static mut syscall_table: [SyscallFuncType; 7] = [
     win_write_string,
     win_fill_rectangle,
     get_current_tick,
+    win_redraw,
 ];
 
 pub fn initialize_syscall() {
@@ -180,10 +197,13 @@ fn str_from(bytes: &[u8]) -> &str {
     core::str::from_utf8(bytes).expect("could not convert to str")
 }
 
-fn do_win_func<F>(layer_id: LayerID, f: F) -> SyscallResult
+fn do_win_func<F>(layer_id_flags: u64, f: F) -> SyscallResult
 where
     F: FnOnce(&mut Window) -> SyscallResult,
 {
+    let layer_flags = layer_id_flags >> 32;
+    let layer_id = LayerID::new((layer_id_flags & 0xffffffff) as u32);
+
     unsafe { asm!("cli") };
     let layer = layer_manager().get_layer_mut(layer_id);
     unsafe { asm!("sti") };
@@ -196,9 +216,11 @@ where
         return res;
     }
 
-    unsafe { asm!("cli") };
-    layer_manager().draw_layer_of(layer_id, screen_frame_buffer());
-    unsafe { asm!("sti") };
+    if (layer_flags & 1) == 0 {
+        unsafe { asm!("cli") };
+        layer_manager().draw_layer_of(layer_id, screen_frame_buffer());
+        unsafe { asm!("sti") };
+    }
 
     res
 }

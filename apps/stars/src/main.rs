@@ -10,7 +10,7 @@ use rand::{Rng, SeedableRng};
 use shared_lib::args::Args;
 use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
-use shared_lib::window::Window;
+use shared_lib::window::{Window, FLAG_NO_DRAW};
 use shared_lib::{current_tick_millis, println};
 
 const WIDTH: i32 = 100;
@@ -24,7 +24,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
         Err(e) => exit(e.error_number()),
     };
 
-    window.fill_rectangle((4, 24), (WIDTH, HEIGHT), 0x000000);
+    window.fill_rectangle((4, 24), (WIDTH, HEIGHT), 0x000000, FLAG_NO_DRAW);
 
     let num_stars = if args.len() <= 1 {
         100
@@ -38,8 +38,9 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
     for _ in 0..num_stars {
         let x: i32 = rng.gen_range(0..WIDTH - 2);
         let y: i32 = rng.gen_range(0..HEIGHT - 2);
-        window.fill_rectangle((4 + x, 24 + y), (2, 2), 0xfff100);
+        window.fill_rectangle((4 + x, 24 + y), (2, 2), 0xfff100, FLAG_NO_DRAW);
     }
+    window.draw();
 
     println!(
         "{} stars in {} ms.",
