@@ -1,4 +1,4 @@
-use crate::syscall::{SyscallWinFillRectangle, SyscallWinRedraw};
+use crate::syscall::{SyscallWinDrawLine, SyscallWinFillRectangle, SyscallWinRedraw};
 use crate::{ByteBuffer, SyscallError, SyscallOpenWindow, SyscallWinWriteString};
 
 #[derive(Copy, Clone)]
@@ -49,6 +49,13 @@ impl Window {
     pub fn draw(&mut self) {
         unsafe {
             SyscallWinRedraw(self.layer_id_flags(0));
+        }
+    }
+
+    pub fn draw_line(&mut self, x0: i32, x1: i32, y0: i32, y1: i32, color: u32) {
+        let flags = 0;
+        unsafe {
+            SyscallWinDrawLine(self.layer_id_flags(flags), x0, x1, y0, y1, color);
         }
     }
 

@@ -34,6 +34,15 @@ extern "C" {
     pub(crate) fn SyscallGetCurrentTick() -> SyscallResult;
 
     pub(crate) fn SyscallWinRedraw(layer_id_flags: u64) -> SyscallResult;
+
+    pub(crate) fn SyscallWinDrawLine(
+        layer_id_flags: u64,
+        x0: i32,
+        x1: i32,
+        y0: i32,
+        y1: i32,
+        color: u32,
+    ) -> SyscallResult;
 }
 
 #[repr(C)]
