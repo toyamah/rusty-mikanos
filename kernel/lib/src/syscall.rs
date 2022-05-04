@@ -1,7 +1,7 @@
 use crate::asm::global::{write_msr, SyscallEntry};
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
-use crate::graphics::{fill_rectangle, PixelColor, Vector2D};
+use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Vector2D};
 use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
 use crate::layer::LayerID;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
@@ -13,6 +13,7 @@ use crate::timer::global::timer_manager;
 use crate::timer::TIMER_FREQ;
 use crate::Window;
 use core::arch::asm;
+use core::mem;
 use log::{log, Level};
 
 type SyscallFuncType = fn(u64, u64, u64, u64, u64, u64) -> SyscallResult;
@@ -170,8 +171,65 @@ fn win_redraw(
     do_win_func(layer_id_flags, |_| SyscallResult::ok(0))
 }
 
+fn win_draw_line(
+    layer_id_flags: u64,
+    x0: u64,
+    y0: u64,
+    x1: u64,
+    y1: u64,
+    color: u64,
+) -> SyscallResult {
+    let mut x0 = x0 as i32;
+    let mut y0 = y0 as i32;
+    let mut x1 = x1 as i32;
+    let mut y1 = y1 as i32;
+    let color = PixelColor::from(color as u32);
+
+    do_win_func(layer_id_flags, |window| {
+        let dx = x1 - x0 + (x1 - x0).signum();
+        let dy = y1 - y0 + (y1 - y0).signum();
+
+        if dx == 0 && dy == 0 {
+            window.normal_window_writer().write(x0, y0, &color);
+            return SyscallResult::ok(0);
+        }
+
+        if dx.abs() >= dy.abs() {
+            if dx < 0 {
+                mem::swap(&mut x0, &mut x1);
+                mem::swap(&mut y0, &mut y1);
+            }
+
+            let roundish = if y1 >= y0 { libm::floor } else { libm::ceil };
+            let m = dy as f64 / dx as f64;
+            for x in x0..=x1 {
+                let y = roundish(m * (x - x0) as f64 + y0 as f64);
+                window
+                    .normal_window_writer()
+                    .write(x as i32, y as i32, &color);
+            }
+        } else {
+            if dy < 0 {
+                mem::swap(&mut x0, &mut x1);
+                mem::swap(&mut y0, &mut y1);
+            }
+
+            let roundish = if x1 >= x0 { libm::floor } else { libm::ceil };
+            let m = dx as f64 / dy as f64;
+            for y in y0..=y1 {
+                let x = roundish(m * (y - y0) as f64 + x0 as f64);
+                window
+                    .normal_window_writer()
+                    .write(x as i32, y as i32, &color);
+            }
+        }
+
+        SyscallResult::ok(0)
+    })
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 8] = [
+static mut syscall_table: [SyscallFuncType; 9] = [
     log_string,
     put_string,
     exit,
@@ -180,6 +238,7 @@ static mut syscall_table: [SyscallFuncType; 8] = [
     win_fill_rectangle,
     get_current_tick,
     win_redraw,
+    win_draw_line,
 ];
 
 pub fn initialize_syscall() {
