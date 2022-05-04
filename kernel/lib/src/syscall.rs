@@ -1,7 +1,7 @@
 use crate::asm::global::{write_msr, SyscallEntry};
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
-use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Vector2D};
+use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
 use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
 use crate::layer::LayerID;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
@@ -228,8 +228,34 @@ fn win_draw_line(
     })
 }
 
+fn close_window(
+    layer_id_flags: u64,
+    _a2: u64,
+    _a3: u64,
+    _a4: u64,
+    _a5: u64,
+    _a6: u64,
+) -> SyscallResult {
+    let layer_id = LayerID::new((layer_id_flags & 0xffffffff) as u32);
+    let layer = match layer_manager().get_layer_mut(layer_id) {
+        None => return SyscallResult::err(0, EBADF),
+        Some(l) => l,
+    };
+
+    let layer_pos = layer.position();
+    let win_size = layer.get_window_ref().size().to_i32_vec2d();
+
+    unsafe { asm!("cli") };
+    active_layer().activate(None, layer_manager(), screen_frame_buffer());
+    layer_manager().remove_layer(layer_id);
+    layer_manager().draw_on(Rectangle::new(layer_pos, win_size), screen_frame_buffer());
+    unsafe { asm!("sti") };
+
+    SyscallResult::ok(0)
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 9] = [
+static mut syscall_table: [SyscallFuncType; 10] = [
     log_string,
     put_string,
     exit,
@@ -239,6 +265,7 @@ static mut syscall_table: [SyscallFuncType; 9] = [
     get_current_tick,
     win_redraw,
     win_draw_line,
+    close_window,
 ];
 
 pub fn initialize_syscall() {
