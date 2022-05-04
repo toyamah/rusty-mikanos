@@ -43,6 +43,8 @@ extern "C" {
         y1: i32,
         color: u32,
     ) -> SyscallResult;
+
+    pub(crate) fn SyscallCloseWindow(layer_id_flags: u64) -> SyscallResult;
 }
 
 #[repr(C)]

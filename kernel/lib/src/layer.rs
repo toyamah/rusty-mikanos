@@ -123,6 +123,10 @@ impl Layer {
         self.id
     }
 
+    pub fn position(&self) -> Vector2D<i32> {
+        self.position
+    }
+
     pub fn get_window_ref(&self) -> &Window {
         &self.window
     }
@@ -323,6 +327,19 @@ impl LayerManager {
             LayerOperation::DrawArea(area) => {
                 self.draw(message.layer_id, area, screen);
             }
+        }
+    }
+
+    pub fn remove_layer(&mut self, layer_id: LayerID) {
+        self.hide(layer_id);
+
+        let index = self
+            .layers
+            .iter()
+            .enumerate()
+            .find(|(_, layer)| layer.id == layer_id);
+        if let Some((i, _)) = index {
+            self.layers.remove(i);
         }
     }
 
