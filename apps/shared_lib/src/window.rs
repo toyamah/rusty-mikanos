@@ -1,4 +1,6 @@
-use crate::syscall::{SyscallWinDrawLine, SyscallWinFillRectangle, SyscallWinRedraw};
+use crate::syscall::{
+    SyscallCloseWindow, SyscallWinDrawLine, SyscallWinFillRectangle, SyscallWinRedraw,
+};
 use crate::{ByteBuffer, SyscallError, SyscallOpenWindow, SyscallWinWriteString};
 
 #[derive(Copy, Clone)]
@@ -56,6 +58,12 @@ impl Window {
         let flags = 0;
         unsafe {
             SyscallWinDrawLine(self.layer_id_flags(flags), x0, x1, y0, y1, color);
+        }
+    }
+
+    pub fn close(&mut self) {
+        unsafe {
+            SyscallCloseWindow(self.layer_id_flags(0));
         }
     }
 

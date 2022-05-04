@@ -19,6 +19,7 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
     w.write_string((24, 40), 0x00c000, "hello world!", 0);
     w.write_string((40, 56), 0x0000c0, "hello world!", 0);
 
+    w.close();
     exit(0);
 }
 
