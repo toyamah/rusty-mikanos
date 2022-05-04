@@ -5,7 +5,8 @@ use crate::byte_buffer::ByteBuffer;
 use crate::newlib_support::write;
 use crate::rust_official::cchar::c_char;
 use crate::syscall::{
-    SyscallError, SyscallGetCurrentTick, SyscallLogString, SyscallOpenWindow, SyscallWinWriteString,
+    SyscallError, SyscallGetCurrentTick, SyscallLogString, SyscallOpenWindow, SyscallReadEvent,
+    SyscallWinWriteString,
 };
 use core::ffi::c_void;
 use core::fmt;
@@ -40,10 +41,38 @@ pub fn current_tick_millis() -> u64 {
     result.value * 1000 / timer_freq as u64
 }
 
+pub fn read_event(events: &mut [AppEvent], len: usize) -> Result<u64, SyscallError> {
+    unsafe { SyscallReadEvent(events.as_mut_ptr(), len) }.to_result()
+}
+
 #[macro_export]
 macro_rules! println {
     () => ($crate::print("\n"));
     ($($arg:tt)*) => ({
         $crate::printf(format_args_nl!($($arg)*));
     })
+}
+
+#[repr(C)]
+pub struct AppEvent {
+    type_: Type,
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+pub enum Type {
+    Quit,
+    Empty,
+}
+
+impl AppEvent {
+    pub fn type_(&self) -> Type {
+        self.type_
+    }
+}
+
+impl Default for AppEvent {
+    fn default() -> Self {
+        AppEvent { type_: Type::Empty }
+    }
 }
