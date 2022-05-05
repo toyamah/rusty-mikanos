@@ -303,7 +303,6 @@ fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
                     event.set_type(AppEventType::Quit);
                     i += 1;
                 }
-                break;
             }
             _ => debug!("uncaught event type: {:?}", msg.m_type),
         }
