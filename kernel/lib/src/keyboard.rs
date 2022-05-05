@@ -71,14 +71,15 @@ const KEYCODE_MAP_SHIFT: [char; 256] = [
     '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', // 248
 ];
 
-const L_CONTROL_BIT_MASK: u8 = 0b00000001;
-const L_SHIFT_BIT_MASK: u8 = 0b00000010;
-const L_ALT_BIT_MASK: u8 = 0b00000100;
-const L_GUIBIT_MASK: u8 = 0b00001000;
-const R_CONTROL_BIT_MASK: u8 = 0b00010000;
-const R_SHIFT_BIT_MASK: u8 = 0b00100000;
-const R_ALT_BIT_MASK: u8 = 0b01000000;
-const R_GUIBIT_MASK: u8 = 0b10000000;
+pub const KEY_Q: u8 = 20;
+pub const L_CONTROL_BIT_MASK: u8 = 0b00000001;
+pub const L_SHIFT_BIT_MASK: u8 = 0b00000010;
+pub const L_ALT_BIT_MASK: u8 = 0b00000100;
+pub const L_GUIBIT_MASK: u8 = 0b00001000;
+pub const R_CONTROL_BIT_MASK: u8 = 0b00010000;
+pub const R_SHIFT_BIT_MASK: u8 = 0b00100000;
+pub const R_ALT_BIT_MASK: u8 = 0b01000000;
+pub const R_GUIBIT_MASK: u8 = 0b10000000;
 
 pub fn on_input(modifier: u8, keycode: u8, task_manager: &mut TaskManager) {
     let shift_inputted = (modifier & (L_SHIFT_BIT_MASK | R_SHIFT_BIT_MASK)) != 0;

@@ -32,6 +32,11 @@ pub mod global {
         ));
         unsafe { asm!("sti") };
     }
+
+    #[no_mangle]
+    extern "C" fn GetCurrentTaskOSStackPointerInRust() -> u64 {
+        *task_manager().current_task().os_stack_pointer()
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]

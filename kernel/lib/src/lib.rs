@@ -34,3 +34,4 @@ pub mod terminal;
 pub mod timer;
 pub mod window;
 mod x86_descriptor;
+mod app_event;
