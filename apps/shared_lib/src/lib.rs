@@ -55,7 +55,8 @@ macro_rules! println {
 
 #[repr(C)]
 pub struct AppEvent {
-    type_: Type,
+    pub type_: Type,
+    pub arg: AppEventArg,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -63,6 +64,24 @@ pub struct AppEvent {
 pub enum Type {
     Quit,
     Empty,
+    MouseMove,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union AppEventArg {
+    pub mouse_move: MouseMove,
+    pub empty: (),
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct MouseMove {
+    pub x: i32,
+    pub y: i32,
+    pub dx: i32,
+    pub dy: i32,
+    pub buttons: u8,
 }
 
 impl AppEvent {
@@ -73,6 +92,9 @@ impl AppEvent {
 
 impl Default for AppEvent {
     fn default() -> Self {
-        AppEvent { type_: Type::Empty }
+        AppEvent {
+            type_: Type::Empty,
+            arg: AppEventArg { empty: () },
+        }
     }
 }
