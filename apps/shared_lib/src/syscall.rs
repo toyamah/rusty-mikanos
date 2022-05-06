@@ -1,5 +1,5 @@
 use crate::rust_official::cstr::CStr;
-use crate::{c_char, libc, AppEvent};
+use crate::{c_char, libc};
 use core::ffi::c_void;
 
 extern "C" {
@@ -47,7 +47,8 @@ extern "C" {
 
     pub(crate) fn SyscallCloseWindow(layer_id_flags: u64) -> SyscallResult;
 
-    pub(crate) fn SyscallReadEvent(events: *const AppEvent, len: usize) -> SyscallResult;
+    // events should be a raw pointer from an array of AppEvent
+    pub(crate) fn SyscallReadEvent(events: *const c_void, len: usize) -> SyscallResult;
 }
 
 #[repr(C)]

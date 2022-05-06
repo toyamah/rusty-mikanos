@@ -44,7 +44,7 @@ pub fn current_tick_millis() -> u64 {
 }
 
 pub fn read_event(events: &mut [AppEvent], len: usize) -> Result<u64, SyscallError> {
-    unsafe { SyscallReadEvent(events.as_ptr()), len) }.to_result()
+    unsafe { SyscallReadEvent(events.as_ptr() as *const c_void, len) }.to_result()
 }
 
 #[macro_export]
