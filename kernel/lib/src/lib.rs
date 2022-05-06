@@ -8,6 +8,7 @@ extern crate alloc;
 
 use crate::window::Window;
 pub mod acpi;
+mod app_event;
 pub mod asm;
 pub mod console;
 mod elf;
@@ -34,4 +35,3 @@ pub mod terminal;
 pub mod timer;
 pub mod window;
 mod x86_descriptor;
-mod app_event;
