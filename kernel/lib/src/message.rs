@@ -19,6 +19,7 @@ impl Message {
             MessageType::KeyPush { .. } => false,
             MessageType::Layer(_) => false,
             MessageType::LayerFinish => true,
+            MessageType::MouseMove(_) => false,
         }
     }
 }
@@ -37,6 +38,7 @@ pub enum MessageType {
     },
     Layer(LayerMessage),
     LayerFinish,
+    MouseMove(MouseMoveMessage),
 }
 
 #[derive(Debug, PartialEq)]
@@ -52,4 +54,14 @@ pub enum LayerOperation {
     MoveRelative { pos: Vector2D<i32> },
     Draw,
     DrawArea(Rectangle<i32>),
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct MouseMoveMessage {
+    pub x: i32,
+    pub y: i32,
+    pub dx: i32,
+    pub dy: i32,
+    pub buttons: u8,
 }
