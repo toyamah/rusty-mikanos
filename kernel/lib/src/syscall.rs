@@ -1,4 +1,4 @@
-use crate::app_event::{AppEvent, AppEventType};
+use crate::app_event::{AppEvent, AppEventArg, AppEventType};
 use crate::asm::global::{write_msr, SyscallEntry};
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
@@ -300,9 +300,18 @@ fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
                 if keycode == KEY_Q && is_control_inputted {
                     let event = unsafe { app_events.add(i).as_mut() }
                         .expect("failed to convert to AppEvent Ref");
-                    event.set_type(AppEventType::Quit);
+                    event.type_ = AppEventType::Quit;
                     i += 1;
                 }
+            }
+            MessageType::MouseMove(arg) => {
+                let event = unsafe { app_events.add(i).as_mut() }
+                    .expect("failed to convert to AppEvent Ref");
+                event.type_ = AppEventType::MouseMove;
+                event.arg = AppEventArg {
+                    mouse_move: arg.into(),
+                };
+                i += 1;
             }
             _ => debug!("uncaught event type: {:?}", msg.m_type),
         }

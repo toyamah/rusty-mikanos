@@ -14,29 +14,19 @@ pub enum AppEventType {
 
 #[derive(Copy, Clone)]
 #[repr(C)]
-union AppEventArg {
+pub union AppEventArg {
     pub mouse_move: MouseMove,
     pub empty: (),
 }
 
 #[derive(Copy, Clone)]
 #[repr(C)]
-struct MouseMove {
+pub struct MouseMove {
     pub x: i32,
     pub y: i32,
     pub dx: i32,
     pub dy: i32,
     pub buttons: u8,
-}
-
-impl AppEvent {
-    pub fn type_(&self) -> AppEventType {
-        self.type_
-    }
-
-    pub fn set_type(&mut self, t: AppEventType) {
-        self.type_ = t;
-    }
 }
 
 impl Default for AppEvent {

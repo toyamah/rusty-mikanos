@@ -211,6 +211,7 @@ pub extern "C" fn KernelMainNewStack(
                 unsafe { asm!("sti") };
             }
             MessageType::LayerFinish => {}
+            MessageType::MouseMove(_) => {}
         }
     }
 }
@@ -239,6 +240,8 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
         layer_manager(),
         screen_frame_buffer(),
         active_layer(),
+        layer_task_map(),
+        task_manager(),
     );
 }
 

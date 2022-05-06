@@ -1,3 +1,4 @@
+use crate::app_event::MouseMove;
 use crate::graphics::{Rectangle, Vector2D};
 use crate::layer::LayerID;
 use crate::task::TaskID;
@@ -56,7 +57,7 @@ pub enum LayerOperation {
     DrawArea(Rectangle<i32>),
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(C)]
 pub struct MouseMoveMessage {
     pub x: i32,
@@ -64,4 +65,16 @@ pub struct MouseMoveMessage {
     pub dx: i32,
     pub dy: i32,
     pub buttons: u8,
+}
+
+impl Into<MouseMove> for MouseMoveMessage {
+    fn into(self) -> MouseMove {
+        MouseMove {
+            x: self.x,
+            y: self.y,
+            dx: self.dx,
+            dy: self.dy,
+            buttons: self.buttons,
+        }
+    }
 }
