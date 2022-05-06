@@ -8,6 +8,7 @@ struct LayerID(u32);
 
 const TITLE_OFFSET: (i32, i32) = (8, 28);
 pub const FLAG_NO_DRAW: u64 = 0x00000001 << 32;
+pub const FLAG_FORCE_DRAW: u64 = 0;
 
 pub struct Window {
     layer_id: LayerID,
@@ -55,7 +56,7 @@ impl Window {
     }
 
     pub fn draw_line(&mut self, x0: i32, x1: i32, y0: i32, y1: i32, color: u32) {
-        let flags = 0;
+        let flags = FLAG_FORCE_DRAW;
         unsafe {
             SyscallWinDrawLine(self.layer_id_flags(flags), x0, x1, y0, y1, color);
         }

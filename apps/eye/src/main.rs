@@ -8,7 +8,7 @@ use libm::{atan2, cos, fmin, pow, sin, sqrt};
 use shared_lib::app_event::AppEventType;
 use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
-use shared_lib::window::{Window, FLAG_NO_DRAW};
+use shared_lib::window::{Window, FLAG_FORCE_DRAW, FLAG_NO_DRAW};
 use shared_lib::{println, read_event};
 
 const CANVAS_SIZE: i32 = 100;
@@ -21,7 +21,12 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
         Err(e) => exit(e.error_number()),
     };
 
-    w.fill_rectangle((4, 24), (CANVAS_SIZE, CANVAS_SIZE), 0xffffff, 0);
+    w.fill_rectangle(
+        (4, 24),
+        (CANVAS_SIZE, CANVAS_SIZE),
+        0xffffff,
+        FLAG_FORCE_DRAW,
+    );
 
     let mut events = [Default::default(); 1];
     loop {
@@ -67,7 +72,7 @@ fn draw_eye(window: &mut Window, mouse_x: i32, mouse_y: i32, color: u32) {
         (eye_x - EYE_SIZE / 2, eye_y - EYE_SIZE / 2),
         (EYE_SIZE, EYE_SIZE),
         color,
-        0,
+        FLAG_FORCE_DRAW,
     );
 }
 
