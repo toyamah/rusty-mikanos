@@ -1,6 +1,7 @@
 #[repr(C)]
 pub struct AppEvent {
-    type_: AppEventType,
+    pub type_: AppEventType,
+    pub arg: AppEventArg,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -8,6 +9,24 @@ pub struct AppEvent {
 pub enum AppEventType {
     Quit,
     Empty,
+    MouseMove,
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+union AppEventArg {
+    pub mouse_move: MouseMove,
+    pub empty: (),
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct MouseMove {
+    pub x: i32,
+    pub y: i32,
+    pub dx: i32,
+    pub dy: i32,
+    pub buttons: u8,
 }
 
 impl AppEvent {
@@ -24,6 +43,7 @@ impl Default for AppEvent {
     fn default() -> Self {
         AppEvent {
             type_: AppEventType::Empty,
+            arg: AppEventArg { empty: () },
         }
     }
 }
