@@ -47,7 +47,7 @@ extern "C" {
 
     pub(crate) fn SyscallCloseWindow(layer_id_flags: u64) -> SyscallResult;
 
-    pub(crate) fn SyscallReadEvent(events: *mut AppEvent, len: usize) -> SyscallResult;
+    pub(crate) fn SyscallReadEvent(events: *const AppEvent, len: usize) -> SyscallResult;
 }
 
 #[repr(C)]

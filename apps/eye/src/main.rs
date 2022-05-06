@@ -5,10 +5,11 @@
 use core::arch::asm;
 use core::panic::PanicInfo;
 use libm::{atan2, cos, fmin, pow, sin, sqrt};
+use shared_lib::app_event::AppEventType;
 use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::window::{Window, FLAG_NO_DRAW};
-use shared_lib::{println, read_event, Type};
+use shared_lib::{println, read_event};
 
 const CANVAS_SIZE: i32 = 100;
 const EYE_SIZE: i32 = 10;
@@ -32,14 +33,14 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
         };
 
         let event = &events[0];
-        match event.type_() {
-            Type::Quit => break,
-            Type::MouseMove => {
+        match event.type_ {
+            AppEventType::Quit => break,
+            AppEventType::MouseMove => {
                 let arg = unsafe { event.arg.mouse_move };
                 w.fill_rectangle((4, 24), (CANVAS_SIZE, CANVAS_SIZE), 0xffffff, FLAG_NO_DRAW);
                 draw_eye(&mut w, arg.x, arg.y, 0x000000);
             }
-            _ => println!("unknown event: type = {:?}", events[0].type_()),
+            _ => println!("unknown event: type = {:?}", events[0].type_),
         }
     }
 

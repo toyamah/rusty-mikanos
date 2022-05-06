@@ -1,4 +1,4 @@
-use crate::app_event::MouseMove;
+use crate::app_event;
 use crate::graphics::{Rectangle, Vector2D};
 use crate::layer::LayerID;
 use crate::task::TaskID;
@@ -67,14 +67,15 @@ pub struct MouseMoveMessage {
     pub buttons: u8,
 }
 
-impl Into<MouseMove> for MouseMoveMessage {
-    fn into(self) -> MouseMove {
-        MouseMove {
-            x: self.x,
-            y: self.y,
-            dx: self.dx,
-            dy: self.dy,
-            buttons: self.buttons,
+// This trait is defined here because the app crate also uses app_event::MouseMove.
+impl From<MouseMoveMessage> for app_event::MouseMove {
+    fn from(m: MouseMoveMessage) -> Self {
+        Self {
+            x: m.x,
+            y: m.y,
+            dx: m.dx,
+            dy: m.dy,
+            buttons: m.buttons,
         }
     }
 }

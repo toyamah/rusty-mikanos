@@ -1,3 +1,5 @@
+// This file is also referenced by the app crate as a symbolic link
+
 #[repr(C)]
 pub struct AppEvent {
     pub type_: AppEventType,

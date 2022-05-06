@@ -4,10 +4,11 @@
 
 use core::arch::asm;
 use core::panic::PanicInfo;
+use shared_lib::app_event::AppEventType;
 use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::window::Window;
-use shared_lib::{println, read_event, Type};
+use shared_lib::{println, read_event};
 
 #[no_mangle]
 pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
@@ -28,9 +29,9 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
                 println!("ReadEvent failed: {}", e.strerror());
             }
         };
-        match events[0].type_() {
-            Type::Quit => break,
-            _ => println!("unknown event: type = {:?}", events[0].type_()),
+        match events[0].type_ {
+            AppEventType::Quit => break,
+            _ => println!("unknown event: type = {:?}", events[0].type_),
         }
     }
 

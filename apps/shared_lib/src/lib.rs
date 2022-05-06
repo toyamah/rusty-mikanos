@@ -1,6 +1,7 @@
 #![feature(format_args_nl)]
 #![no_std]
 
+use crate::app_event::AppEvent;
 use crate::byte_buffer::ByteBuffer;
 use crate::newlib_support::write;
 use crate::rust_official::cchar::c_char;
@@ -11,6 +12,7 @@ use crate::syscall::{
 use core::ffi::c_void;
 use core::fmt;
 
+pub mod app_event;
 pub mod args;
 mod byte_buffer;
 pub mod libc;
@@ -42,7 +44,7 @@ pub fn current_tick_millis() -> u64 {
 }
 
 pub fn read_event(events: &mut [AppEvent], len: usize) -> Result<u64, SyscallError> {
-    unsafe { SyscallReadEvent(events.as_mut_ptr(), len) }.to_result()
+    unsafe { SyscallReadEvent(events.as_ptr()), len) }.to_result()
 }
 
 #[macro_export]
@@ -51,50 +53,4 @@ macro_rules! println {
     ($($arg:tt)*) => ({
         $crate::printf(format_args_nl!($($arg)*));
     })
-}
-
-#[repr(C)]
-pub struct AppEvent {
-    pub type_: Type,
-    pub arg: AppEventArg,
-}
-
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub enum Type {
-    Quit,
-    Empty,
-    MouseMove,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union AppEventArg {
-    pub mouse_move: MouseMove,
-    pub empty: (),
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct MouseMove {
-    pub x: i32,
-    pub y: i32,
-    pub dx: i32,
-    pub dy: i32,
-    pub buttons: u8,
-}
-
-impl AppEvent {
-    pub fn type_(&self) -> Type {
-        self.type_
-    }
-}
-
-impl Default for AppEvent {
-    fn default() -> Self {
-        AppEvent {
-            type_: Type::Empty,
-            arg: AppEventArg { empty: () },
-        }
-    }
 }
