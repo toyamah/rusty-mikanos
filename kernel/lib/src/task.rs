@@ -29,6 +29,7 @@ pub mod global {
         timer_manager().add_timer(Timer::new(
             timer_manager().current_tick() + TASK_TIMER_PERIOD,
             TASK_TIMER_VALUE,
+            task_manager().main_task_id,
         ));
         unsafe { asm!("sti") };
     }
