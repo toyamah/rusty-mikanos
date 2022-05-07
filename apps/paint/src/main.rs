@@ -15,7 +15,7 @@ const HEIGHT: i32 = 130;
 
 #[no_mangle]
 pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
-    let mut w = match Window::open((200, 100), (10, 10), "paint") {
+    let mut w = match Window::open((WIDTH, HEIGHT), (10, 10), "paint") {
         Ok(w) => w,
         Err(e) => exit(e.error_number()),
     };
