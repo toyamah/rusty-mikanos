@@ -225,7 +225,8 @@ pub fn send_mouse_message(
     if previous_buttons != buttons {
         let diff = previous_buttons ^ buttons;
         for i in 0..8 {
-            if ((diff >> i) & 1) != 0 {
+            let is_button_state_changed = ((diff >> i) & 1) == 1;
+            if is_button_state_changed {
                 let msg = Message::new(MessageType::MouseButton(MouseButtonMessage {
                     x: relpos.x,
                     y: relpos.y,
