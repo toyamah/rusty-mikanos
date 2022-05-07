@@ -13,7 +13,6 @@ pub mod global {
     use crate::asm::global::{get_cr3, restore_context, switch_context};
     use crate::task::TaskManager;
     use crate::timer::global::timer_manager;
-    use crate::timer::{Timer, TASK_TIMER_PERIOD, TASK_TIMER_VALUE};
     use core::arch::asm;
 
     static mut TASK_MANAGER: Option<TaskManager> = None;
@@ -26,11 +25,7 @@ pub mod global {
         task_manager().initialize(get_cr3);
 
         unsafe { asm!("cli") };
-        timer_manager().add_timer(Timer::new(
-            timer_manager().current_tick() + TASK_TIMER_PERIOD,
-            TASK_TIMER_VALUE,
-            task_manager().main_task_id,
-        ));
+        timer_manager().add_timer_for_switching_task(task_manager().main_task_id);
         unsafe { asm!("sti") };
     }
 

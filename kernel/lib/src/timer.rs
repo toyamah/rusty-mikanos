@@ -11,9 +11,9 @@ use core::ptr::read_volatile;
 const COUNT_MAX: u32 = 0xffffffff;
 pub const TIMER_FREQ: u64 = 100;
 
-pub const TASK_TIMER_PERIOD: u64 = TIMER_FREQ / 50;
+const TASK_TIMER_PERIOD: u64 = TIMER_FREQ / 50;
 // indicates the value for switching a task
-pub const TASK_TIMER_VALUE: i32 = i32::MAX;
+const TASK_TIMER_VALUE: i32 = i32::MAX;
 
 pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
@@ -170,11 +170,7 @@ impl TimerManager {
             if t.value == TASK_TIMER_VALUE {
                 task_timer_timeout = true;
                 self.timers.pop();
-                self.timers.push(Timer::new(
-                    self.tick + TASK_TIMER_PERIOD,
-                    TASK_TIMER_VALUE,
-                    task_manager.main_task().id(),
-                ));
+                self.add_timer_for_switching_task(task_manager.main_task().id());
                 continue;
             }
 
@@ -205,6 +201,14 @@ impl TimerManager {
 
     pub fn add_timer(&mut self, timer: Timer) {
         self.timers.push(timer);
+    }
+
+    pub(crate) fn add_timer_for_switching_task(&mut self, main_task_id: TaskID) {
+        self.add_timer(Timer::new(
+            self.tick + TASK_TIMER_PERIOD,
+            TASK_TIMER_VALUE,
+            main_task_id,
+        ));
     }
 }
 
