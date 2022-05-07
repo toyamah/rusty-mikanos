@@ -111,8 +111,8 @@ impl Mouse {
         displacement_x: i8,
         displacement_y: i8,
         screen_size: Vector2D<i32>,
-        lm: &mut LayerManager,
-        sfb: &mut FrameBuffer,
+        layout_manager: &mut LayerManager,
+        frame_buffer: &mut FrameBuffer,
         active_layer: &mut ActiveLayer,
         layer_task_map: &mut BTreeMap<LayerID, TaskID>,
         task_manager: &mut TaskManager,
@@ -125,12 +125,12 @@ impl Mouse {
         let old_pos = self.position;
         self.position = new_pos;
         let pos_diff = self.position - old_pos;
-        lm.move_(self.layer_id, self.position, sfb);
+        layout_manager.move_(self.layer_id, self.position, frame_buffer);
 
         let previous_left_pressed = (self.previous_buttons & 0x01) != 0;
         let left_pressed = (buttons & 0x01) != 0;
         if !previous_left_pressed && left_pressed {
-            let draggable_layer = lm
+            let draggable_layer = layout_manager
                 .find_layer_by_position(new_pos, self.layer_id)
                 .filter(|l| l.is_draggable());
             if let Some(layer) = draggable_layer {
@@ -140,10 +140,10 @@ impl Mouse {
                 }
             }
             let draggable_id = draggable_layer.map(|l| l.id());
-            active_layer.activate(draggable_id, lm, sfb);
+            active_layer.activate(draggable_id, layout_manager, frame_buffer);
         } else if previous_left_pressed && left_pressed {
             if let Some(drag_layer_id) = self.drag_layer_id {
-                lm.move_relative(drag_layer_id, pos_diff, sfb);
+                layout_manager.move_relative(drag_layer_id, pos_diff, frame_buffer);
             }
         } else if previous_left_pressed && !left_pressed {
             self.drag_layer_id = None;
@@ -155,7 +155,7 @@ impl Mouse {
                 pos_diff,
                 buttons,
                 self.previous_buttons,
-                lm,
+                layout_manager,
                 active_layer,
                 layer_task_map,
                 task_manager,
