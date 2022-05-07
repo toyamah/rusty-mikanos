@@ -181,6 +181,7 @@ pub fn draw_mouse_cursor(writer: &mut Window, position: &Vector2D<i32>) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn send_mouse_message(
     newpos: Vector2D<i32>,
     posdiff: Vector2D<i32>,
