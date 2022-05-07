@@ -210,8 +210,7 @@ pub extern "C" fn KernelMainNewStack(
                     .unwrap();
                 unsafe { asm!("sti") };
             }
-            MessageType::LayerFinish => {}
-            MessageType::MouseMove(_) => {}
+            _ => {}
         }
     }
 }

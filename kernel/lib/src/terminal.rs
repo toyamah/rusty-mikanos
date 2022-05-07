@@ -87,7 +87,6 @@ pub mod global {
 
             let msg = msg.unwrap();
             match msg.m_type {
-                MessageType::InterruptXhci => {}
                 MessageType::TimerTimeout {
                     timeout: _,
                     value: _,
@@ -127,9 +126,7 @@ pub mod global {
                         .unwrap();
                     unsafe { asm!("sti") };
                 }
-                MessageType::Layer(_) => {}
-                MessageType::LayerFinish => {}
-                MessageType::MouseMove(_) => {}
+                _ => {}
             }
         }
     }

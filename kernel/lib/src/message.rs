@@ -21,6 +21,7 @@ impl Message {
             MessageType::Layer(_) => false,
             MessageType::LayerFinish => true,
             MessageType::MouseMove(_) => false,
+            MessageType::MouseButton(_) => false,
         }
     }
 }
@@ -40,6 +41,7 @@ pub enum MessageType {
     Layer(LayerMessage),
     LayerFinish,
     MouseMove(MouseMoveMessage),
+    MouseButton(MouseButtonMessage),
 }
 
 #[derive(Debug, PartialEq)]
@@ -67,6 +69,15 @@ pub struct MouseMoveMessage {
     pub buttons: u8,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(C)]
+pub struct MouseButtonMessage {
+    pub x: i32,
+    pub y: i32,
+    pub press: i32,
+    pub button: i32,
+}
+
 // This trait is defined here because the app crate also uses app_event::MouseMove.
 impl From<MouseMoveMessage> for app_event::MouseMove {
     fn from(m: MouseMoveMessage) -> Self {
@@ -76,6 +87,17 @@ impl From<MouseMoveMessage> for app_event::MouseMove {
             dx: m.dx,
             dy: m.dy,
             buttons: m.buttons,
+        }
+    }
+}
+
+impl From<MouseButtonMessage> for app_event::MouseButton {
+    fn from(m: MouseButtonMessage) -> Self {
+        Self {
+            x: m.x,
+            y: m.y,
+            press: m.press,
+            button: m.button,
         }
     }
 }

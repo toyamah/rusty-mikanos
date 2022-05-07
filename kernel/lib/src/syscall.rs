@@ -313,6 +313,15 @@ fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
                 };
                 i += 1;
             }
+            MessageType::MouseButton(arg) => {
+                let event = unsafe { app_events.add(i).as_mut() }
+                    .expect("failed to convert to AppEvent Ref");
+                event.type_ = AppEventType::MouseButton;
+                event.arg = AppEventArg {
+                    mouse_button: arg.into(),
+                };
+                i += 1;
+            }
             _ => debug!("uncaught event type: {:?}", msg.m_type),
         }
     }
