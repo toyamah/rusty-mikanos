@@ -45,6 +45,7 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
                 let arg = unsafe { event.arg.mouse_button };
                 if arg.button == 0 {
                     press = arg.is_pressed();
+                    // it prevents access outside Window's size
                     if is_inside(arg.x, arg.y) {
                         w.fill_rectangle((arg.x, arg.y), (1, 1), 0x000000, FLAG_FORCE_DRAW);
                     }
