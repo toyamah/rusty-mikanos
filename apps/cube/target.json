@@ -1,0 +1,27 @@
+{
+  "llvm-target": "x86_64-unknown-none-elf",
+  "arch": "x86_64",
+  "os": "none",
+  "code-model": "kernel",
+  "data-layout": "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+  "target-pointer-width": "64",
+  "max-atomic-width": 64,
+  "executables": true,
+  "panic-strategy": "abort",
+  "position-independent-executables": false,
+  "disable-redzone": false,
+  "features": "-mmx,-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-3dnow,-3dnowa,-avx,-avx2,+soft-float",
+  "linker-flavor": "ld.lld",
+  "linker": "ld.lld",
+  "post-link-args": {
+    "ld.lld": [
+      "-lc",
+      "-lc++",
+      "--entry", "main",
+      "-z", "norelro",
+      "--image-base", "0xffff800000000000",
+      "-o", "apps/cube/cube",
+      "--static"
+    ]
+  }
+}
