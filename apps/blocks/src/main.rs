@@ -65,7 +65,7 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
         draw_blocks(&mut w, &blocks);
         draw_bar(&mut w, bar_x);
         if ball_y >= 0 {
-            draw_ball(&mut w, bar_x, ball_y);
+            draw_ball(&mut w, ball_x, ball_y);
         }
         w.draw();
 
@@ -92,7 +92,7 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
                 AppEventType::Quit => break 'outer,
                 AppEventType::KeyPush => {
                     let arg = unsafe { event.arg.key_push };
-                    if arg.press {
+                    if !arg.press {
                         move_dir = 0;
                     } else {
                         let keycode = arg.keycode;
