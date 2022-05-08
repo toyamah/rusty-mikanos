@@ -16,7 +16,7 @@ extern "C" {
         cb: extern "C" fn(buttons: u8, displacement_x: i8, displacement_y: i8),
     );
 
-    fn RegisterKeyboardObserver(cb: extern "C" fn(modifier: u8, keycode: u8));
+    fn RegisterKeyboardObserver(cb: extern "C" fn(modifier: u8, keycode: u8, press: bool));
 }
 
 pub mod global {
@@ -74,7 +74,7 @@ pub fn register_mouse_observer(
     unsafe { RegisterMouseObserver(cb) };
 }
 
-pub fn register_keyboard_observer(cb: extern "C" fn(modifier: u8, keycode: u8)) {
+pub fn register_keyboard_observer(cb: extern "C" fn(modifier: u8, keycode: u8, press: bool)) {
     unsafe { RegisterKeyboardObserver(cb) };
 }
 

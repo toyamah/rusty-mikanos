@@ -81,7 +81,7 @@ pub const R_SHIFT_BIT_MASK: u8 = 0b00100000;
 pub const R_ALT_BIT_MASK: u8 = 0b01000000;
 pub const R_GUIBIT_MASK: u8 = 0b10000000;
 
-pub fn on_input(modifier: u8, keycode: u8, task_manager: &mut TaskManager) {
+pub fn on_input(modifier: u8, keycode: u8, press: bool, task_manager: &mut TaskManager) {
     let shift_inputted = (modifier & (L_SHIFT_BIT_MASK | R_SHIFT_BIT_MASK)) != 0;
     let ascii = if shift_inputted {
         KEYCODE_MAP_SHIFT[keycode as usize]
@@ -95,6 +95,7 @@ pub fn on_input(modifier: u8, keycode: u8, task_manager: &mut TaskManager) {
                 modifier,
                 keycode,
                 ascii,
+                press,
             }),
         )
         .unwrap();

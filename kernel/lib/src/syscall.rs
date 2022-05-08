@@ -1,4 +1,4 @@
-use crate::app_event::{AppEvent, AppEventArg, AppEventType, TimerTimeout};
+use crate::app_event::{AppEvent, AppEventArg, AppEventType, KeyPush, TimerTimeout};
 use crate::asm::global::{write_msr, SyscallEntry};
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
@@ -295,13 +295,25 @@ fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
             MessageType::KeyPush {
                 modifier,
                 keycode,
-                ascii: _,
+                ascii,
+                press,
             } => {
+                let event = unsafe { app_events.add(i).as_mut() }
+                    .expect("failed to convert to AppEvent Ref");
                 let is_control_inputted = modifier & (L_CONTROL_BIT_MASK | R_CONTROL_BIT_MASK) != 0;
                 if keycode == KEY_Q && is_control_inputted {
-                    let event = unsafe { app_events.add(i).as_mut() }
-                        .expect("failed to convert to AppEvent Ref");
                     event.type_ = AppEventType::Quit;
+                    i += 1;
+                } else {
+                    event.type_ = AppEventType::KeyPush;
+                    event.arg = AppEventArg {
+                        key_push: KeyPush {
+                            modifier,
+                            keycode,
+                            ascii,
+                            press,
+                        },
+                    };
                     i += 1;
                 }
             }
