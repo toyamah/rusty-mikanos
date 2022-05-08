@@ -209,7 +209,7 @@ fn draw_blocks(w: &mut Window, blocks: &Blocks) {
             if blocks[by as usize][bx as usize] {
                 let x = 4 + kGapWidth + bx * kBlockWidth;
                 let c = color | (0xff << ((bx + by) % 3) * 8);
-                w.fill_rectangle((x, y), (kCanvasWidth, kBlockHeight), c, FLAG_NO_DRAW);
+                w.fill_rectangle((x, y), (kBlockWidth, kBlockHeight), c, FLAG_NO_DRAW);
             }
         }
     }
