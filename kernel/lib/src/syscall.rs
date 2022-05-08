@@ -326,11 +326,17 @@ fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
             MessageType::TimerTimeout { timeout, value } => {
                 let event = unsafe { app_events.add(i).as_mut() }
                     .expect("failed to convert to AppEvent Ref");
-                event.type_ = AppEventType::TimerTimeout;
-                event.arg = AppEventArg {
-                    timer_timeout: TimerTimeout { timeout, value },
-                };
-                i += 1;
+                let is_created_by_app = value < 0;
+                if is_created_by_app {
+                    event.type_ = AppEventType::TimerTimeout;
+                    event.arg = AppEventArg {
+                        timer_timeout: TimerTimeout {
+                            timeout,
+                            value: -value,
+                        },
+                    };
+                    i += 1;
+                }
             }
             _ => debug!("uncaught event type: {:?}", msg.m_type),
         }
