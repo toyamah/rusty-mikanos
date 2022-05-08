@@ -112,7 +112,7 @@ impl Timer {
         }
     }
 
-    pub fn sentinel() -> Self {
+    fn sentinel() -> Self {
         Self {
             // the sentinel timer is the longest timeout
             timeout: u64::MAX,
