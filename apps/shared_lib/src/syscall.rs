@@ -49,6 +49,12 @@ extern "C" {
 
     // events should be a raw pointer from an array of AppEvent
     pub(crate) fn SyscallReadEvent(events: *const c_void, len: usize) -> SyscallResult;
+
+    pub(crate) fn SyscallCreateTimer(
+        type_: u64,
+        timer_value: i32,
+        timeout_ms: u64,
+    ) -> SyscallResult;
 }
 
 #[repr(C)]
