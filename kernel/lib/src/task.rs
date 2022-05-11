@@ -35,7 +35,9 @@ pub mod global {
 
     #[no_mangle]
     extern "C" fn GetCurrentTaskOSStackPointerInRust() -> u64 {
-        *task_manager().current_task().os_stack_pointer()
+        let p = *task_manager().current_task().os_stack_pointer();
+        assert_ne!(p, 1); // Do the same check as c++ code
+        p
     }
 }
 

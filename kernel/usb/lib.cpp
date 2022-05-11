@@ -74,8 +74,8 @@ __attribute__((no_caller_saved_registers))
 extern "C" uint64_t GetCurrentTaskOSStackPointer() {
     auto p = GetCurrentTaskOSStackPointerInRust();
 
-    // this code is needed to work well...
-    if (p == 0) {
+    // this code is needed to avoid call instruction for GetCurrentTaskOSStackPointerInRust instead of jmp
+    if (p == 1) {
         while (1) __asm__("hlt");
     }
 
