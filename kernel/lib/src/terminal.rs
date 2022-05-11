@@ -129,6 +129,7 @@ pub mod global {
                 }
                 MessageType::Layer(_) => {}
                 MessageType::LayerFinish => {}
+                MessageType::MouseMove(_) => {}
             }
         }
     }

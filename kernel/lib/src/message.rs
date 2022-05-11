@@ -1,3 +1,4 @@
+use crate::app_event;
 use crate::graphics::{Rectangle, Vector2D};
 use crate::layer::LayerID;
 use crate::task::TaskID;
@@ -19,6 +20,7 @@ impl Message {
             MessageType::KeyPush { .. } => false,
             MessageType::Layer(_) => false,
             MessageType::LayerFinish => true,
+            MessageType::MouseMove(_) => false,
         }
     }
 }
@@ -37,6 +39,7 @@ pub enum MessageType {
     },
     Layer(LayerMessage),
     LayerFinish,
+    MouseMove(MouseMoveMessage),
 }
 
 #[derive(Debug, PartialEq)]
@@ -52,4 +55,27 @@ pub enum LayerOperation {
     MoveRelative { pos: Vector2D<i32> },
     Draw,
     DrawArea(Rectangle<i32>),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(C)]
+pub struct MouseMoveMessage {
+    pub x: i32,
+    pub y: i32,
+    pub dx: i32,
+    pub dy: i32,
+    pub buttons: u8,
+}
+
+// This trait is defined here because the app crate also uses app_event::MouseMove.
+impl From<MouseMoveMessage> for app_event::MouseMove {
+    fn from(m: MouseMoveMessage) -> Self {
+        Self {
+            x: m.x,
+            y: m.y,
+            dx: m.dx,
+            dy: m.dy,
+            buttons: m.buttons,
+        }
+    }
 }

@@ -1,6 +1,9 @@
+// This file is also referenced by the app crate as a symbolic link
+
 #[repr(C)]
 pub struct AppEvent {
-    type_: AppEventType,
+    pub type_: AppEventType,
+    pub arg: AppEventArg,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -8,22 +11,31 @@ pub struct AppEvent {
 pub enum AppEventType {
     Quit,
     Empty,
+    MouseMove,
 }
 
-impl AppEvent {
-    pub fn type_(&self) -> AppEventType {
-        self.type_
-    }
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub union AppEventArg {
+    pub mouse_move: MouseMove,
+    pub empty: (),
+}
 
-    pub fn set_type(&mut self, t: AppEventType) {
-        self.type_ = t;
-    }
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct MouseMove {
+    pub x: i32,
+    pub y: i32,
+    pub dx: i32,
+    pub dy: i32,
+    pub buttons: u8,
 }
 
 impl Default for AppEvent {
     fn default() -> Self {
         AppEvent {
             type_: AppEventType::Empty,
+            arg: AppEventArg { empty: () },
         }
     }
 }

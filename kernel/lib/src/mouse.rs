@@ -1,7 +1,10 @@
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use crate::layer::{ActiveLayer, LayerID, LayerManager};
+use crate::message::{Message, MessageType, MouseMoveMessage};
+use crate::task::{TaskID, TaskManager};
 use crate::Window;
+use alloc::collections::BTreeMap;
 use shared::PixelFormat;
 
 pub mod global {
@@ -110,6 +113,8 @@ impl Mouse {
         layout_manager: &mut LayerManager,
         screen_frame_buffer: &mut FrameBuffer,
         active_layer: &mut ActiveLayer,
+        layer_task_map: &mut BTreeMap<LayerID, TaskID>,
+        task_manager: &mut TaskManager,
     ) {
         let new_pos = self.position + Vector2D::new(displacement_x as i32, displacement_y as i32);
         let new_pos = new_pos
@@ -140,6 +145,18 @@ impl Mouse {
             self.drag_layer_id = None;
         }
 
+        if self.drag_layer_id == None {
+            send_mouse_message(
+                new_pos,
+                pos_diff,
+                buttons,
+                layout_manager,
+                active_layer,
+                layer_task_map,
+                task_manager,
+            );
+        }
+
         self.previous_buttons = buttons;
     }
 }
@@ -156,6 +173,45 @@ pub fn draw_mouse_cursor(writer: &mut Window, position: &Vector2D<i32>) {
             };
             writer.write(position.x + dx as i32, position.y + dy as i32, color);
         }
+    }
+}
+
+pub fn send_mouse_message(
+    newpos: Vector2D<i32>,
+    posdiff: Vector2D<i32>,
+    buttons: u8,
+    layer_manager: &mut LayerManager,
+    active_layer: &mut ActiveLayer,
+    layer_task_map: &mut BTreeMap<LayerID, TaskID>,
+    task_manager: &mut TaskManager,
+) {
+    let active_layer_id = match active_layer.get_active_layer_id() {
+        None => return,
+        Some(id) => id,
+    };
+
+    let layer = layer_manager
+        .get_layer_mut(active_layer_id)
+        .expect("failed to get layer");
+
+    let task_it = match layer_task_map.get(&active_layer_id) {
+        None => return,
+        Some(id) => id,
+    };
+
+    if posdiff.x != 0 || posdiff.y != 0 {
+        let relpos = newpos - layer.position();
+        let msg = Message::new(MessageType::MouseMove(MouseMoveMessage {
+            x: relpos.x,
+            y: relpos.y,
+            dx: posdiff.x,
+            dy: posdiff.y,
+            buttons,
+        }));
+
+        task_manager
+            .send_message(*task_it, msg)
+            .expect("failed to send message");
     }
 }
 

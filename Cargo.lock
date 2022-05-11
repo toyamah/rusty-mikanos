@@ -81,6 +81,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "eye"
+version = "0.1.0"
+dependencies = [
+ "libm",
+ "shared_lib",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
