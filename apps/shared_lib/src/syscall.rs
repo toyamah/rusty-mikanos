@@ -77,6 +77,7 @@ impl SyscallResult {
     }
 }
 
+#[derive(Debug)]
 pub struct SyscallError {
     value: u64,
     error_number: i32,

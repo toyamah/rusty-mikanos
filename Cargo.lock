@@ -81,6 +81,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cube"
+version = "0.1.0"
+dependencies = [
+ "libm",
+ "shared_lib",
+]
+
+[[package]]
 name = "eye"
 version = "0.1.0"
 dependencies = [
