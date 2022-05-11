@@ -196,6 +196,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paint"
+version = "0.1.0"
+dependencies = [
+ "shared_lib",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"

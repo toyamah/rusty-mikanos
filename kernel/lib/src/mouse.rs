@@ -1,8 +1,9 @@
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use crate::layer::{ActiveLayer, LayerID, LayerManager};
-use crate::message::{Message, MessageType, MouseMoveMessage};
+use crate::message::{Message, MessageType, MouseButtonMessage, MouseMoveMessage};
 use crate::task::{TaskID, TaskManager};
+use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::Window;
 use alloc::collections::BTreeMap;
 use shared::PixelFormat;
@@ -111,7 +112,7 @@ impl Mouse {
         displacement_y: i8,
         screen_size: Vector2D<i32>,
         layout_manager: &mut LayerManager,
-        screen_frame_buffer: &mut FrameBuffer,
+        frame_buffer: &mut FrameBuffer,
         active_layer: &mut ActiveLayer,
         layer_task_map: &mut BTreeMap<LayerID, TaskID>,
         task_manager: &mut TaskManager,
@@ -124,22 +125,25 @@ impl Mouse {
         let old_pos = self.position;
         self.position = new_pos;
         let pos_diff = self.position - old_pos;
-        layout_manager.move_(self.layer_id, self.position, screen_frame_buffer);
+        layout_manager.move_(self.layer_id, self.position, frame_buffer);
 
         let previous_left_pressed = (self.previous_buttons & 0x01) != 0;
         let left_pressed = (buttons & 0x01) != 0;
         if !previous_left_pressed && left_pressed {
-            let draggable_layer_id = layout_manager
+            let draggable_layer = layout_manager
                 .find_layer_by_position(new_pos, self.layer_id)
-                .filter(|l| l.is_draggable())
-                .map(|l| l.id());
-            if let Some(id) = draggable_layer_id {
-                self.drag_layer_id = Some(id);
+                .filter(|l| l.is_draggable());
+            if let Some(layer) = draggable_layer {
+                let y_layer = self.position.y - layer.position().y;
+                if y_layer < TITLED_WINDOW_TOP_LEFT_MARGIN.y {
+                    self.drag_layer_id = Some(layer.id());
+                }
             }
-            active_layer.activate(draggable_layer_id, layout_manager, screen_frame_buffer);
+            let draggable_id = draggable_layer.map(|l| l.id());
+            active_layer.activate(draggable_id, layout_manager, frame_buffer);
         } else if previous_left_pressed && left_pressed {
             if let Some(drag_layer_id) = self.drag_layer_id {
-                layout_manager.move_relative(drag_layer_id, pos_diff, screen_frame_buffer);
+                layout_manager.move_relative(drag_layer_id, pos_diff, frame_buffer);
             }
         } else if previous_left_pressed && !left_pressed {
             self.drag_layer_id = None;
@@ -150,6 +154,7 @@ impl Mouse {
                 new_pos,
                 pos_diff,
                 buttons,
+                self.previous_buttons,
                 layout_manager,
                 active_layer,
                 layer_task_map,
@@ -176,10 +181,12 @@ pub fn draw_mouse_cursor(writer: &mut Window, position: &Vector2D<i32>) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn send_mouse_message(
     newpos: Vector2D<i32>,
     posdiff: Vector2D<i32>,
     buttons: u8,
+    previous_buttons: u8,
     layer_manager: &mut LayerManager,
     active_layer: &mut ActiveLayer,
     layer_task_map: &mut BTreeMap<LayerID, TaskID>,
@@ -199,6 +206,7 @@ pub fn send_mouse_message(
         Some(id) => id,
     };
 
+    let relpos = newpos - layer.position();
     if posdiff.x != 0 || posdiff.y != 0 {
         let relpos = newpos - layer.position();
         let msg = Message::new(MessageType::MouseMove(MouseMoveMessage {
@@ -212,6 +220,24 @@ pub fn send_mouse_message(
         task_manager
             .send_message(*task_it, msg)
             .expect("failed to send message");
+    }
+
+    if previous_buttons != buttons {
+        let diff = previous_buttons ^ buttons;
+        for i in 0..8 {
+            let is_button_state_changed = ((diff >> i) & 1) == 1;
+            if is_button_state_changed {
+                let msg = Message::new(MessageType::MouseButton(MouseButtonMessage {
+                    x: relpos.x,
+                    y: relpos.y,
+                    press: ((buttons >> i) & 1) as i32,
+                    button: i,
+                }));
+                task_manager
+                    .send_message(*task_it, msg)
+                    .expect("failed to send message");
+            }
+        }
     }
 }
 

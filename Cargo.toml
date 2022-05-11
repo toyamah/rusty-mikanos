@@ -9,5 +9,6 @@ members = [
     "apps/winhello",
     "apps/stars",
     "apps/lines",
-    "apps/eye"
+    "apps/eye",
+    "apps/paint",
 ]
