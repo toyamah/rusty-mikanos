@@ -66,6 +66,20 @@ extern "C" {
     void RegisterKeyboardObserver(keyboard_observer keyboard_observer) {
         usb::HIDKeyboardDriver::default_observer = keyboard_observer;
     }
+
+    uint64_t GetCurrentTaskOSStackPointerInRust();
+}
+
+__attribute__((no_caller_saved_registers))
+extern "C" uint64_t GetCurrentTaskOSStackPointer() {
+    auto p = GetCurrentTaskOSStackPointerInRust();
+
+    // this code is needed to avoid call instruction for GetCurrentTaskOSStackPointerInRust instead of jmp
+    if (p == 1) {
+        while (1) __asm__("hlt");
+    }
+
+    return p;
 }
 
 // Define to solve the following

@@ -1,4 +1,5 @@
-use crate::c_char;
+use crate::rust_official::cstr::CStr;
+use crate::{c_char, libc, AppEvent};
 use core::ffi::c_void;
 
 extern "C" {
@@ -45,6 +46,8 @@ extern "C" {
     ) -> SyscallResult;
 
     pub(crate) fn SyscallCloseWindow(layer_id_flags: u64) -> SyscallResult;
+
+    pub(crate) fn SyscallReadEvent(events: *mut AppEvent, len: usize) -> SyscallResult;
 }
 
 #[repr(C)]
@@ -86,5 +89,11 @@ impl SyscallError {
 
     pub fn error_number(&self) -> i32 {
         self.error_number
+    }
+
+    pub fn strerror(&self) -> &str {
+        let s = unsafe { libc::strerror(self.error_number) };
+        let cs = unsafe { CStr::from_ptr(s as *const _) };
+        cs.to_str().expect("could not convert errno to str")
     }
 }

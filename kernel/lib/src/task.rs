@@ -32,6 +32,13 @@ pub mod global {
         ));
         unsafe { asm!("sti") };
     }
+
+    #[no_mangle]
+    extern "C" fn GetCurrentTaskOSStackPointerInRust() -> u64 {
+        let p = *task_manager().current_task().os_stack_pointer();
+        assert_ne!(p, 1); // Do the same check as c++ code
+        p
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]

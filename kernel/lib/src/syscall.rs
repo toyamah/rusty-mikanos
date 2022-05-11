@@ -1,9 +1,12 @@
+use crate::app_event::{AppEvent, AppEventType};
 use crate::asm::global::{write_msr, SyscallEntry};
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
-use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
+use crate::keyboard::{KEY_Q, L_CONTROL_BIT_MASK, R_CONTROL_BIT_MASK};
+use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
 use crate::layer::LayerID;
+use crate::message::MessageType;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
@@ -14,7 +17,7 @@ use crate::timer::TIMER_FREQ;
 use crate::Window;
 use core::arch::asm;
 use core::mem;
-use log::{log, Level};
+use log::{debug, log, Level};
 
 type SyscallFuncType = fn(u64, u64, u64, u64, u64, u64) -> SyscallResult;
 
@@ -22,6 +25,7 @@ type SyscallFuncType = fn(u64, u64, u64, u64, u64, u64) -> SyscallResult;
 const EPERM: i32 = 1; // Operation not permitted (POSIX.1-2001).
 const E2BIG: i32 = 7; // Argument list too long
 const EBADF: i32 = 9; // Bad file descriptor
+const EFAULT: i32 = 14; // Bad address
 
 #[repr(C)]
 struct SyscallResult {
@@ -110,6 +114,9 @@ fn open_window(w: u64, h: u64, x: u64, y: u64, title: u64, _a6: u64) -> SyscallR
         .move_(Vector2D::new(x as i32, y as i32))
         .id();
     active_layer().activate(Some(layer_id), layer_manager(), screen_frame_buffer());
+
+    let task_id = task_manager().current_task().id();
+    layer_task_map().insert(layer_id, task_id);
     unsafe { asm!("sti") };
 
     SyscallResult::ok(layer_id.value() as u64)
@@ -254,8 +261,58 @@ fn close_window(
     SyscallResult::ok(0)
 }
 
+fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
+    if app_events < 0x8000_0000_0000_0000 {
+        return SyscallResult::err(0, EFAULT);
+    }
+    let app_events = app_events as *mut u64 as *mut AppEvent;
+    let len = len as usize;
+
+    unsafe { asm!("cli") };
+    let task = task_manager().current_task_mut();
+    unsafe { asm!("sti") };
+
+    let mut i = 0;
+    while i < len {
+        unsafe { asm!("cli") };
+        let msg = task.receive_message();
+        if msg.is_none() && i == 0 {
+            task_manager()
+                .sleep(task.id())
+                .expect("could not sleep a task");
+            continue;
+        }
+        unsafe { asm!("sti") };
+
+        let msg = if let Some(m) = msg {
+            m
+        } else {
+            break;
+        };
+
+        match msg.m_type {
+            MessageType::KeyPush {
+                modifier,
+                keycode,
+                ascii: _,
+            } => {
+                let is_control_inputted = modifier & (L_CONTROL_BIT_MASK | R_CONTROL_BIT_MASK) != 0;
+                if keycode == KEY_Q && is_control_inputted {
+                    let event = unsafe { app_events.add(i).as_mut() }
+                        .expect("failed to convert to AppEvent Ref");
+                    event.set_type(AppEventType::Quit);
+                    i += 1;
+                }
+            }
+            _ => debug!("uncaught event type: {:?}", msg.m_type),
+        }
+    }
+
+    SyscallResult::ok(i as u64)
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 10] = [
+static mut syscall_table: [SyscallFuncType; 11] = [
     log_string,
     put_string,
     exit,
@@ -266,6 +323,7 @@ static mut syscall_table: [SyscallFuncType; 10] = [
     win_redraw,
     win_draw_line,
     close_window,
+    read_event,
 ];
 
 pub fn initialize_syscall() {
