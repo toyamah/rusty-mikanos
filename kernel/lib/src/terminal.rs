@@ -108,7 +108,11 @@ pub mod global {
                     modifier,
                     keycode,
                     ascii,
+                    press,
                 } => {
+                    if !press {
+                        continue;
+                    }
                     let area = terminal().input_key(
                         modifier,
                         keycode,

@@ -186,6 +186,7 @@ pub extern "C" fn KernelMainNewStack(
                 modifier: _,
                 keycode,
                 ascii,
+                press,
             } => {
                 let act = active_layer().get_active_layer_id();
                 if act.is_none() {
@@ -193,7 +194,7 @@ pub extern "C" fn KernelMainNewStack(
                 }
                 let act = act.unwrap();
 
-                if act == text_window_layer_id() {
+                if act == text_window_layer_id() && press {
                     input_text_window(ascii);
                 } else {
                     unsafe { asm!("cli") };
@@ -254,8 +255,8 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
     );
 }
 
-extern "C" fn keyboard_observer(modifier: u8, keycode: u8) {
-    keyboard::on_input(modifier, keycode, task_manager());
+extern "C" fn keyboard_observer(modifier: u8, keycode: u8, press: bool) {
+    keyboard::on_input(modifier, keycode, press, task_manager());
 }
 
 fn initialize_main_window() {

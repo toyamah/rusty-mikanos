@@ -37,6 +37,7 @@ pub enum MessageType {
         modifier: u8,
         keycode: u8,
         ascii: char,
+        press: bool,
     },
     Layer(LayerMessage),
     LayerFinish,

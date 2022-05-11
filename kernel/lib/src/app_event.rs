@@ -14,6 +14,7 @@ pub enum AppEventType {
     MouseMove,
     MouseButton,
     TimerTimeout,
+    KeyPush,
 }
 
 #[derive(Copy, Clone)]
@@ -22,6 +23,7 @@ pub union AppEventArg {
     pub mouse_move: MouseMove,
     pub mouse_button: MouseButton,
     pub timer_timeout: TimerTimeout,
+    pub key_push: KeyPush,
     pub empty: (),
 }
 
@@ -52,6 +54,15 @@ pub struct MouseButton {
 pub struct TimerTimeout {
     pub timeout: u64,
     pub value: i32,
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct KeyPush {
+    pub modifier: u8,
+    pub keycode: u8,
+    pub ascii: char,
+    pub press: bool,
 }
 
 impl Default for AppEvent {
