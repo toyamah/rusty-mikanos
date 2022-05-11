@@ -1,7 +1,7 @@
 use crate::interrupt::global::notify_end_of_interrupt;
 use crate::message::{Message, MessageType};
 use crate::task::global::task_manager;
-use crate::task::{TaskContext, TaskManager};
+use crate::task::{TaskContext, TaskID, TaskManager};
 use crate::timer::global::timer_manager;
 use alloc::collections::BinaryHeap;
 use core::arch::asm;
@@ -11,8 +11,9 @@ use core::ptr::read_volatile;
 const COUNT_MAX: u32 = 0xffffffff;
 pub const TIMER_FREQ: u64 = 100;
 
-pub const TASK_TIMER_PERIOD: u64 = TIMER_FREQ / 50;
-pub const TASK_TIMER_VALUE: i32 = i32::MIN;
+const TASK_TIMER_PERIOD: u64 = TIMER_FREQ / 50;
+// indicates the value for switching a task
+const TASK_TIMER_VALUE: i32 = i32::MAX;
 
 pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
@@ -99,11 +100,25 @@ fn divide_config() -> *mut u32 {
 pub struct Timer {
     timeout: u64,
     value: i32,
+    task_id: Option<TaskID>,
 }
 
 impl Timer {
-    pub fn new(timeout: u64, value: i32) -> Timer {
-        Self { timeout, value }
+    pub fn new(timeout: u64, value: i32, task_id: TaskID) -> Timer {
+        Self {
+            timeout,
+            value,
+            task_id: Some(task_id),
+        }
+    }
+
+    fn sentinel() -> Self {
+        Self {
+            // the sentinel timer is the longest timeout
+            timeout: u64::MAX,
+            value: 0,
+            task_id: None,
+        }
     }
 }
 
@@ -136,10 +151,11 @@ pub struct TimerManager {
 impl TimerManager {
     pub fn new() -> TimerManager {
         let mut timers = BinaryHeap::new();
-        timers.push(Timer::new(u64::MAX, -1));
+        timers.push(Timer::sentinel());
         Self { tick: 0, timers }
     }
 
+    /// ticks the clock and returns whether switching a task is needed or not
     pub fn tick(&mut self, task_manager: &mut TaskManager) -> bool {
         // unsafe { write_volatile(&mut self.tick as *mut u64, self.tick + 1) };
         self.tick += 1;
@@ -154,18 +170,17 @@ impl TimerManager {
             if t.value == TASK_TIMER_VALUE {
                 task_timer_timeout = true;
                 self.timers.pop();
-                self.timers
-                    .push(Timer::new(self.tick + TASK_TIMER_PERIOD, TASK_TIMER_VALUE));
+                self.add_timer_for_switching_task(task_manager.main_task().id());
                 continue;
             }
 
-            let m = Message::new(MessageType::TimerTimeout {
-                timeout: t.timeout,
-                value: t.value,
-            });
-            task_manager
-                .send_message(task_manager.main_task().id(), m)
-                .unwrap();
+            if let Some(task_id) = t.task_id {
+                let m = Message::new(MessageType::TimerTimeout {
+                    timeout: t.timeout,
+                    value: t.value,
+                });
+                task_manager.send_message(task_id, m).unwrap();
+            }
             self.timers.pop();
         }
 
@@ -187,6 +202,14 @@ impl TimerManager {
     pub fn add_timer(&mut self, timer: Timer) {
         self.timers.push(timer);
     }
+
+    pub(crate) fn add_timer_for_switching_task(&mut self, main_task_id: TaskID) {
+        self.add_timer(Timer::new(
+            self.tick + TASK_TIMER_PERIOD,
+            TASK_TIMER_VALUE,
+            main_task_id,
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -198,18 +221,24 @@ mod tests {
 
     #[test]
     fn timer_manager_tick() {
-        let mut manager = TimerManager::new();
-        manager.add_timer(Timer::new(3, 3));
-        manager.add_timer(Timer::new(1, 1));
-        manager.add_timer(Timer::new(2, 2));
-        manager.add_timer(Timer::new(1, 11));
         let mut task_manager = TaskManager::new(dummy_context, |_| {});
         task_manager.initialize(|| 0);
+        let main_task_id = task_manager.main_task().id();
+
+        let mut manager = TimerManager::new();
+        manager.add_timer(Timer::new(3, 3, main_task_id));
+        manager.add_timer(Timer::new(1, 1, main_task_id));
+        manager.add_timer(Timer::new(2, 2, main_task_id));
+        manager.add_timer(Timer::new(1, 11, main_task_id));
 
         manager.tick(&mut task_manager);
         assert_eq!(
             get_timers(&mut manager),
-            vec![Timer::new(u64::MAX, -1), Timer::new(3, 3), Timer::new(2, 2)]
+            vec![
+                Timer::new(u64::MAX, -1, main_task_id),
+                Timer::new(3, 3, main_task_id),
+                Timer::new(2, 2, main_task_id)
+            ]
         );
         assert_eq!(
             get_received_message_timers(&mut task_manager),
@@ -219,7 +248,10 @@ mod tests {
         manager.tick(&mut task_manager);
         assert_eq!(
             get_timers(&mut manager),
-            vec![Timer::new(u64::MAX, -1), Timer::new(3, 3)]
+            vec![
+                Timer::new(u64::MAX, -1, main_task_id),
+                Timer::new(3, 3, main_task_id)
+            ]
         );
         assert_eq!(
             get_received_message_timers(&mut task_manager),
@@ -227,7 +259,10 @@ mod tests {
         );
 
         manager.tick(&mut task_manager);
-        assert_eq!(get_timers(&mut manager), vec![Timer::new(u64::MAX, -1)]);
+        assert_eq!(
+            get_timers(&mut manager),
+            vec![Timer::new(u64::MAX, -1, main_task_id)]
+        );
         assert_eq!(
             get_received_message_timers(&mut task_manager),
             vec![message(3, 3)]
@@ -237,7 +272,10 @@ mod tests {
         manager.tick(&mut task_manager);
         manager.tick(&mut task_manager);
         manager.tick(&mut task_manager);
-        assert_eq!(get_timers(&mut manager), vec![Timer::new(u64::MAX, -1)]);
+        assert_eq!(
+            get_timers(&mut manager),
+            vec![Timer::new(u64::MAX, -1, main_task_id)]
+        );
         assert_eq!(get_received_message_timers(&mut task_manager), vec![]);
     }
 

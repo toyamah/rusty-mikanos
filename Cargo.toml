@@ -11,4 +11,5 @@ members = [
     "apps/lines",
     "apps/eye",
     "apps/paint",
+    "apps/timer",
 ]

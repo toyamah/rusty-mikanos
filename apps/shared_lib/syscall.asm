@@ -10,14 +10,15 @@ Syscall%1:
     ret
 %endmacro
 
-define_syscall LogString, 0x80000000
-define_syscall PutString, 0x80000001
-define_syscall Exit,      0x80000002
-define_syscall OpenWindow, 0x80000003
-define_syscall WinWriteString, 0x80000004
+define_syscall LogString,        0x80000000
+define_syscall PutString,        0x80000001
+define_syscall Exit,             0x80000002
+define_syscall OpenWindow,       0x80000003
+define_syscall WinWriteString,   0x80000004
 define_syscall WinFillRectangle, 0x80000005
-define_syscall GetCurrentTick, 0x80000006
-define_syscall WinRedraw, 0x80000007
-define_syscall WinDrawLine, 0x80000008
-define_syscall CloseWindow, 0x80000009
-define_syscall ReadEvent, 0x8000000a
+define_syscall GetCurrentTick,   0x80000006
+define_syscall WinRedraw,        0x80000007
+define_syscall WinDrawLine,      0x80000008
+define_syscall CloseWindow,      0x80000009
+define_syscall ReadEvent,        0x8000000a
+define_syscall CreateTimer,      0x8000000b

@@ -1,4 +1,4 @@
-use crate::app_event::{AppEvent, AppEventArg, AppEventType};
+use crate::app_event::{AppEvent, AppEventArg, AppEventType, TimerTimeout};
 use crate::asm::global::{write_msr, SyscallEntry};
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
@@ -13,7 +13,7 @@ use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
 use crate::terminal::global::{get_terminal_mut_by, terminal_window};
 use crate::timer::global::timer_manager;
-use crate::timer::TIMER_FREQ;
+use crate::timer::{Timer, TIMER_FREQ};
 use crate::Window;
 use core::arch::asm;
 use core::mem;
@@ -26,6 +26,7 @@ const EPERM: i32 = 1; // Operation not permitted (POSIX.1-2001).
 const E2BIG: i32 = 7; // Argument list too long
 const EBADF: i32 = 9; // Bad file descriptor
 const EFAULT: i32 = 14; // Bad address
+const EINVAL: i32 = 22; // Invalid argument
 
 #[repr(C)]
 struct SyscallResult {
@@ -322,6 +323,21 @@ fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
                 };
                 i += 1;
             }
+            MessageType::TimerTimeout { timeout, value } => {
+                let event = unsafe { app_events.add(i).as_mut() }
+                    .expect("failed to convert to AppEvent Ref");
+                let is_created_by_app = value < 0;
+                if is_created_by_app {
+                    event.type_ = AppEventType::TimerTimeout;
+                    event.arg = AppEventArg {
+                        timer_timeout: TimerTimeout {
+                            timeout,
+                            value: -value,
+                        },
+                    };
+                    i += 1;
+                }
+            }
             _ => debug!("uncaught event type: {:?}", msg.m_type),
         }
     }
@@ -329,8 +345,39 @@ fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
     SyscallResult::ok(i as u64)
 }
 
+fn create_timer(
+    mode: u64,
+    timer_value: u64,
+    timeout_ms: u64,
+    _a4: u64,
+    _a5: u64,
+    _a6: u64,
+) -> SyscallResult {
+    let mode = mode as u32;
+    let timer_value = timer_value as i32;
+    if timer_value <= 0 {
+        return SyscallResult::err(0, EINVAL);
+    }
+
+    unsafe { asm!("cli") };
+    let task_id = task_manager().current_task().id();
+    unsafe { asm!("sti") };
+
+    let is_relative = mode & 1 == 1;
+    let timeout = if is_relative {
+        timeout_ms * TIMER_FREQ / 1000 + timer_manager().current_tick()
+    } else {
+        timeout_ms * TIMER_FREQ / 1000
+    };
+
+    unsafe { asm!("cli") };
+    timer_manager().add_timer(Timer::new(timeout, -timer_value, task_id));
+    unsafe { asm!("sti") };
+    SyscallResult::new(timeout * 1000 / TIMER_FREQ, 0)
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 11] = [
+static mut syscall_table: [SyscallFuncType; 12] = [
     log_string,
     put_string,
     exit,
@@ -342,6 +389,7 @@ static mut syscall_table: [SyscallFuncType; 11] = [
     win_draw_line,
     close_window,
     read_event,
+    create_timer,
 ];
 
 pub fn initialize_syscall() {

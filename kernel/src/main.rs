@@ -25,6 +25,7 @@ use lib::layer::LayerID;
 use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
+use lib::task::TaskID;
 use lib::terminal::global::task_terminal;
 use lib::timer::global::timer_manager;
 use lib::timer::{Timer, TIMER_FREQ};
@@ -112,8 +113,13 @@ pub extern "C" fn KernelMainNewStack(
 
     let text_box_cursor_timer = 1;
     let timer_05_sec = TIMER_FREQ / 2;
+    let expected_main_task_id = TaskID::new(0); // prepare because the main task id is created after it
     unsafe { asm!("cli") };
-    timer_manager().add_timer(Timer::new(timer_05_sec, text_box_cursor_timer));
+    timer_manager().add_timer(Timer::new(
+        timer_05_sec,
+        text_box_cursor_timer,
+        expected_main_task_id,
+    ));
     unsafe { asm!("sti") };
     let mut text_box_cursor_visible = false;
 
@@ -121,6 +127,7 @@ pub extern "C" fn KernelMainNewStack(
 
     task::global::initialize();
     let main_task_id = task_manager().main_task_mut().id();
+    assert_eq!(main_task_id, expected_main_task_id);
     let task_terminal_id = task_manager()
         .new_task()
         .init_context(task_terminal, 0, get_cr3)
@@ -158,8 +165,11 @@ pub extern "C" fn KernelMainNewStack(
             MessageType::TimerTimeout { timeout, value } => {
                 if value == text_box_cursor_timer {
                     unsafe { asm!("cli") };
-                    timer_manager()
-                        .add_timer(Timer::new(timeout + timer_05_sec, text_box_cursor_timer));
+                    timer_manager().add_timer(Timer::new(
+                        timeout + timer_05_sec,
+                        text_box_cursor_timer,
+                        main_task_id,
+                    ));
                     unsafe { asm!("sti") };
                     text_box_cursor_visible = !text_box_cursor_visible;
                     draw_text_cursor(text_box_cursor_visible);
