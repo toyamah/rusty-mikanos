@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(format_args_nl)]
-
+#![allow(unused_assignments)]
 use core::arch::asm;
 use core::cmp;
 use core::f64::consts::PI;
@@ -204,7 +204,7 @@ fn sleep(ms: u64) -> bool {
         prev_timeout = timeout;
     } else {
         prev_timeout += ms;
-        create_timer(TimerType::OneshotAbs, 1, prev_timeout);
+        create_timer(TimerType::OneshotAbs, 1, prev_timeout).unwrap();
     }
 
     let mut events = [Default::default(); 1];
