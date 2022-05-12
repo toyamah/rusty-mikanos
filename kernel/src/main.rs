@@ -17,6 +17,7 @@ use lib::graphics::{
     fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
 };
 use lib::interrupt::global::initialize_interrupt;
+use lib::keyboard::KEY_F2;
 use lib::layer::global::{
     active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager, layer_task_map,
     screen_frame_buffer,
@@ -196,6 +197,12 @@ pub extern "C" fn KernelMainNewStack(
 
                 if act == text_window_layer_id() && press {
                     input_text_window(ascii);
+                } else if press && keycode == KEY_F2 {
+                    let id = task_manager()
+                        .new_task()
+                        .init_context(task_terminal, 0, get_cr3)
+                        .id();
+                    task_manager().wake_up(id).unwrap();
                 } else {
                     unsafe { asm!("cli") };
                     let task_id = layer_task_map().get(&act);
