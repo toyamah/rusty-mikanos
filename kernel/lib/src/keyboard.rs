@@ -72,6 +72,7 @@ const KEYCODE_MAP_SHIFT: [char; 256] = [
 ];
 
 pub const KEY_Q: u8 = 20;
+pub const KEY_F2: u8 = 59;
 pub const L_CONTROL_BIT_MASK: u8 = 0b00000001;
 pub const L_SHIFT_BIT_MASK: u8 = 0b00000010;
 pub const L_ALT_BIT_MASK: u8 = 0b00000100;
