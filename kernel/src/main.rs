@@ -320,7 +320,7 @@ fn input_text_window(c: char) {
         let pos = pos();
         text_window()
             .writer()
-            .write_ascii(pos.x, pos.y, c, &COLOR_WHITE);
+            .write_ascii(pos.x, pos.y, c, &COLOR_BLACK);
         unsafe { TEXT_WINDOW_INDEX += 1 };
         draw_text_cursor(true);
     }

@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(format_args_nl)]
+#![allow(unused_assignments)]
 
 use core::arch::asm;
 use core::f64::consts::PI;
@@ -76,7 +77,7 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
             prev_timeout = timeout;
         } else {
             prev_timeout += 1000 / FRAME_RATE as u64;
-            create_timer(TimerType::OneshotAbs, 1, prev_timeout);
+            create_timer(TimerType::OneshotAbs, 1, prev_timeout).unwrap();
         }
 
         let mut events = [Default::default(); 1];
