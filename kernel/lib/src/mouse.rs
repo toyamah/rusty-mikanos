@@ -140,7 +140,13 @@ impl Mouse {
                 }
             }
             let draggable_id = draggable_layer.map(|l| l.id());
-            active_layer.activate(draggable_id, layout_manager, frame_buffer);
+            active_layer.activate(
+                draggable_id,
+                layout_manager,
+                frame_buffer,
+                task_manager,
+                layer_task_map,
+            );
         } else if previous_left_pressed && left_pressed {
             if let Some(drag_layer_id) = self.drag_layer_id {
                 layout_manager.move_relative(drag_layer_id, pos_diff, frame_buffer);

@@ -114,7 +114,13 @@ fn open_window(w: u64, h: u64, x: u64, y: u64, title: u64, _a6: u64) -> SyscallR
         .set_draggable(true)
         .move_(Vector2D::new(x as i32, y as i32))
         .id();
-    active_layer().activate(Some(layer_id), layer_manager(), screen_frame_buffer());
+    active_layer().activate(
+        Some(layer_id),
+        layer_manager(),
+        screen_frame_buffer(),
+        task_manager(),
+        layer_task_map(),
+    );
 
     let task_id = task_manager().current_task().id();
     layer_task_map().insert(layer_id, task_id);
@@ -254,7 +260,13 @@ fn close_window(
     let win_size = layer.get_window_ref().size().to_i32_vec2d();
 
     unsafe { asm!("cli") };
-    active_layer().activate(None, layer_manager(), screen_frame_buffer());
+    active_layer().activate(
+        None,
+        layer_manager(),
+        screen_frame_buffer(),
+        task_manager(),
+        layer_task_map(),
+    );
     layer_manager().remove_layer(layer_id);
     layer_manager().draw_on(Rectangle::new(layer_pos, win_size), screen_frame_buffer());
     unsafe { asm!("sti") };
