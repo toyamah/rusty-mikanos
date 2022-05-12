@@ -1,6 +1,9 @@
+use crate::error::{Code, Error};
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{Rectangle, Vector2D};
-use crate::message::{LayerMessage, LayerOperation};
+use crate::make_error;
+use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
+use crate::task::{TaskID, TaskManager};
 use crate::window::Window;
 use alloc::collections::BTreeMap;
 use alloc::vec;
@@ -422,6 +425,8 @@ impl ActiveLayer {
         layer_id: Option<LayerID>,
         manager: &mut LayerManager,
         screen: &mut FrameBuffer,
+        task_manager: &mut TaskManager,
+        layer_task_map: &BTreeMap<LayerID, TaskID>,
     ) {
         if self.active_layer_id == layer_id {
             return;
@@ -433,6 +438,13 @@ impl ActiveLayer {
                 .unwrap_or_else(|| panic!("no such layer {}", active_layer_id));
             layer.get_window_mut().deactivate();
             manager.draw_layer_of(active_layer_id, screen);
+            Self::send_window_active_message(
+                active_layer_id,
+                WindowActiveMode::Deactivate,
+                task_manager,
+                layer_task_map,
+            )
+            .unwrap();
         }
 
         self.active_layer_id = layer_id;
@@ -444,6 +456,26 @@ impl ActiveLayer {
             let mouse_height = manager.get_height(self.mouser_layer_id).unwrap_or(-1);
             manager.up_down(active_layer_id, mouse_height - 1);
             manager.draw_layer_of(active_layer_id, screen);
+            Self::send_window_active_message(
+                active_layer_id,
+                WindowActiveMode::Activate,
+                task_manager,
+                layer_task_map,
+            )
+            .unwrap();
+        }
+    }
+
+    fn send_window_active_message(
+        layer_id: LayerID,
+        mode: WindowActiveMode,
+        task_manager: &mut TaskManager,
+        layer_task_map: &BTreeMap<LayerID, TaskID>,
+    ) -> Result<(), Error> {
+        if let Some(&task_id) = layer_task_map.get(&layer_id) {
+            task_manager.send_message(task_id, Message::new(MessageType::WindowActive(mode)))
+        } else {
+            Err(make_error!(Code::NoSuchTask))
         }
     }
 }

@@ -33,10 +33,12 @@ pub mod global {
     use crate::graphics::Vector2D;
     use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
     use crate::layer::LayerID;
-    use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
+    use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
     use crate::task::global::task_manager;
     use crate::task::TaskID;
     use crate::terminal::Terminal;
+    use crate::timer::global::timer_manager;
+    use crate::timer::{Timer, TIMER_FREQ};
     use crate::Window;
     use alloc::collections::BTreeMap;
     use core::arch::asm;
@@ -60,18 +62,24 @@ pub mod global {
                 Vector2D::new(100, 200),
                 screen_frame_buffer(),
             );
+            layer_task_map().insert(terminal.layer_id, task_id);
             active_layer().activate(
                 Some(terminal.layer_id),
                 layer_manager(),
                 screen_frame_buffer(),
+                task_manager(),
+                layer_task_map(),
             );
-            layer_task_map().insert(terminal.layer_id, task_id);
             unsafe { TERMINALS.insert(task_id, terminal) };
         }
         unsafe { asm!("sti") };
 
-        let terminal = || unsafe { TERMINALS.get_mut(&task_id).expect("no such terminal") };
+        let add_blink_timer =
+            |t: u64| timer_manager().add_timer(Timer::new(t + TIMER_FREQ / 2, 1, task_id));
+        add_blink_timer(timer_manager().current_tick());
+        let mut active_mode = WindowActiveMode::Deactivate;
 
+        let terminal = || unsafe { TERMINALS.get_mut(&task_id).expect("no such terminal") };
         loop {
             unsafe { asm!("cli") };
             let msg = task_manager()
@@ -87,22 +95,22 @@ pub mod global {
 
             let msg = msg.unwrap();
             match msg.m_type {
-                MessageType::TimerTimeout {
-                    timeout: _,
-                    value: _,
-                } => {
-                    let area = terminal().blink_cursor(terminal_window(terminal().layer_id));
+                MessageType::TimerTimeout { timeout, value: _ } => {
+                    add_blink_timer(timeout);
+                    if active_mode == WindowActiveMode::Activate {
+                        let area = terminal().blink_cursor(terminal_window(terminal().layer_id));
 
-                    let msg = Message::new(MessageType::Layer(LayerMessage {
-                        layer_id: terminal().layer_id,
-                        op: LayerOperation::DrawArea(area),
-                        src_task_id: task_id,
-                    }));
-                    unsafe { asm!("cli") };
-                    task_manager()
-                        .send_message(task_manager().main_task().id(), msg)
-                        .unwrap();
-                    unsafe { asm!("sti") };
+                        let msg = Message::new(MessageType::Layer(LayerMessage {
+                            layer_id: terminal().layer_id,
+                            op: LayerOperation::DrawArea(area),
+                            src_task_id: task_id,
+                        }));
+                        unsafe { asm!("cli") };
+                        task_manager()
+                            .send_message(task_manager().main_task().id(), msg)
+                            .unwrap();
+                        unsafe { asm!("sti") };
+                    }
                 }
                 MessageType::KeyPush {
                     modifier,
@@ -130,6 +138,7 @@ pub mod global {
                         .unwrap();
                     unsafe { asm!("sti") };
                 }
+                MessageType::WindowActive(mode) => active_mode = mode,
                 _ => {}
             }
         }

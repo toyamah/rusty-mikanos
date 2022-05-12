@@ -175,12 +175,6 @@ pub extern "C" fn KernelMainNewStack(
                     text_box_cursor_visible = !text_box_cursor_visible;
                     draw_text_cursor(text_box_cursor_visible);
                     layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
-
-                    unsafe { asm!("cli") };
-                    task_manager()
-                        .send_message(task_terminal_id, message)
-                        .unwrap();
-                    unsafe { asm!("sti") };
                 }
             }
             MessageType::KeyPush {

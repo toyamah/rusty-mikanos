@@ -12,18 +12,6 @@ impl Message {
     pub const fn new(m_type: MessageType) -> Message {
         Self { m_type }
     }
-
-    pub fn is_layer_finished(&self) -> bool {
-        match self.m_type {
-            MessageType::InterruptXhci => false,
-            MessageType::TimerTimeout { .. } => false,
-            MessageType::KeyPush { .. } => false,
-            MessageType::Layer(_) => false,
-            MessageType::LayerFinish => true,
-            MessageType::MouseMove(_) => false,
-            MessageType::MouseButton(_) => false,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -43,6 +31,7 @@ pub enum MessageType {
     LayerFinish,
     MouseMove(MouseMoveMessage),
     MouseButton(MouseButtonMessage),
+    WindowActive(WindowActiveMode),
 }
 
 #[derive(Debug, PartialEq)]
@@ -77,6 +66,12 @@ pub struct MouseButtonMessage {
     pub y: i32,
     pub press: i32,
     pub button: i32,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum WindowActiveMode {
+    Activate,
+    Deactivate,
 }
 
 // This trait is defined here because the app crate also uses app_event::MouseMove.
