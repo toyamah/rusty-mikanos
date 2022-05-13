@@ -444,7 +444,7 @@ impl ActiveLayer {
                 task_manager,
                 layer_task_map,
             )
-            .unwrap();
+            .unwrap_or_default(); // ignore error in the same way as the official
         }
 
         self.active_layer_id = layer_id;
@@ -462,7 +462,7 @@ impl ActiveLayer {
                 task_manager,
                 layer_task_map,
             )
-            .unwrap();
+            .unwrap_or_default(); // ignore error in the same way as the official
         }
     }
 
