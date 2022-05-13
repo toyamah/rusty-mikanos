@@ -131,6 +131,14 @@ impl Task {
         self
     }
 
+    pub(crate) fn set_cr3(&mut self, cr3: u64) {
+        self.context.cr3 = cr3;
+    }
+
+    pub(crate) fn get_cr3(&self) -> u64 {
+        self.context.cr3
+    }
+
     /// needs to call `wake_up` after this method is invoked
     fn send_message(&mut self, message: Message) {
         self.messages.push_back(message)

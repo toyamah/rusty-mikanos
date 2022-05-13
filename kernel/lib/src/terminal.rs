@@ -15,7 +15,7 @@ use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::task::global::task_manager;
-use crate::task::TaskID;
+use crate::task::{Task, TaskID};
 use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
 use crate::{fat, make_error, Window};
 use alloc::collections::VecDeque;
@@ -414,6 +414,12 @@ impl Terminal {
             return Ok(());
         }
 
+        unsafe { asm!("cli") };
+        let task = task_manager().current_task_mut();
+        unsafe { asm!("sti") };
+        let pm4 = PageMapEntry::setup_pml4(task, get_cr3(), memory_manager());
+        let task_id = task.id();
+
         elf_header.load_elf(get_cr3(), memory_manager())?;
 
         let args_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000);
@@ -459,6 +465,8 @@ impl Terminal {
             get_cr3(),
             memory_manager(),
         )
+        .unwrap();
+        PageMapEntry::free_pml4(task_manager().get_task_mut(task_id).unwrap())
     }
 
     pub(crate) fn print(&mut self, s: &str, w: &mut Window) {
