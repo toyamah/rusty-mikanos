@@ -421,7 +421,6 @@ impl Terminal {
         let task = task_manager().current_task_mut();
         unsafe { asm!("sti") };
         setup_pml4(task)?;
-        // let task_id = task.id();
 
         elf_header.load_elf(get_cr3(), memory_manager())?;
 
@@ -439,10 +438,6 @@ impl Terminal {
 
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_e000);
         PageMapEntry::setup_page_maps(stack_frame_addr, 1, get_cr3(), memory_manager())?;
-
-        unsafe { asm!("cli") };
-        let task = task_manager().current_task();
-        unsafe { asm!("sti") };
 
         let entry_addr = elf_header.e_entry;
         let ret = call_app(
