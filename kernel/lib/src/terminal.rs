@@ -1,4 +1,4 @@
-use crate::asm::global::{call_app, get_cr3};
+use crate::asm::global::{call_app, get_cr3, set_cr3};
 use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
 use crate::fat::{Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
@@ -9,7 +9,9 @@ use crate::graphics::{
 };
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
+use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
+use crate::paging::global::reset_cr3;
 use crate::paging::{LinearAddress4Level, PageMapEntry};
 use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
@@ -24,6 +26,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::fmt::Write;
+use core::intrinsics::copy_nonoverlapping;
 use core::ops::Deref;
 use core::{cmp, fmt, mem};
 use shared::PixelFormat;
@@ -417,8 +420,8 @@ impl Terminal {
         unsafe { asm!("cli") };
         let task = task_manager().current_task_mut();
         unsafe { asm!("sti") };
-        let pm4 = PageMapEntry::setup_pml4(task, get_cr3(), memory_manager());
-        let task_id = task.id();
+        setup_pml4(task)?;
+        // let task_id = task.id();
 
         elf_header.load_elf(get_cr3(), memory_manager())?;
 
@@ -466,7 +469,7 @@ impl Terminal {
             memory_manager(),
         )
         .unwrap();
-        PageMapEntry::free_pml4(task_manager().get_task_mut(task_id).unwrap())
+        free_pml4(task_manager().get_task_mut(task.id()).unwrap())
     }
 
     pub(crate) fn print(&mut self, s: &str, w: &mut Window) {
@@ -546,7 +549,7 @@ impl Terminal {
     }
 }
 
-impl fmt::Write for Terminal {
+impl Write for Terminal {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.print(s, global::terminal_window(self.layer_id));
         Ok(())
@@ -680,6 +683,26 @@ fn new_c_chars_vec(strs: &[&str]) -> Vec<*const c_char> {
         .map(|&s| CString::_new(s.as_bytes().to_vec()).unwrap())
         .map(|c| c.into_raw() as *const c_char)
         .collect::<Vec<_>>()
+}
+
+pub fn setup_pml4(current_task: &mut Task) -> Result<*mut PageMapEntry, Error> {
+    let pml4 = PageMapEntry::new_page_map(memory_manager())?;
+
+    let current_pml4 = get_cr3() as *const u64 as *const PageMapEntry;
+    unsafe { copy_nonoverlapping(current_pml4, pml4, 256 * mem::size_of::<u64>()) }
+
+    let cr3 = pml4 as usize as u64;
+    set_cr3(cr3);
+    current_task.set_cr3(cr3);
+    Ok(pml4)
+}
+
+pub fn free_pml4(current_task: &mut Task) -> Result<(), Error> {
+    let cr3 = current_task.get_cr3();
+    current_task.set_cr3(0);
+    reset_cr3();
+    let frame_id = FrameID::new(cr3 as usize / BYTES_PER_FRAME);
+    memory_manager().free(frame_id, 1)
 }
 
 extern "C" {

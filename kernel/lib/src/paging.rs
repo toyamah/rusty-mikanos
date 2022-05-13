@@ -1,11 +1,6 @@
-use crate::asm::global::set_cr3;
 use crate::error::Error;
-use crate::memory_manager::global::memory_manager;
 use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
-use crate::paging::global::reset_cr3;
-use crate::task::Task;
 use bit_field::BitField;
-use core::intrinsics::copy_nonoverlapping;
 use core::mem;
 use core::ptr::write_bytes;
 
@@ -266,30 +261,6 @@ impl PageMapEntry {
         }
 
         Ok(())
-    }
-
-    pub fn setup_pml4(
-        current_task: &mut Task,
-        cr3: u64,
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<*mut PageMapEntry, Error> {
-        let pml4 = PageMapEntry::new_page_map(memory_manager)?;
-
-        let current_pml4 = cr3 as *const u64 as *const PageMapEntry;
-        unsafe { copy_nonoverlapping(current_pml4, pml4, 256 * mem::size_of::<u64>()) }
-
-        let cr3 = pml4 as usize as u64;
-        set_cr3(cr3);
-        current_task.set_cr3(cr3);
-        Ok(pml4)
-    }
-
-    pub fn free_pml4(current_task: &mut Task) -> Result<(), Error> {
-        let cr3 = current_task.get_cr3();
-        current_task.set_cr3(0);
-        reset_cr3();
-        let frame_id = FrameID::new(cr3 as usize / BYTES_PER_FRAME);
-        memory_manager().free(frame_id, 1)
     }
 }
 
