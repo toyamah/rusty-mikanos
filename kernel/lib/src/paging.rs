@@ -198,7 +198,9 @@ impl PageMapEntry {
         child_map_result
     }
 
-    fn new_page_map(memory_manager: &mut BitmapMemoryManager) -> Result<*mut PageMapEntry, Error> {
+    pub fn new_page_map(
+        memory_manager: &mut BitmapMemoryManager,
+    ) -> Result<*mut PageMapEntry, Error> {
         let frame = memory_manager.allocate(1);
         if let Err(e) = frame {
             return Err(e);
@@ -371,5 +373,9 @@ pub mod global {
             // set the address of PM4_TABLE to the cr3 register
             set_cr3(&PML4_TABLE.0[0] as *const _ as u64);
         }
+    }
+
+    pub(crate) fn reset_cr3() {
+        unsafe { set_cr3(&PML4_TABLE.0[0] as *const _ as u64) }
     }
 }
