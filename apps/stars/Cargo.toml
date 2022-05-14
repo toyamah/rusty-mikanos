@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 shared_lib = { path = "../shared_lib", version = "0.1.0" }
-rand = { version = "0.8.4", default-features = false, features = ["small_rng"] }
+rand = { version = "0.8.5", default-features = false, features = ["small_rng"] }
