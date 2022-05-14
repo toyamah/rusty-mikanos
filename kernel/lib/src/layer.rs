@@ -8,6 +8,7 @@ use crate::window::Window;
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cmp;
 use core::fmt::{Display, Formatter};
 use core::ops::AddAssign;
 use shared::FrameBufferConfig;
@@ -271,14 +272,7 @@ impl LayerManager {
             return;
         }
 
-        let new_height = {
-            let h = new_height as usize;
-            if h > self.layer_id_stack.len() {
-                self.layer_id_stack.len()
-            } else {
-                h
-            }
-        };
+        let new_height = cmp::min(new_height as usize, self.layer_id_stack.len());
 
         let showing_layer_id = self
             .layer_id_stack
@@ -292,13 +286,13 @@ impl LayerManager {
                 self.layer_id_stack.insert(new_height, id);
             }
             Some((old_index, &layer_id)) => {
-                let height = if new_height == self.layer_id_stack.len() - 1 {
+                let height = if new_height == self.layer_id_stack.len() {
                     new_height - 1 // decrement because the stack will remove
                 } else {
                     new_height
                 };
                 self.layer_id_stack.remove(old_index);
-                self.layer_id_stack.insert(height - 1, layer_id);
+                self.layer_id_stack.insert(height, layer_id);
             }
         }
     }
@@ -453,6 +447,7 @@ impl ActiveLayer {
                 .get_layer_mut(active_layer_id)
                 .unwrap_or_else(|| panic!("no such layer {}", active_layer_id));
             layer.get_window_mut().activate();
+            manager.up_down(active_layer_id, 0);
             let mouse_height = manager.get_height(self.mouser_layer_id).unwrap_or(-1);
             manager.up_down(active_layer_id, mouse_height - 1);
             manager.draw_layer_of(active_layer_id, screen);
