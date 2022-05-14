@@ -129,15 +129,19 @@ pub extern "C" fn KernelMainNewStack(
     task::global::initialize();
     let main_task_id = task_manager().main_task_mut().id();
     assert_eq!(main_task_id, expected_main_task_id);
-    let task_terminal_id = task_manager()
-        .new_task()
-        .init_context(task_terminal, 0, get_cr3)
-        .id();
-    task_manager().wake_up(task_terminal_id).unwrap();
 
     usb::global::initialize();
     usb::register_keyboard_observer(keyboard_observer);
     mouse::global::initialize();
+
+    task_manager()
+        .wake_up(
+            task_manager()
+                .new_task()
+                .init_context(task_terminal, 0, get_cr3)
+                .id(),
+        )
+        .unwrap();
 
     loop {
         fill_rectangle(
