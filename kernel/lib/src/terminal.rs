@@ -58,7 +58,7 @@ pub mod global {
         let current_task_id = task_manager().current_task().id();
         {
             // Initialize Terminal
-            let mut terminal = Terminal::new(task_id);
+            let mut terminal = Terminal::new(task_id, true);
             terminal.initialize(layer_manager(), frame_buffer_config().pixel_format);
             layer_manager().move_(
                 terminal.layer_id,
@@ -166,10 +166,11 @@ pub(crate) struct Terminal {
     is_cursor_visible: bool,
     line_buf: String,
     command_history: CommandHistory,
+    show_window: bool,
 }
 
 impl Terminal {
-    fn new(task_id: TaskID) -> Terminal {
+    fn new(task_id: TaskID, show_window: bool) -> Terminal {
         Self {
             task_id,
             layer_id: LayerID::MAX,
@@ -177,6 +178,7 @@ impl Terminal {
             is_cursor_visible: false,
             line_buf: String::with_capacity(LINE_MAX),
             command_history: CommandHistory::new(),
+            show_window,
         }
     }
 
@@ -185,17 +187,19 @@ impl Terminal {
     }
 
     fn initialize(&mut self, layout_manager: &mut LayerManager, pixel_format: PixelFormat) {
-        let mut window = Window::new_with_title(
-            COLUMNS * 8 + 8 + Window::TITLED_WINDOW_MARGIN.x as usize,
-            ROWS * 16 + 8 + Window::TITLED_WINDOW_MARGIN.y as usize,
-            pixel_format,
-            "MikanTerm",
-        );
+        if self.show_window {
+            let mut window = Window::new_with_title(
+                COLUMNS * 8 + 8 + Window::TITLED_WINDOW_MARGIN.x as usize,
+                ROWS * 16 + 8 + Window::TITLED_WINDOW_MARGIN.y as usize,
+                pixel_format,
+                "MikanTerm",
+            );
 
-        let inner_size = window.inner_size();
-        draw_terminal(&mut window, Vector2D::new(0, 0), inner_size);
-        self.print(">", &mut window);
-        self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
+            let inner_size = window.inner_size();
+            draw_terminal(&mut window, Vector2D::new(0, 0), inner_size);
+            self.print(">", &mut window);
+            self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
+        }
     }
 
     fn blink_cursor(&mut self, w: &mut Window) -> Rectangle<i32> {
@@ -205,6 +209,9 @@ impl Terminal {
     }
 
     fn draw_cursor(&mut self, visible: bool, window: &mut Window) {
+        if !self.show_window {
+            return;
+        }
         let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
         fill_rectangle(
             &mut window.normal_window_writer(),
@@ -244,12 +251,14 @@ impl Terminal {
             '\x08' => {
                 if self.line_buf.pop().is_some() {
                     self.cursor.x -= 1;
-                    fill_rectangle(
-                        &mut window.normal_window_writer(),
-                        &self.calc_cursor_pos(),
-                        &Vector2D::new(8, 16),
-                        &COLOR_BLACK,
-                    );
+                    if self.show_window {
+                        fill_rectangle(
+                            &mut window.normal_window_writer(),
+                            &self.calc_cursor_pos(),
+                            &Vector2D::new(8, 16),
+                            &COLOR_BLACK,
+                        );
+                    }
                     draw_area.pos = self.calc_cursor_pos();
                 }
             }
@@ -264,13 +273,15 @@ impl Terminal {
                 if self.cursor.x < COLUMNS as i32 - 1 && self.line_buf.len() < LINE_MAX {
                     self.line_buf.push(ascii);
                     let pos = self.calc_cursor_pos();
-                    write_ascii(
-                        &mut window.normal_window_writer(),
-                        pos.x,
-                        pos.y,
-                        ascii,
-                        &COLOR_WHITE,
-                    );
+                    if self.show_window {
+                        write_ascii(
+                            &mut window.normal_window_writer(),
+                            pos.x,
+                            pos.y,
+                            ascii,
+                            &COLOR_WHITE,
+                        );
+                    }
                     self.cursor.x += 1;
                 }
             }
@@ -318,12 +329,14 @@ impl Terminal {
                 self.print("\n", w);
             }
             "clear" => {
-                fill_rectangle(
-                    w,
-                    &Vector2D::new(4, 4),
-                    &Vector2D::new(8 * COLUMNS as i32, 16 * ROWS as i32),
-                    &COLOR_BLACK,
-                );
+                if self.show_window {
+                    fill_rectangle(
+                        w,
+                        &Vector2D::new(4, 4),
+                        &Vector2D::new(8 * COLUMNS as i32, 16 * ROWS as i32),
+                        &COLOR_BLACK,
+                    );
+                }
                 self.cursor = Vector2D::new(0, 0);
             }
             "lspci" => {
@@ -498,7 +511,9 @@ impl Terminal {
             self.new_line(w);
         } else {
             let pos = self.calc_cursor_pos();
-            write_ascii(&mut w.normal_window_writer(), pos.x, pos.y, c, &COLOR_WHITE);
+            if self.show_window {
+                write_ascii(&mut w.normal_window_writer(), pos.x, pos.y, c, &COLOR_WHITE);
+            }
             if self.cursor.x == COLUMNS as i32 - 1 {
                 self.new_line(w);
             } else {
