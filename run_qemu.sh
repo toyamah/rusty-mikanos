@@ -12,26 +12,20 @@ build_and_run() {
   export RUSTFLAGS="-C link-arg=$LDFLAGS"
 
   # run clippy instead of run on Github Actions because setting up the environment is bothersome.
-  cd kernel # run in only kernel because borrowed stdlib code in apps/shared_lib needs to be fixed.
-  cargo clippy -- -Dwarnings
-  cd -
+  if [ $clippy -eq 1 ]; then
+    cd kernel # run in only kernel because borrowed stdlib code in apps/shared_lib needs to be fixed.
+    cargo clippy -- -Dwarnings
+    cd -
+  fi
 
-  cd kernel
-  cargo build --release # build in release mode to optimize code
+  if [ $apps -eq 1 ]; then
+    cargo build --release # build in release mode to optimize code
+  else
+    cd kernel
+    cargo build --release # build in release mode to optimize code
+    cd -
+  fi
 #  cargo build
-  cd -
-
-  for cargo_manifest in $(ls apps/*/Cargo.toml)
-  do
-    app_dir=$(dirname $cargo_manifest)
-    if [ $app_dir == "apps/shared_lib" ]; then
-      continue
-    fi
-    cd "${script_dir}/${app_dir}"
-    cargo build --release
-  done
-
-  cd $script_dir
 
   make -C apps/onlyhlt/ onlyhlt
 
@@ -60,10 +54,14 @@ build_and_run_official() {
 
 parse_params() {
   official=0
+  clippy=0
+  apps=0
 
   while :; do
     case "${1-}" in
     -v | --verbose) set -x ;;
+    -c | --clippy) clippy=1 ;;
+    -a | --apps) apps=1 ;;
     -o | --official) official=1 ;;
     -?*) die "Unknown option: $1" ;;
     *) break ;;
