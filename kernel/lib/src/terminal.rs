@@ -240,7 +240,7 @@ impl Terminal {
     }
 
     fn draw_cursor(&mut self, visible: bool) {
-        if let Some(window) = self.window() {
+        if let Some(window) = self.window_mut() {
             let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
             fill_rectangle(
                 &mut window.normal_window_writer(),
@@ -270,7 +270,7 @@ impl Terminal {
                 self.execute_line();
                 self.print(">");
                 draw_area.pos = TITLED_WINDOW_TOP_LEFT_MARGIN;
-                draw_area.size = self.window().map(|w| w.inner_size()).unwrap_or(
+                draw_area.size = self.window_mut().map(|w| w.inner_size()).unwrap_or(
                     Vector2D::new(0, 0)
                         - TITLED_WINDOW_TOP_LEFT_MARGIN
                         - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN,
@@ -279,7 +279,7 @@ impl Terminal {
             '\x08' => {
                 if self.line_buf.pop().is_some() {
                     self.cursor.x -= 1;
-                    if let Some(window) = self.window() {
+                    if let Some(window) = self.window_mut() {
                         fill_rectangle(
                             &mut window.normal_window_writer(),
                             &self.calc_cursor_pos(),
@@ -301,7 +301,7 @@ impl Terminal {
                 if self.cursor.x < COLUMNS as i32 - 1 && self.line_buf.len() < LINE_MAX {
                     self.line_buf.push(ascii);
                     let pos = self.calc_cursor_pos();
-                    if let Some(window) = self.window() {
+                    if let Some(window) = self.window_mut() {
                         write_ascii(
                             &mut window.normal_window_writer(),
                             pos.x,
@@ -324,7 +324,7 @@ impl Terminal {
     }
 
     fn scroll1(&mut self) {
-        if let Some(window) = self.window() {
+        if let Some(window) = self.window_mut() {
             let move_src = Rectangle::new(
                 TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4 + 16),
                 Vector2D::new(8 * COLUMNS as i32, 16 * (ROWS as i32 - 1)),
@@ -359,7 +359,7 @@ impl Terminal {
                 self.print("\n");
             }
             "clear" => {
-                if let Some(window) = self.window() {
+                if let Some(window) = self.window_mut() {
                     fill_rectangle(
                         window,
                         &Vector2D::new(4, 4),
@@ -454,12 +454,6 @@ impl Terminal {
         }
     }
 
-    fn window(&self) -> Option<&'static mut Window> {
-        layer_manager()
-            .get_layer_mut(self.layer_id)
-            .map(|l| l.get_window_mut())
-    }
-
     fn execute_file(
         &mut self,
         file_entry: &DirectoryEntry,
@@ -539,7 +533,7 @@ impl Terminal {
 
         let draw_pos = Vector2D::new(TITLED_WINDOW_TOP_LEFT_MARGIN.x, prev_cursor.y);
         let draw_size = Vector2D::new(
-            self.window()
+            self.window_mut()
                 .map(|w| w.inner_size().x)
                 .unwrap_or(-TITLED_WINDOW_TOP_LEFT_MARGIN.x - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.x),
             current_cursor.y - prev_cursor.y + 16,
@@ -562,7 +556,7 @@ impl Terminal {
             self.new_line();
         } else {
             let pos = self.calc_cursor_pos();
-            if let Some(window) = self.window() {
+            if let Some(window) = self.window_mut() {
                 write_ascii(
                     &mut window.normal_window_writer(),
                     pos.x,
@@ -592,7 +586,7 @@ impl Terminal {
         self.cursor.x = 1;
         let first_pos = self.calc_cursor_pos();
         let draw_area = Rectangle::new(first_pos, Vector2D::new(8 * (COLUMNS as i32 - 1), 16));
-        if let Some(window) = self.window() {
+        if let Some(window) = self.window_mut() {
             fill_rectangle(
                 &mut window.normal_window_writer(),
                 &draw_area.pos,
@@ -606,7 +600,7 @@ impl Terminal {
             Direction::Down => self.command_history.down().to_string(),
         };
 
-        if let Some(window) = self.window() {
+        if let Some(window) = self.window_mut() {
             write_string(
                 &mut window.normal_window_writer(),
                 first_pos.x,
@@ -618,6 +612,12 @@ impl Terminal {
         self.cursor.x = self.line_buf.len() as i32 + 1;
 
         draw_area
+    }
+
+    fn window_mut(&self) -> Option<&'static mut Window> {
+        layer_manager()
+            .get_layer_mut(self.layer_id)
+            .map(|l| l.get_window_mut())
     }
 }
 
