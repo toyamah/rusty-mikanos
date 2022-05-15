@@ -39,7 +39,7 @@ pub mod global {
     use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
     use crate::layer::LayerID;
     use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
-    use crate::rust_official::c_str::CStr;
+    use crate::rust_official::c_str::{CStr, CString};
     use crate::rust_official::cchar::c_char;
     use crate::task::global::task_manager;
     use crate::task::TaskID;
@@ -48,8 +48,8 @@ pub mod global {
     use crate::timer::{Timer, TIMER_FREQ};
     use crate::Window;
     use alloc::collections::BTreeMap;
+    use alloc::string::{String, ToString};
     use core::arch::asm;
-    use log::info;
 
     static mut TERMINALS: BTreeMap<TaskID, Terminal> = BTreeMap::new();
 
@@ -58,16 +58,17 @@ pub mod global {
     }
 
     pub fn task_terminal(task_id: u64, command: usize) {
-        let ptr = command as *const usize as *const c_char;
-        let command = if ptr.is_null() {
-            ""
-        } else {
-            unsafe { CStr::from_ptr(command as *const usize as *const c_char) }
-                .to_str()
-                .unwrap()
+        let command = {
+            let ptr = command as *const usize as *const c_char;
+            if ptr.is_null() {
+                "".to_string()
+            } else {
+                // use CString to free memory
+                let c_string = unsafe { CString::from_raw(ptr as *mut c_char) };
+                String::from_utf8(c_string.into_bytes()).unwrap()
+            }
         };
         let show_window = command.is_empty();
-        info!("show_window = {}, command = {:?}", show_window, command);
 
         unsafe { asm!("cli") };
         let task_id = TaskID::new(task_id);
@@ -102,9 +103,8 @@ pub mod global {
         let terminal = || unsafe { TERMINALS.get_mut(&task_id).expect("no such terminal") };
 
         if !show_window {
-            let id = terminal().layer_id;
-            for b in command.chars() {
-                terminal().input_key(0, 0, b);
+            for c in command.chars() {
+                terminal().input_key(0, 0, c);
             }
             terminal().input_key(0, 0, '\n');
         }

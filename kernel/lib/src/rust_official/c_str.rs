@@ -357,6 +357,31 @@ impl CString {
         Box::into_raw(self.into_inner()) as *mut c_char
     }
 
+    /// Consumes the `CString` and returns the underlying byte buffer.
+    ///
+    /// The returned buffer does **not** contain the trailing nul
+    /// terminator, and it is guaranteed to not have any interior nul
+    /// bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::ffi::CString;
+    ///
+    /// let c_string = CString::new("foo").expect("CString::new failed");
+    /// let bytes = c_string.into_bytes();
+    /// assert_eq!(bytes, vec![b'f', b'o', b'o']);
+    /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
+    // Note: I disabled this line.
+    // #[stable(feature = "cstring_into", since = "1.7.0")]
+    pub fn into_bytes(self) -> Vec<u8> {
+        let mut vec = self.into_inner().into_vec();
+        let _nul = vec.pop();
+        debug_assert_eq!(_nul, Some(0u8));
+        vec
+    }
+
     /// Bypass "move out of struct which implements [`Drop`] trait" restriction.
     #[inline]
     fn into_inner(self) -> Box<[u8]> {
