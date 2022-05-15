@@ -74,8 +74,12 @@ pub mod global {
         let current_task_id = task_manager().current_task().id();
         {
             // Initialize Terminal
-            let mut terminal = Terminal::new(task_id, show_window);
-            terminal.initialize(layer_manager(), frame_buffer_config().pixel_format);
+            let mut terminal = Terminal::new(task_id);
+            terminal.initialize(
+                show_window,
+                layer_manager(),
+                frame_buffer_config().pixel_format,
+            );
             if show_window {
                 layer_manager().move_(
                     terminal.layer_id,
@@ -190,11 +194,10 @@ pub(crate) struct Terminal {
     is_cursor_visible: bool,
     line_buf: String,
     command_history: CommandHistory,
-    show_window: bool,
 }
 
 impl Terminal {
-    fn new(task_id: TaskID, show_window: bool) -> Terminal {
+    fn new(task_id: TaskID) -> Terminal {
         Self {
             task_id,
             layer_id: LayerID::MAX,
@@ -202,7 +205,6 @@ impl Terminal {
             is_cursor_visible: false,
             line_buf: String::with_capacity(LINE_MAX),
             command_history: CommandHistory::new(),
-            show_window,
         }
     }
 
@@ -210,8 +212,13 @@ impl Terminal {
         self.layer_id
     }
 
-    fn initialize(&mut self, layout_manager: &mut LayerManager, pixel_format: PixelFormat) {
-        if self.show_window {
+    fn initialize(
+        &mut self,
+        show_window: bool,
+        layout_manager: &mut LayerManager,
+        pixel_format: PixelFormat,
+    ) {
+        if show_window {
             let mut window = Window::new_with_title(
                 COLUMNS * 8 + 8 + Window::TITLED_WINDOW_MARGIN.x as usize,
                 ROWS * 16 + 8 + Window::TITLED_WINDOW_MARGIN.y as usize,
@@ -233,16 +240,15 @@ impl Terminal {
     }
 
     fn draw_cursor(&mut self, visible: bool) {
-        if !self.show_window {
-            return;
+        if let Some(window) = self.window() {
+            let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
+            fill_rectangle(
+                &mut window.normal_window_writer(),
+                &self.calc_cursor_pos(),
+                &Vector2D::new(7, 15),
+                color,
+            );
         }
-        let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
-        fill_rectangle(
-            &mut self.window().unwrap().normal_window_writer(),
-            &self.calc_cursor_pos(),
-            &Vector2D::new(7, 15),
-            color,
-        );
     }
 
     fn input_key(&mut self, _modifier: u8, keycode: u8, ascii: char) -> Rectangle<i32> {
@@ -264,7 +270,6 @@ impl Terminal {
                 self.execute_line();
                 self.print(">");
                 draw_area.pos = TITLED_WINDOW_TOP_LEFT_MARGIN;
-                // draw_area.size = self.window2().unwrap().inner_size();
                 draw_area.size = self.window().map(|w| w.inner_size()).unwrap_or(
                     Vector2D::new(0, 0)
                         - TITLED_WINDOW_TOP_LEFT_MARGIN
@@ -274,9 +279,9 @@ impl Terminal {
             '\x08' => {
                 if self.line_buf.pop().is_some() {
                     self.cursor.x -= 1;
-                    if self.show_window {
+                    if let Some(window) = self.window() {
                         fill_rectangle(
-                            &mut self.window().unwrap().normal_window_writer(),
+                            &mut window.normal_window_writer(),
                             &self.calc_cursor_pos(),
                             &Vector2D::new(8, 16),
                             &COLOR_BLACK,
@@ -296,9 +301,9 @@ impl Terminal {
                 if self.cursor.x < COLUMNS as i32 - 1 && self.line_buf.len() < LINE_MAX {
                     self.line_buf.push(ascii);
                     let pos = self.calc_cursor_pos();
-                    if self.show_window {
+                    if let Some(window) = self.window() {
                         write_ascii(
-                            &mut self.window().unwrap().normal_window_writer(),
+                            &mut window.normal_window_writer(),
                             pos.x,
                             pos.y,
                             ascii,
@@ -319,20 +324,22 @@ impl Terminal {
     }
 
     fn scroll1(&mut self) {
-        let move_src = Rectangle::new(
-            TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4 + 16),
-            Vector2D::new(8 * COLUMNS as i32, 16 * (ROWS as i32 - 1)),
-        );
-        self.window().unwrap().move_(
-            TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4),
-            &move_src,
-        );
-        fill_rectangle(
-            self.window().unwrap(),
-            &Vector2D::new(4, 4 + 16 * self.cursor.y),
-            &Vector2D::new(8 * COLUMNS as i32, 16),
-            &COLOR_BLACK,
-        );
+        if let Some(window) = self.window() {
+            let move_src = Rectangle::new(
+                TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4 + 16),
+                Vector2D::new(8 * COLUMNS as i32, 16 * (ROWS as i32 - 1)),
+            );
+            window.move_(
+                TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4),
+                &move_src,
+            );
+            fill_rectangle(
+                window,
+                &Vector2D::new(4, 4 + 16 * self.cursor.y),
+                &Vector2D::new(8 * COLUMNS as i32, 16),
+                &COLOR_BLACK,
+            );
+        }
     }
 
     fn execute_line(&mut self) {
@@ -352,9 +359,9 @@ impl Terminal {
                 self.print("\n");
             }
             "clear" => {
-                if self.show_window {
+                if let Some(window) = self.window() {
                     fill_rectangle(
-                        self.window().unwrap(),
+                        window,
                         &Vector2D::new(4, 4),
                         &Vector2D::new(8 * COLUMNS as i32, 16 * ROWS as i32),
                         &COLOR_BLACK,
@@ -532,11 +539,9 @@ impl Terminal {
 
         let draw_pos = Vector2D::new(TITLED_WINDOW_TOP_LEFT_MARGIN.x, prev_cursor.y);
         let draw_size = Vector2D::new(
-            if self.show_window {
-                self.window().map(|w| w.inner_size().x).unwrap_or(-8)
-            } else {
-                -8
-            },
+            self.window()
+                .map(|w| w.inner_size().x)
+                .unwrap_or(-TITLED_WINDOW_TOP_LEFT_MARGIN.x - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.x),
             current_cursor.y - prev_cursor.y + 16,
         );
         let msg = Message::new(MessageType::Layer(LayerMessage {
@@ -557,9 +562,9 @@ impl Terminal {
             self.new_line();
         } else {
             let pos = self.calc_cursor_pos();
-            if self.show_window {
+            if let Some(window) = self.window() {
                 write_ascii(
-                    &mut self.window().unwrap().normal_window_writer(),
+                    &mut window.normal_window_writer(),
                     pos.x,
                     pos.y,
                     c,
@@ -587,24 +592,29 @@ impl Terminal {
         self.cursor.x = 1;
         let first_pos = self.calc_cursor_pos();
         let draw_area = Rectangle::new(first_pos, Vector2D::new(8 * (COLUMNS as i32 - 1), 16));
-        fill_rectangle(
-            &mut self.window().unwrap().normal_window_writer(),
-            &draw_area.pos,
-            &draw_area.size,
-            &COLOR_BLACK,
-        );
+        if let Some(window) = self.window() {
+            fill_rectangle(
+                &mut window.normal_window_writer(),
+                &draw_area.pos,
+                &draw_area.size,
+                &COLOR_BLACK,
+            );
+        }
 
         self.line_buf = match direction {
             Direction::Up => self.command_history.up().to_string(),
             Direction::Down => self.command_history.down().to_string(),
         };
-        write_string(
-            &mut self.window().unwrap().normal_window_writer(),
-            first_pos.x,
-            first_pos.y,
-            self.line_buf.as_str(),
-            &COLOR_WHITE,
-        );
+
+        if let Some(window) = self.window() {
+            write_string(
+                &mut window.normal_window_writer(),
+                first_pos.x,
+                first_pos.y,
+                self.line_buf.as_str(),
+                &COLOR_WHITE,
+            );
+        }
         self.cursor.x = self.line_buf.len() as i32 + 1;
 
         draw_area
