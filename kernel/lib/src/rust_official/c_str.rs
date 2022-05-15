@@ -8,7 +8,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use core::slice::memchr;
-use core::{mem, ptr};
+use core::{mem, ptr, str};
 
 /// A type representing an owned, C-compatible, nul-terminated string with no nul bytes in the
 /// middle.
@@ -357,6 +357,31 @@ impl CString {
         Box::into_raw(self.into_inner()) as *mut c_char
     }
 
+    /// Consumes the `CString` and returns the underlying byte buffer.
+    ///
+    /// The returned buffer does **not** contain the trailing nul
+    /// terminator, and it is guaranteed to not have any interior nul
+    /// bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::ffi::CString;
+    ///
+    /// let c_string = CString::new("foo").expect("CString::new failed");
+    /// let bytes = c_string.into_bytes();
+    /// assert_eq!(bytes, vec![b'f', b'o', b'o']);
+    /// ```
+    #[must_use = "`self` will be dropped if the result is not used"]
+    // Note: I disabled this line.
+    // #[stable(feature = "cstring_into", since = "1.7.0")]
+    pub fn into_bytes(self) -> Vec<u8> {
+        let mut vec = self.into_inner().into_vec();
+        let _nul = vec.pop();
+        debug_assert_eq!(_nul, Some(0u8));
+        vec
+    }
+
     /// Bypass "move out of struct which implements [`Drop`] trait" restriction.
     #[inline]
     fn into_inner(self) -> Box<[u8]> {
@@ -574,5 +599,31 @@ impl CStr {
     // #[stable(feature = "rust1", since = "1.0.0")]
     pub fn to_bytes_with_nul(&self) -> &[u8] {
         unsafe { &*(&self.inner as *const [c_char] as *const [u8]) }
+    }
+
+    /// Yields a <code>&[str]</code> slice if the `CStr` contains valid UTF-8.
+    ///
+    /// If the contents of the `CStr` are valid UTF-8 data, this
+    /// function will return the corresponding <code>&[str]</code> slice. Otherwise,
+    /// it will return an error with details of where UTF-8 validation failed.
+    ///
+    /// [str]: prim@str "str"
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::ffi::CStr;
+    ///
+    /// let cstr = CStr::from_bytes_with_nul(b"foo\0").expect("CStr::from_bytes_with_nul failed");
+    /// assert_eq!(cstr.to_str(), Ok("foo"));
+    /// ```
+    // Note: I disabled this line
+    // #[stable(feature = "cstr_to_str", since = "1.4.0")]
+    pub fn to_str(&self) -> Result<&str, str::Utf8Error> {
+        // N.B., when `CStr` is changed to perform the length check in `.to_bytes()`
+        // instead of in `from_ptr()`, it may be worth considering if this should
+        // be rewritten to do the UTF-8 check inline with the length calculation
+        // instead of doing it afterwards.
+        str::from_utf8(self.to_bytes())
     }
 }

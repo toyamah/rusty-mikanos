@@ -7,6 +7,7 @@ use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
     COLOR_BLACK, COLOR_WHITE,
 };
+use crate::layer::global::layer_manager;
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
 use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
@@ -18,7 +19,8 @@ use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::task::global::task_manager;
 use crate::task::{Task, TaskID};
-use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
+use crate::terminal::global::task_terminal;
+use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{fat, make_error, Window};
 use alloc::collections::VecDeque;
 use alloc::string::{String, ToString};
@@ -37,6 +39,8 @@ pub mod global {
     use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
     use crate::layer::LayerID;
     use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
+    use crate::rust_official::c_str::CString;
+    use crate::rust_official::cchar::c_char;
     use crate::task::global::task_manager;
     use crate::task::TaskID;
     use crate::terminal::Terminal;
@@ -44,6 +48,7 @@ pub mod global {
     use crate::timer::{Timer, TIMER_FREQ};
     use crate::Window;
     use alloc::collections::BTreeMap;
+    use alloc::string::{String, ToString};
     use core::arch::asm;
 
     static mut TERMINALS: BTreeMap<TaskID, Terminal> = BTreeMap::new();
@@ -52,37 +57,63 @@ pub mod global {
         unsafe { TERMINALS.get_mut(&task_id) }
     }
 
-    pub fn task_terminal(task_id: u64, _: usize) {
+    pub fn task_terminal(task_id: u64, command: usize) {
+        let command = {
+            let ptr = command as *const usize as *const c_char;
+            if ptr.is_null() {
+                "".to_string()
+            } else {
+                // use CString to free memory
+                let c_string = unsafe { CString::from_raw(ptr as *mut c_char) };
+                String::from_utf8(c_string.into_bytes()).unwrap()
+            }
+        };
+        let show_window = command.is_empty();
+
         unsafe { asm!("cli") };
         let task_id = TaskID::new(task_id);
         let current_task_id = task_manager().current_task().id();
         {
             // Initialize Terminal
             let mut terminal = Terminal::new(task_id);
-            terminal.initialize(layer_manager(), frame_buffer_config().pixel_format);
-            layer_manager().move_(
-                terminal.layer_id,
-                Vector2D::new(100, 200),
-                screen_frame_buffer(),
-            );
-            layer_task_map().insert(terminal.layer_id, task_id);
-            active_layer().activate(
-                Some(terminal.layer_id),
+            terminal.initialize(
+                show_window,
                 layer_manager(),
-                screen_frame_buffer(),
-                task_manager(),
-                layer_task_map(),
+                frame_buffer_config().pixel_format,
             );
+            if show_window {
+                layer_manager().move_(
+                    terminal.layer_id,
+                    Vector2D::new(100, 200),
+                    screen_frame_buffer(),
+                );
+                layer_task_map().insert(terminal.layer_id, task_id);
+                active_layer().activate(
+                    Some(terminal.layer_id),
+                    layer_manager(),
+                    screen_frame_buffer(),
+                    task_manager(),
+                    layer_task_map(),
+                );
+            }
             unsafe { TERMINALS.insert(task_id, terminal) };
         }
         unsafe { asm!("sti") };
+
+        let terminal = || unsafe { TERMINALS.get_mut(&task_id).expect("no such terminal") };
+
+        if !show_window {
+            for c in command.chars() {
+                terminal().input_key(0, 0, c);
+            }
+            terminal().input_key(0, 0, '\n');
+        }
 
         let add_blink_timer =
             |t: u64| timer_manager().add_timer(Timer::new(t + TIMER_FREQ / 2, 1, task_id));
         add_blink_timer(timer_manager().current_tick());
         let mut active_mode = WindowActiveMode::Deactivate;
 
-        let terminal = || unsafe { TERMINALS.get_mut(&task_id).expect("no such terminal") };
         loop {
             unsafe { asm!("cli") };
             let msg = task_manager()
@@ -100,8 +131,8 @@ pub mod global {
             match msg.m_type {
                 MessageType::TimerTimeout { timeout, value: _ } => {
                     add_blink_timer(timeout);
-                    if active_mode == WindowActiveMode::Activate {
-                        let area = terminal().blink_cursor(terminal_window(terminal().layer_id));
+                    if show_window && active_mode == WindowActiveMode::Activate {
+                        let area = terminal().blink_cursor();
 
                         let msg = Message::new(MessageType::Layer(LayerMessage {
                             layer_id: terminal().layer_id,
@@ -124,22 +155,19 @@ pub mod global {
                     if !press {
                         continue;
                     }
-                    let area = terminal().input_key(
-                        modifier,
-                        keycode,
-                        ascii,
-                        terminal_window(terminal().layer_id),
-                    );
-                    let msg = Message::new(MessageType::Layer(LayerMessage {
-                        layer_id: terminal().layer_id,
-                        op: LayerOperation::DrawArea(area),
-                        src_task_id: task_id,
-                    }));
-                    unsafe { asm!("cli") };
-                    task_manager()
-                        .send_message(task_manager().main_task().id(), msg)
-                        .unwrap();
-                    unsafe { asm!("sti") };
+                    let area = terminal().input_key(modifier, keycode, ascii);
+                    if show_window {
+                        let msg = Message::new(MessageType::Layer(LayerMessage {
+                            layer_id: terminal().layer_id,
+                            op: LayerOperation::DrawArea(area),
+                            src_task_id: task_id,
+                        }));
+                        unsafe { asm!("cli") };
+                        task_manager()
+                            .send_message(task_manager().main_task().id(), msg)
+                            .unwrap();
+                        unsafe { asm!("sti") };
+                    }
                 }
                 MessageType::WindowActive(mode) => active_mode = mode,
                 _ => {}
@@ -184,44 +212,47 @@ impl Terminal {
         self.layer_id
     }
 
-    fn initialize(&mut self, layout_manager: &mut LayerManager, pixel_format: PixelFormat) {
-        let mut window = Window::new_with_title(
-            COLUMNS * 8 + 8 + Window::TITLED_WINDOW_MARGIN.x as usize,
-            ROWS * 16 + 8 + Window::TITLED_WINDOW_MARGIN.y as usize,
-            pixel_format,
-            "MikanTerm",
-        );
+    fn initialize(
+        &mut self,
+        show_window: bool,
+        layout_manager: &mut LayerManager,
+        pixel_format: PixelFormat,
+    ) {
+        if show_window {
+            let mut window = Window::new_with_title(
+                COLUMNS * 8 + 8 + Window::TITLED_WINDOW_MARGIN.x as usize,
+                ROWS * 16 + 8 + Window::TITLED_WINDOW_MARGIN.y as usize,
+                pixel_format,
+                "MikanTerm",
+            );
 
-        let inner_size = window.inner_size();
-        draw_terminal(&mut window, Vector2D::new(0, 0), inner_size);
-        self.print(">", &mut window);
-        self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
+            let inner_size = window.inner_size();
+            draw_terminal(&mut window, Vector2D::new(0, 0), inner_size);
+            self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
+            self.print(">");
+        }
     }
 
-    fn blink_cursor(&mut self, w: &mut Window) -> Rectangle<i32> {
+    fn blink_cursor(&mut self) -> Rectangle<i32> {
         self.is_cursor_visible = !self.is_cursor_visible;
-        self.draw_cursor(self.is_cursor_visible, w);
+        self.draw_cursor(self.is_cursor_visible);
         Rectangle::new(self.calc_cursor_pos(), Vector2D::new(7, 15))
     }
 
-    fn draw_cursor(&mut self, visible: bool, window: &mut Window) {
-        let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
-        fill_rectangle(
-            &mut window.normal_window_writer(),
-            &self.calc_cursor_pos(),
-            &Vector2D::new(7, 15),
-            color,
-        );
+    fn draw_cursor(&mut self, visible: bool) {
+        if let Some(window) = self.window_mut() {
+            let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
+            fill_rectangle(
+                &mut window.normal_window_writer(),
+                &self.calc_cursor_pos(),
+                &Vector2D::new(7, 15),
+                color,
+            );
+        }
     }
 
-    fn input_key(
-        &mut self,
-        _modifier: u8,
-        keycode: u8,
-        ascii: char,
-        window: &mut Window,
-    ) -> Rectangle<i32> {
-        self.draw_cursor(false, window);
+    fn input_key(&mut self, _modifier: u8, keycode: u8, ascii: char) -> Rectangle<i32> {
+        self.draw_cursor(false);
 
         let mut draw_area = Rectangle::new(self.calc_cursor_pos(), Vector2D::new(8 * 2, 16));
 
@@ -233,50 +264,58 @@ impl Terminal {
                 if self.cursor.y < ROWS as i32 - 1 {
                     self.cursor.y += 1;
                 } else {
-                    self.scroll1(window);
+                    self.scroll1();
                 }
 
-                self.execute_line(window);
-                self.print(">", window);
+                self.execute_line();
+                self.print(">");
                 draw_area.pos = TITLED_WINDOW_TOP_LEFT_MARGIN;
-                draw_area.size = window.inner_size();
+                draw_area.size = self.window_mut().map(|w| w.inner_size()).unwrap_or(
+                    Vector2D::new(0, 0)
+                        - TITLED_WINDOW_TOP_LEFT_MARGIN
+                        - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN,
+                )
             }
             '\x08' => {
                 if self.line_buf.pop().is_some() {
                     self.cursor.x -= 1;
-                    fill_rectangle(
-                        &mut window.normal_window_writer(),
-                        &self.calc_cursor_pos(),
-                        &Vector2D::new(8, 16),
-                        &COLOR_BLACK,
-                    );
+                    if let Some(window) = self.window_mut() {
+                        fill_rectangle(
+                            &mut window.normal_window_writer(),
+                            &self.calc_cursor_pos(),
+                            &Vector2D::new(8, 16),
+                            &COLOR_BLACK,
+                        );
+                    }
                     draw_area.pos = self.calc_cursor_pos();
                 }
             }
             '\x00' => {
                 if keycode == 0x51 {
-                    draw_area = self.history_up_down(Direction::Down, window);
+                    draw_area = self.history_up_down(Direction::Down);
                 } else if keycode == 0x52 {
-                    draw_area = self.history_up_down(Direction::Up, window);
+                    draw_area = self.history_up_down(Direction::Up);
                 }
             }
             _ => {
                 if self.cursor.x < COLUMNS as i32 - 1 && self.line_buf.len() < LINE_MAX {
                     self.line_buf.push(ascii);
                     let pos = self.calc_cursor_pos();
-                    write_ascii(
-                        &mut window.normal_window_writer(),
-                        pos.x,
-                        pos.y,
-                        ascii,
-                        &COLOR_WHITE,
-                    );
+                    if let Some(window) = self.window_mut() {
+                        write_ascii(
+                            &mut window.normal_window_writer(),
+                            pos.x,
+                            pos.y,
+                            ascii,
+                            &COLOR_WHITE,
+                        );
+                    }
                     self.cursor.x += 1;
                 }
             }
         }
 
-        self.draw_cursor(true, window);
+        self.draw_cursor(true);
         draw_area
     }
 
@@ -284,24 +323,26 @@ impl Terminal {
         TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4 + 8 * self.cursor.x, 4 + 16 * self.cursor.y)
     }
 
-    fn scroll1(&mut self, window: &mut Window) {
-        let move_src = Rectangle::new(
-            TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4 + 16),
-            Vector2D::new(8 * COLUMNS as i32, 16 * (ROWS as i32 - 1)),
-        );
-        window.move_(
-            TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4),
-            &move_src,
-        );
-        fill_rectangle(
-            window,
-            &Vector2D::new(4, 4 + 16 * self.cursor.y),
-            &Vector2D::new(8 * COLUMNS as i32, 16),
-            &COLOR_BLACK,
-        );
+    fn scroll1(&mut self) {
+        if let Some(window) = self.window_mut() {
+            let move_src = Rectangle::new(
+                TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4 + 16),
+                Vector2D::new(8 * COLUMNS as i32, 16 * (ROWS as i32 - 1)),
+            );
+            window.move_(
+                TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4),
+                &move_src,
+            );
+            fill_rectangle(
+                window,
+                &Vector2D::new(4, 4 + 16 * self.cursor.y),
+                &Vector2D::new(8 * COLUMNS as i32, 16),
+                &COLOR_BLACK,
+            );
+        }
     }
 
-    fn execute_line(&mut self, w: &mut Window) {
+    fn execute_line(&mut self) {
         let line_buf = mem::take(&mut self.line_buf);
         let argv = if let Some(argv) = parse_command(line_buf.as_str()) {
             argv
@@ -313,17 +354,19 @@ impl Terminal {
         match command {
             "echo" => {
                 if let Some(&arg) = argv.get(0) {
-                    self.print(arg, w);
+                    self.print(arg);
                 }
-                self.print("\n", w);
+                self.print("\n");
             }
             "clear" => {
-                fill_rectangle(
-                    w,
-                    &Vector2D::new(4, 4),
-                    &Vector2D::new(8 * COLUMNS as i32, 16 * ROWS as i32),
-                    &COLOR_BLACK,
-                );
+                if let Some(window) = self.window_mut() {
+                    fill_rectangle(
+                        window,
+                        &Vector2D::new(4, 4),
+                        &Vector2D::new(8 * COLUMNS as i32, 16 * ROWS as i32),
+                        &COLOR_BLACK,
+                    );
+                }
                 self.cursor = Vector2D::new(0, 0);
             }
             "lspci" => {
@@ -366,7 +409,7 @@ impl Terminal {
                 if let Some(file_entry) = file_entry {
                     let mut cluster = file_entry.first_cluster() as u64;
                     let mut remain_bytes = file_entry.file_size() as u64;
-                    self.draw_cursor(false, w);
+                    self.draw_cursor(false);
                     loop {
                         if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
                             break;
@@ -381,9 +424,19 @@ impl Terminal {
                         remain_bytes -= p.len() as u64;
                         cluster = bpb.next_cluster(cluster);
                     }
-                    self.draw_cursor(true, w);
+                    self.draw_cursor(true);
                 } else {
                     writeln!(self, "no such file: {}", first_arg).unwrap();
+                }
+            }
+            "noterm" => {
+                if let Some(&first_arg) = argv.get(1) {
+                    let c = CString::_new(first_arg.as_bytes().to_vec()).unwrap();
+                    let task_id = task_manager()
+                        .new_task()
+                        .init_context(task_terminal, c.into_raw() as u64, get_cr3)
+                        .id();
+                    task_manager().wake_up(task_id).unwrap();
                 }
             }
             _ => {
@@ -467,19 +520,24 @@ impl Terminal {
         free_pml4(task_manager().get_task_mut(task.id()).unwrap())
     }
 
-    pub(crate) fn print(&mut self, s: &str, w: &mut Window) {
+    pub(crate) fn print(&mut self, s: &str) {
         let prev_cursor = self.calc_cursor_pos();
-        self.draw_cursor(false, w);
+        self.draw_cursor(false);
 
         for char in s.chars() {
-            self.print_char(char, w);
+            self.print_char(char);
         }
 
-        self.draw_cursor(true, w);
+        self.draw_cursor(true);
         let current_cursor = self.calc_cursor_pos();
 
         let draw_pos = Vector2D::new(TITLED_WINDOW_TOP_LEFT_MARGIN.x, prev_cursor.y);
-        let draw_size = Vector2D::new(w.inner_size().x, current_cursor.y - prev_cursor.y + 16);
+        let draw_size = Vector2D::new(
+            self.window_mut()
+                .map(|w| w.inner_size().x)
+                .unwrap_or(-TITLED_WINDOW_TOP_LEFT_MARGIN.x - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.x),
+            current_cursor.y - prev_cursor.y + 16,
+        );
         let msg = Message::new(MessageType::Layer(LayerMessage {
             layer_id: self.layer_id,
             op: LayerOperation::DrawArea(Rectangle::new(draw_pos, draw_size)),
@@ -493,60 +551,79 @@ impl Terminal {
         unsafe { asm!("sti") };
     }
 
-    fn print_char(&mut self, c: char, w: &mut Window) {
+    fn print_char(&mut self, c: char) {
         if c == '\n' {
-            self.new_line(w);
+            self.new_line();
         } else {
             let pos = self.calc_cursor_pos();
-            write_ascii(&mut w.normal_window_writer(), pos.x, pos.y, c, &COLOR_WHITE);
+            if let Some(window) = self.window_mut() {
+                write_ascii(
+                    &mut window.normal_window_writer(),
+                    pos.x,
+                    pos.y,
+                    c,
+                    &COLOR_WHITE,
+                );
+            }
             if self.cursor.x == COLUMNS as i32 - 1 {
-                self.new_line(w);
+                self.new_line();
             } else {
                 self.cursor.x += 1;
             }
         }
     }
 
-    fn new_line(&mut self, w: &mut Window) {
+    fn new_line(&mut self) {
         self.cursor.x = 0;
         if self.cursor.y < ROWS as i32 - 1 {
             self.cursor.y += 1;
         } else {
-            self.scroll1(w)
+            self.scroll1()
         }
     }
 
-    fn history_up_down(&mut self, direction: Direction, w: &mut Window) -> Rectangle<i32> {
+    fn history_up_down(&mut self, direction: Direction) -> Rectangle<i32> {
         self.cursor.x = 1;
         let first_pos = self.calc_cursor_pos();
         let draw_area = Rectangle::new(first_pos, Vector2D::new(8 * (COLUMNS as i32 - 1), 16));
-        fill_rectangle(
-            &mut w.normal_window_writer(),
-            &draw_area.pos,
-            &draw_area.size,
-            &COLOR_BLACK,
-        );
+        if let Some(window) = self.window_mut() {
+            fill_rectangle(
+                &mut window.normal_window_writer(),
+                &draw_area.pos,
+                &draw_area.size,
+                &COLOR_BLACK,
+            );
+        }
 
         self.line_buf = match direction {
             Direction::Up => self.command_history.up().to_string(),
             Direction::Down => self.command_history.down().to_string(),
         };
-        write_string(
-            &mut w.normal_window_writer(),
-            first_pos.x,
-            first_pos.y,
-            self.line_buf.as_str(),
-            &COLOR_WHITE,
-        );
+
+        if let Some(window) = self.window_mut() {
+            write_string(
+                &mut window.normal_window_writer(),
+                first_pos.x,
+                first_pos.y,
+                self.line_buf.as_str(),
+                &COLOR_WHITE,
+            );
+        }
         self.cursor.x = self.line_buf.len() as i32 + 1;
 
         draw_area
+    }
+
+    fn window_mut(&self) -> Option<&'static mut Window> {
+        layer_manager()
+            .get_layer_mut(self.layer_id)
+            .map(|l| l.get_window_mut())
     }
 }
 
 impl Write for Terminal {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.print(s, global::terminal_window(self.layer_id));
+        self.print(s);
         Ok(())
     }
 }

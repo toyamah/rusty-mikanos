@@ -11,7 +11,7 @@ use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
-use crate::terminal::global::{get_terminal_mut_by, terminal_window};
+use crate::terminal::global::get_terminal_mut_by;
 use crate::timer::global::timer_manager;
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::Window;
@@ -83,8 +83,7 @@ fn put_string(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sy
     if fd == 1 {
         let task_id = task_manager().current_task().id();
         let terminal = get_terminal_mut_by(task_id).expect("failed to get terminal");
-        let layer_id = terminal.layer_id();
-        terminal.print(str, terminal_window(layer_id));
+        terminal.print(str);
         return SyscallResult::ok(count);
     }
 
