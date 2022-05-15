@@ -11,7 +11,7 @@ use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
-use crate::terminal::global::{get_terminal_mut_by, terminal_window};
+use crate::terminal::global::get_terminal_mut_by;
 use crate::timer::global::timer_manager;
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::Window;

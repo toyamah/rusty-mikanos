@@ -39,7 +39,7 @@ pub mod global {
     use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
     use crate::layer::LayerID;
     use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
-    use crate::rust_official::c_str::{CStr, CString};
+    use crate::rust_official::c_str::CString;
     use crate::rust_official::cchar::c_char;
     use crate::task::global::task_manager;
     use crate::task::TaskID;
