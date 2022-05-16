@@ -27,10 +27,10 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::arch::asm;
+use core::ffi::c_void;
 use core::fmt::Write;
-use core::intrinsics::copy_nonoverlapping;
 use core::ops::Deref;
-use core::{cmp, fmt, mem};
+use core::{cmp, fmt, mem, ptr};
 use shared::PixelFormat;
 
 pub mod global {
@@ -761,7 +761,13 @@ pub fn setup_pml4(current_task: &mut Task) -> Result<*mut PageMapEntry, Error> {
     let pml4 = PageMapEntry::new_page_map(memory_manager())?;
 
     let current_pml4 = get_cr3() as *const u64 as *const PageMapEntry;
-    unsafe { copy_nonoverlapping(current_pml4, pml4, 256 * mem::size_of::<u64>()) }
+    unsafe {
+        memcpy(
+            pml4 as *mut c_void,
+            current_pml4 as *const c_void,
+            256 * mem::size_of::<u64>(),
+        );
+    }
 
     let cr3 = pml4 as usize as u64;
     set_cr3(cr3);
@@ -779,6 +785,7 @@ pub fn free_pml4(current_task: &mut Task) -> Result<(), Error> {
 
 extern "C" {
     fn strcpy(dst: *mut c_char, src: *const c_char) -> *mut c_char;
+    fn memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void;
 }
 
 #[cfg(test)]
