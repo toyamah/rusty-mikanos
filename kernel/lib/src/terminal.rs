@@ -30,7 +30,7 @@ use core::arch::asm;
 use core::ffi::c_void;
 use core::fmt::Write;
 use core::ops::Deref;
-use core::{cmp, fmt, mem, ptr};
+use core::{cmp, fmt, mem};
 use shared::PixelFormat;
 
 pub mod global {
