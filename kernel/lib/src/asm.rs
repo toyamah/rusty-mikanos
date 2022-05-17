@@ -27,6 +27,7 @@ pub mod global {
         pub fn IntHandlerLAPICTimer();
         fn WriteMSR(msr: u32, value: u64);
         pub fn SyscallEntry();
+        fn ExitApp(rsp: u64, ret_val: i32);
     }
 
     pub fn io_out_32(addr: u16, data: u32) {
@@ -97,5 +98,9 @@ pub mod global {
 
     pub fn write_msr(msr: u32, value: u64) {
         unsafe { WriteMSR(msr, value) }
+    }
+
+    pub fn exit_app(rsp: u64, ret_val: i32) {
+        unsafe { ExitApp(rsp, ret_val) }
     }
 }

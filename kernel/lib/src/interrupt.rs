@@ -4,7 +4,7 @@ use bit_field::BitField;
 
 pub mod global {
     use super::{InterruptDescriptor, InterruptDescriptorAttribute, InterruptVectorNumber};
-    use crate::asm::global::{load_interrupt_descriptor_table, IntHandlerLAPICTimer};
+    use crate::asm::global::{exit_app, load_interrupt_descriptor_table, IntHandlerLAPICTimer};
     use crate::graphics::global::pixel_writer;
     use crate::graphics::{PixelWriter, COLOR_BLACK};
     use crate::interrupt::InterruptFrame;
@@ -13,6 +13,8 @@ pub mod global {
     use crate::task::global::task_manager;
     use crate::x86_descriptor::SystemDescriptorType;
     use core::arch::asm;
+
+    const SIGSEGV: i32 = 11;
 
     pub(crate) const IST_FOR_TIMER: u8 = 0; // index of the interrupt stack table
 
@@ -146,6 +148,7 @@ pub mod global {
 
     fn _fault_handler_with_error(name: &str, frame: *const InterruptFrame, error_code: u64) {
         let f = unsafe { frame.as_ref() }.unwrap();
+        kill_app(f);
         print_frame(f, name);
         pixel_writer().write_string(500, 16 * 4, "ERR", &COLOR_BLACK);
         print_hex(error_code, 16, 500 + 8 * 4, 16 * 4);
@@ -156,13 +159,14 @@ pub mod global {
 
     fn _fault_handler_no_error(name: &str, frame: *const InterruptFrame) {
         let f = unsafe { frame.as_ref() }.unwrap();
+        kill_app(f);
         print_frame(f, name);
         loop {
             unsafe { asm!("hlt") }
         }
     }
 
-    pub fn print_frame(f: &InterruptFrame, exp_name: &str) {
+    fn print_frame(f: &InterruptFrame, exp_name: &str) {
         let w = pixel_writer();
         w.write_string(500, 0, exp_name, &COLOR_BLACK);
 
@@ -178,7 +182,7 @@ pub mod global {
         print_hex(f.rsp, 16, 500 + 8 * 12, 16 * 3);
     }
 
-    pub fn print_hex(value: u64, width: i32, pos_x: i32, pos_y: i32) {
+    fn print_hex(value: u64, width: i32, pos_x: i32, pos_y: i32) {
         for i in 0..width {
             let mut x = value >> (4 * (width - i - 1)) & 0xf;
             if x >= 10 {
@@ -189,6 +193,17 @@ pub mod global {
 
             pixel_writer().write_ascii(pos_x + (8 * i), pos_y, char::from(x as u8), &COLOR_BLACK);
         }
+    }
+
+    fn kill_app(frame: &InterruptFrame) {
+        let cpl = frame.cs & 0x3;
+        if cpl != 3 {
+            return;
+        }
+
+        let task = task_manager().current_task();
+        unsafe { asm!("sti") };
+        exit_app(*task.os_stack_pointer(), 128 + SIGSEGV)
     }
 }
 

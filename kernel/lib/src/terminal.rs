@@ -465,9 +465,7 @@ impl Terminal {
 
         let elf_header = unsafe { Elf64Ehdr::from_mut(&mut file_buf) }.unwrap();
         if !elf_header.is_elf() {
-            let f = &file_buf as *const _ as *const fn() -> ();
-            unsafe { f.as_ref() }.unwrap()();
-            return Ok(());
+            return Err(make_error!(Code::InvalidFile));
         }
 
         unsafe { asm!("cli") };
