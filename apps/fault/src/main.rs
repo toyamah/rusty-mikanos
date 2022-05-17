@@ -16,6 +16,14 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
 
     match cmd {
         "hlt" => unsafe { asm!("hlt") },
+        "wr_kernel" => {
+            let p = 0x100 as *mut i32;
+            unsafe { *p = 43 }
+        }
+        "wr_app" => {
+            let p = 0xffff8000ffff0000 as *mut i32;
+            unsafe { *p = 123 }
+        }
         "zero" => {
             let z = 0;
             println!("100/{} = {}", z, 100 / z)
