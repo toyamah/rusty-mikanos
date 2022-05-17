@@ -18,8 +18,10 @@ build_and_run() {
     cd -
   fi
 
-  cd kernel
-  cargo build --release # build in release mode to optimize code
+  if [ $kernel -eq 1 ]; then
+    cd kernel
+    cargo build --release # build in release mode to optimize code
+  fi
 
   if [ $apps == "all" ]; then
     for cargo_manifest in $(ls apps/*/Cargo.toml); do
@@ -64,14 +66,16 @@ build_and_run_official() {
 }
 
 parse_params() {
-  official=0
   clippy=0
+  kernel=0
   apps=()
+  official=0
 
   while :; do
     case "${1-}" in
     -v | --verbose) set -x ;;
     -c | --clippy) clippy=1 ;;
+    -k | --kernel) kernel=1 ;;
     --apps=*)
       if [[ "$1" =~ ^--apps= ]]; then
           apps_csv=$(echo $1 | sed -e 's/^--apps=//')
