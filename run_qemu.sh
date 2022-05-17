@@ -18,15 +18,28 @@ build_and_run() {
     cd -
   fi
 
-  if [ $apps -eq 1 ]; then
-    cargo build --release # build in release mode to optimize code
-  else
+  if [ $kernel -eq 1 ]; then
     cd kernel
     cargo build --release # build in release mode to optimize code
-    cd -
   fi
-#  cargo build
 
+  if [ $apps == "all" ]; then
+    for cargo_manifest in $(ls apps/*/Cargo.toml); do
+      app_dir=$(dirname $cargo_manifest)
+      if [ $app_dir == "apps/shared_lib" ]; then
+        continue
+      fi
+      cd "${script_dir}/${app_dir}"
+      cargo build --release
+    done
+  elif [ ${#apps[@]} -gt 0 ]; then
+    for app in ${apps[@]}; do
+      cd "${script_dir}/apps/${app}"
+      cargo build --release
+    done
+  fi
+
+  cd $script_dir
   make -C apps/onlyhlt/ onlyhlt
 
   MIKANOS_DIR=$PWD $HOME/osbook/devenv/run_mikanos.sh
@@ -53,15 +66,22 @@ build_and_run_official() {
 }
 
 parse_params() {
-  official=0
   clippy=0
-  apps=0
+  kernel=0
+  apps=()
+  official=0
 
   while :; do
     case "${1-}" in
     -v | --verbose) set -x ;;
     -c | --clippy) clippy=1 ;;
-    -a | --apps) apps=1 ;;
+    -k | --kernel) kernel=1 ;;
+    --apps=*)
+      if [[ "$1" =~ ^--apps= ]]; then
+          apps_csv=$(echo $1 | sed -e 's/^--apps=//')
+          IFS=',' read -ra apps <<< "$apps_csv"
+      fi
+    ;;
     -o | --official) official=1 ;;
     -?*) die "Unknown option: $1" ;;
     *) break ;;
