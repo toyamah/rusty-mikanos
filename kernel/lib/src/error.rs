@@ -51,6 +51,7 @@ pub enum Code {
     NoSuchTask,
     InvalidFormat,
     FrameTooSmall,
+    InvalidFile,
     LastOfCode,
 }
 

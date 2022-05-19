@@ -169,7 +169,8 @@ fn convert_to_code(code: i32) -> Option<Code> {
         20 => NoSuchTask,
         21 => InvalidFormat,
         22 => FrameTooSmall,
-        23 => LastOfCode,
+        23 => InvalidFile,
+        24 => LastOfCode,
         _ => {
             panic!("unexpected code {}", code);
         }
