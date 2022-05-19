@@ -7,7 +7,7 @@ pub mod global {
     use crate::asm::global::{exit_app, load_interrupt_descriptor_table, IntHandlerLAPICTimer};
     use crate::graphics::global::pixel_writer;
     use crate::graphics::{PixelWriter, COLOR_BLACK};
-    use crate::interrupt::InterruptFrame;
+    use crate::interrupt::{InterruptFrame, InterruptStackFrame};
     use crate::message::{Message, MessageType};
     use crate::segment::KERNEL_CS;
     use crate::task::global::task_manager;
@@ -81,7 +81,7 @@ pub mod global {
         );
     }
 
-    extern "x86-interrupt" fn int_handler_xhci(_: *const InterruptFrame) {
+    extern "x86-interrupt" fn int_handler_xhci(_: InterruptStackFrame) {
         task_manager()
             .send_message(
                 task_manager().main_task().id(),
@@ -91,65 +91,64 @@ pub mod global {
         notify_end_of_interrupt();
     }
 
-    extern "x86-interrupt" fn int_handler_de(frame: *const InterruptFrame) {
-        _fault_handler_no_error("#DE", frame);
+    extern "x86-interrupt" fn int_handler_de(frame: InterruptStackFrame) {
+        _fault_handler_no_error("#DE", &frame.value);
     }
-    extern "x86-interrupt" fn int_handler_db(frame: *const InterruptFrame) {
-        _fault_handler_no_error("#db", frame);
+    extern "x86-interrupt" fn int_handler_db(frame: InterruptStackFrame) {
+        _fault_handler_no_error("#db", &frame.value);
     }
-    extern "x86-interrupt" fn int_handler_bp(frame: *const InterruptFrame) {
-        _fault_handler_no_error("#BP", frame);
+    extern "x86-interrupt" fn int_handler_bp(frame: InterruptStackFrame) {
+        _fault_handler_no_error("#BP", &frame.value);
     }
-    extern "x86-interrupt" fn int_handler_of(frame: *const InterruptFrame) {
-        _fault_handler_no_error("#OF", frame);
+    extern "x86-interrupt" fn int_handler_of(frame: InterruptStackFrame) {
+        _fault_handler_no_error("#OF", &frame.value);
     }
-    extern "x86-interrupt" fn int_handler_br(frame: *const InterruptFrame) {
-        _fault_handler_no_error("#BR", frame);
+    extern "x86-interrupt" fn int_handler_br(frame: InterruptStackFrame) {
+        _fault_handler_no_error("#BR", &frame.value);
     }
-    extern "x86-interrupt" fn int_handler_ud(frame: *const InterruptFrame) {
-        _fault_handler_no_error("#UD", frame);
+    extern "x86-interrupt" fn int_handler_ud(frame: InterruptStackFrame) {
+        _fault_handler_no_error("#UD", &frame.value);
     }
-    extern "x86-interrupt" fn int_handler_nm(frame: *const InterruptFrame) {
-        _fault_handler_no_error("#NM", frame);
+    extern "x86-interrupt" fn int_handler_nm(frame: InterruptStackFrame) {
+        _fault_handler_no_error("#NM", &frame.value);
     }
-    extern "x86-interrupt" fn int_handler_df(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#DF", frame, error_code);
+    extern "x86-interrupt" fn int_handler_df(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#DF", &frame.value, error_code);
     }
-    extern "x86-interrupt" fn int_handler_ts(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#TS", frame, error_code);
+    extern "x86-interrupt" fn int_handler_ts(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#TS", &frame.value, error_code);
     }
-    extern "x86-interrupt" fn int_handler_np(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#NP", frame, error_code);
+    extern "x86-interrupt" fn int_handler_np(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#NP", &frame.value, error_code);
     }
-    extern "x86-interrupt" fn int_handler_ss(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#SS", frame, error_code);
+    extern "x86-interrupt" fn int_handler_ss(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#SS", &frame.value, error_code);
     }
-    extern "x86-interrupt" fn int_handler_gp(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#GP", frame, error_code);
+    extern "x86-interrupt" fn int_handler_gp(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#GP", &frame.value, error_code);
     }
-    extern "x86-interrupt" fn int_handler_pf(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#PF", frame, error_code);
+    extern "x86-interrupt" fn int_handler_pf(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#PF", &frame.value, error_code);
     }
-    extern "x86-interrupt" fn int_handler_mf(frame: *const InterruptFrame) {
-        _fault_handler_no_error("#MF", frame);
+    extern "x86-interrupt" fn int_handler_mf(frame: InterruptStackFrame) {
+        _fault_handler_no_error("#MF", &frame.value);
     }
-    extern "x86-interrupt" fn int_handler_ac(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#AC", frame, error_code);
+    extern "x86-interrupt" fn int_handler_ac(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#AC", &frame.value, error_code);
     }
-    extern "x86-interrupt" fn int_handler_mc(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#MC", frame, error_code);
+    extern "x86-interrupt" fn int_handler_mc(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#MC", &frame.value, error_code);
     }
-    extern "x86-interrupt" fn int_handler_xm(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#XM", frame, error_code);
+    extern "x86-interrupt" fn int_handler_xm(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#XM", &frame.value, error_code);
     }
-    extern "x86-interrupt" fn int_handler_ve(frame: *const InterruptFrame, error_code: u64) {
-        _fault_handler_with_error("#VE", frame, error_code);
+    extern "x86-interrupt" fn int_handler_ve(frame: InterruptStackFrame, error_code: u64) {
+        _fault_handler_with_error("#VE", &frame.value, error_code);
     }
 
-    fn _fault_handler_with_error(name: &str, frame: *const InterruptFrame, error_code: u64) {
-        let f = unsafe { frame.as_ref() }.unwrap();
-        kill_app(f);
-        print_frame(f, name);
+    fn _fault_handler_with_error(name: &str, frame: &InterruptFrame, error_code: u64) {
+        kill_app(frame);
+        print_frame(frame, name);
         pixel_writer().write_string(500, 16 * 4, "ERR", &COLOR_BLACK);
         print_hex(error_code, 16, 500 + 8 * 4, 16 * 4);
         loop {
@@ -157,10 +156,9 @@ pub mod global {
         }
     }
 
-    fn _fault_handler_no_error(name: &str, frame: *const InterruptFrame) {
-        let f = unsafe { frame.as_ref() }.unwrap();
-        kill_app(f);
-        print_frame(f, name);
+    fn _fault_handler_no_error(name: &str, frame: &InterruptFrame) {
+        kill_app(frame);
+        print_frame(frame, name);
         loop {
             unsafe { asm!("hlt") }
         }
@@ -205,6 +203,13 @@ pub mod global {
         unsafe { asm!("sti") };
         exit_app(*task.os_stack_pointer(), 128 + SIGSEGV)
     }
+}
+
+/// This struct is needed for the same reason as `InterruptStackFrame` of x86_64 crate
+/// https://github.com/rust-osdev/x86_64/blob/master/src/structures/idt.rs
+#[repr(C)]
+pub struct InterruptStackFrame {
+    value: InterruptFrame,
 }
 
 #[repr(C)]
