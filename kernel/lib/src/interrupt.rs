@@ -76,7 +76,7 @@ pub mod global {
         idt[20].set_idt_entry(int_handler_ve as usize);
 
         load_interrupt_descriptor_table(
-            core::mem::size_of_val(idt) as u16,
+            core::mem::size_of_val(idt) as u16 - 1,
             &idt[0] as *const InterruptDescriptor as u64,
         );
     }

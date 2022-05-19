@@ -51,7 +51,7 @@ pub mod global {
                 (tss_addr & 0xffff_ffff) as u32,
                 (mem::size_of_val(&TSS) - 1) as u32,
             );
-            GDT[i + 1] = SegmentDescriptor(0);
+            GDT[i + 1] = SegmentDescriptor((tss_addr >> 32) as u64);
         }
         load_tr(K_TSS);
     }
