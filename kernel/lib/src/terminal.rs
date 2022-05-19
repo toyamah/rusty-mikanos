@@ -196,6 +196,7 @@ pub(crate) struct Terminal {
     command_history: CommandHistory,
 }
 
+/// Some functions depend on global functions although Terminal is not in a global module.
 impl Terminal {
     fn new(task_id: TaskID) -> Terminal {
         Self {
