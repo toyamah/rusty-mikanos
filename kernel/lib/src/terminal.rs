@@ -1,6 +1,7 @@
 use crate::asm::global::{call_app, get_cr3, set_cr3};
 use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
+use crate::fat::global::{boot_volume_image, bytes_per_cluster, find_file};
 use crate::fat::{Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
@@ -14,7 +15,7 @@ use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
 use crate::paging::global::reset_cr3;
 use crate::paging::{LinearAddress4Level, PageMapEntry};
-use crate::rust_official::c_str::CString;
+use crate::rust_official::c_str::{CStr, CString};
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::task::global::task_manager;
@@ -377,36 +378,12 @@ impl Terminal {
                 // }
             }
             "ls" => {
-                // don't care about depending on a global var...
-                let root_dir_entries = fat::global::boot_volume_image().root_dir_entries();
-                for dir in root_dir_entries {
-                    if dir.is_free_and_no_more_allocated_after_this() {
-                        break;
-                    }
-                    if dir.is_free() || dir.attr() == Attribute::LongName {
-                        continue;
-                    }
-
-                    let base = dir.basename();
-                    let ext = dir.extension();
-
-                    if ext[0] != 0 {
-                        writeln!(
-                            self,
-                            "{}.{}",
-                            string_trimming_null(&base),
-                            string_trimming_null(&ext)
-                        )
-                        .unwrap();
-                    } else {
-                        writeln!(self, "{}", string_trimming_null(&base)).unwrap();
-                    }
-                }
+                self.list_all_entries(boot_volume_image().get_root_cluster());
             }
             "cat" => {
-                let bpb = fat::global::boot_volume_image();
+                let bpb = boot_volume_image();
                 let first_arg = argv.get(0).unwrap_or(&"").deref();
-                let file_entry = fat::find_file(first_arg, bpb.get_root_cluster() as u64, bpb);
+                let (file_entry, _) = find_file(first_arg, bpb.get_root_cluster() as u64);
                 if let Some(file_entry) = file_entry {
                     let mut cluster = file_entry.first_cluster() as u64;
                     let mut remain_bytes = file_entry.file_size() as u64;
@@ -415,8 +392,7 @@ impl Terminal {
                         if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
                             break;
                         }
-                        let size =
-                            cmp::min(fat::global::bytes_per_cluster(), remain_bytes) as usize;
+                        let size = cmp::min(bytes_per_cluster(), remain_bytes) as usize;
                         let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
                         let p = &p[..size];
                         for &c in p {
@@ -441,11 +417,9 @@ impl Terminal {
                 }
             }
             _ => {
-                let bpb = fat::global::boot_volume_image();
-                if let Some(file_entry) =
-                    fat::find_file(command, bpb.get_root_cluster() as u64, bpb)
-                {
-                    if let Some(e) = self.execute_file(file_entry, argv.as_slice(), bpb).err() {
+                let root_cluster = boot_volume_image().get_root_cluster();
+                if let (Some(file_entry), _) = find_file(command, root_cluster as u64) {
+                    if let Some(e) = self.execute_file(file_entry, argv.as_slice()).err() {
                         writeln!(self, "failed to exec file: {}", e).unwrap();
                     }
                 } else {
@@ -455,14 +429,9 @@ impl Terminal {
         }
     }
 
-    fn execute_file(
-        &mut self,
-        file_entry: &DirectoryEntry,
-        args: &[&str],
-        boot_volume_image: &Bpb,
-    ) -> Result<(), Error> {
+    fn execute_file(&mut self, file_entry: &DirectoryEntry, args: &[&str]) -> Result<(), Error> {
         let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
-        file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image);
+        file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image());
 
         let elf_header = unsafe { Elf64Ehdr::from_mut(&mut file_buf) }.unwrap();
         if !elf_header.is_elf() {
@@ -618,6 +587,38 @@ impl Terminal {
             .get_layer_mut(self.layer_id)
             .map(|l| l.get_window_mut())
     }
+
+    fn list_all_entries(&mut self, mut dir_cluster: u32) {
+        let mut dir_cluster = dir_cluster as u64;
+
+        while dir_cluster != END_OF_CLUSTER_CHAIN {
+            let dirs = boot_volume_image().get_sector_by_cluster::<DirectoryEntry>(dir_cluster);
+            for dir in dirs {
+                if dir.is_free_and_no_more_allocated_after_this() {
+                    break;
+                }
+                if dir.is_free() || dir.attr() == Attribute::LongName {
+                    continue;
+                }
+
+                let base = dir.basename();
+                let ext = dir.extension();
+
+                if ext[0] != 0 {
+                    writeln!(
+                        self,
+                        "{}.{}",
+                        string_trimming_null(&base),
+                        string_trimming_null(&ext)
+                    )
+                } else {
+                    writeln!(self, "{}", string_trimming_null(&base))
+                }
+                .unwrap();
+            }
+            dir_cluster = boot_volume_image().next_cluster(dir_cluster);
+        }
+    }
 }
 
 impl Write for Terminal {
@@ -714,9 +715,10 @@ fn parse_command(s: &str) -> Option<Vec<&str>> {
     Some(Vec::from(parsed))
 }
 
-fn string_trimming_null(bytes: &[u8]) -> String {
-    let vec: Vec<u8> = bytes.iter().take_while(|&&v| v != 0x00).copied().collect();
-    String::from_utf8(vec).unwrap()
+fn string_trimming_null(bytes: &[u8]) -> &str {
+    unsafe { CStr::from_bytes_with_nul_unchecked(bytes) }
+        .to_str()
+        .unwrap()
 }
 
 fn make_argv(

@@ -1,8 +1,9 @@
+use crate::fat::global::boot_volume_image;
 use core::mem::size_of;
 use core::{cmp, mem, slice};
 
 pub mod global {
-    use crate::fat::Bpb;
+    use crate::fat::{next_path_element, Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 
     static mut BOOT_VOLUME_IMAGE: Option<&'static Bpb> = None;
     pub fn boot_volume_image() -> &'static Bpb {
@@ -19,6 +20,43 @@ pub mod global {
         let bytes_per_cluster = bpb.bytes_per_cluster();
         unsafe { BOOT_VOLUME_IMAGE = Some(bpb) };
         unsafe { BYTES_PER_CLUSTER = bytes_per_cluster }
+    }
+
+    pub fn find_file(path: &str, mut directory_cluster: u64) -> (Option<&DirectoryEntry>, bool) {
+        let mut path = path;
+        if path.chars().next() == Some('/') {
+            directory_cluster = boot_volume_image().root_cluster as u64;
+            path = &path[1..];
+        } else if directory_cluster == 0 {
+            directory_cluster = boot_volume_image().root_cluster as u64;
+        }
+
+        let (path_elem, next_path, post_slash) = match next_path_element(path) {
+            None => (path, "", false),
+            Some(p) => (p.path_before_slash, p.path_after_slash, true),
+        };
+        let path_last = next_path == "";
+
+        while directory_cluster != END_OF_CLUSTER_CHAIN {
+            let dirs =
+                boot_volume_image().get_sector_by_cluster::<DirectoryEntry>(directory_cluster);
+            for dir in dirs {
+                if dir.name[0] == 0x00 {
+                    return (None, post_slash);
+                } else if dir.name_is_equal(path_elem) {
+                    continue;
+                }
+
+                return if dir.attr() == Attribute::Directory && !path_last {
+                    find_file(next_path, dir.first_cluster() as u64)
+                } else {
+                    (Some(dir), post_slash)
+                };
+            }
+            directory_cluster = boot_volume_image().next_cluster(directory_cluster);
+        }
+
+        return (None, post_slash);
     }
 }
 
@@ -148,7 +186,7 @@ impl From<u8> for Attribute {
 /// See 27 page of https://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/fatgen103.doc
 #[repr(packed)]
 pub struct DirectoryEntry {
-    name: [u8; 11],
+    pub name: [u8; 11],
     attr: u8,
     ntres: u8,
     create_time_tenth: u8,
@@ -257,20 +295,49 @@ impl DirectoryEntry {
     }
 }
 
-pub fn find_file<'a>(
-    name: &'a str,
-    mut directory_cluster: u64,
-    bpb: &'a Bpb,
-) -> Option<&'a DirectoryEntry> {
-    while directory_cluster != END_OF_CLUSTER_CHAIN {
-        let dirs = bpb.get_sector_by_cluster::<DirectoryEntry>(directory_cluster);
-        for dir in dirs {
-            if dir.name_is_equal(name) {
-                return Some(dir);
-            }
-        }
-        directory_cluster = bpb.next_cluster(directory_cluster);
-    }
+#[derive(Eq, PartialEq, Debug)]
+struct PathElements<'a> {
+    path_before_slash: &'a str,
+    path_after_slash: &'a str,
+}
 
-    None
+impl<'a> PathElements<'a> {
+    fn new(path_before_slash: &'a str, path_after_slash: &'a str) -> Self {
+        Self {
+            path_before_slash,
+            path_after_slash,
+        }
+    }
+}
+
+fn next_path_element(path: &str) -> Option<PathElements> {
+    path.find('/').map(|first_slash_index| {
+        let path_before_slash = &path[..first_slash_index];
+        let path_after_slash = &path[first_slash_index + 1..];
+        PathElements::new(path_before_slash, path_after_slash)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_next_path_element() {
+        assert_eq!(next_path_element(""), None);
+        assert_eq!(next_path_element("/"), Some(PathElements::new("", "")));
+
+        assert_eq!(
+            next_path_element("/abc/def"),
+            Some(PathElements::new("", "abc/def"))
+        );
+        assert_eq!(
+            next_path_element("abc/def"),
+            Some(PathElements::new("abc", "def"))
+        );
+        assert_eq!(
+            next_path_element("abc/def/ghi"),
+            Some(PathElements::new("abc", "def/ghi"))
+        );
+    }
 }
