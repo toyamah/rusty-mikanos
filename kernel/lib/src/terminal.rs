@@ -391,8 +391,12 @@ impl Terminal {
             }
             _ => {
                 let root_cluster = boot_volume_image().get_root_cluster();
-                if let (Some(file_entry), _) = find_file(command, root_cluster as u64) {
-                    if let Some(e) = self.execute_file(file_entry, argv.as_slice()).err() {
+                if let (Some(file_entry), post_slash) = find_file(command, root_cluster as u64) {
+                    if !file_entry.is_directory() && post_slash {
+                        let name_bytes = file_entry.formatted_name();
+                        let name = string_trimming_null(&name_bytes);
+                        writeln!(self, "{} is not a directory", name).unwrap();
+                    } else if let Some(e) = self.execute_file(file_entry, argv.as_slice()).err() {
                         writeln!(self, "failed to exec file: {}", e).unwrap();
                     }
                 } else {
