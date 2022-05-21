@@ -1,4 +1,3 @@
-use crate::fat::global::boot_volume_image;
 use core::mem::size_of;
 use core::{cmp, mem, slice};
 
@@ -43,7 +42,7 @@ pub mod global {
             for dir in dirs {
                 if dir.name[0] == 0x00 {
                     return (None, post_slash);
-                } else if dir.name_is_equal(path_elem) {
+                } else if !dir.name_is_equal(path_elem) {
                     continue;
                 }
 
