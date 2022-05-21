@@ -599,28 +599,38 @@ impl Terminal {
     fn execute_cat(&mut self, argv: &[&str]) {
         let bpb = boot_volume_image();
         let first_arg = argv.get(1).unwrap_or(&"").deref();
-        let (file_entry, _) = find_file(first_arg, bpb.get_root_cluster() as u64);
-        if let Some(file_entry) = file_entry {
-            let mut cluster = file_entry.first_cluster() as u64;
-            let mut remain_bytes = file_entry.file_size() as u64;
-            self.draw_cursor(false);
-            loop {
-                if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
-                    break;
-                }
-                let size = cmp::min(bytes_per_cluster(), remain_bytes) as usize;
-                let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
-                let p = &p[..size];
-                for &c in p {
-                    self.write_char(c as char).unwrap();
-                }
-                remain_bytes -= p.len() as u64;
-                cluster = bpb.next_cluster(cluster);
-            }
-            self.draw_cursor(true);
-        } else {
+
+        let (file_entry, post_slash) = find_file(first_arg, bpb.get_root_cluster() as u64);
+        if file_entry.is_none() {
             writeln!(self, "no such file: {}", first_arg).unwrap();
+            return;
         }
+
+        let file_entry = file_entry.unwrap();
+        if file_entry.attr() != Directory && post_slash {
+            let name_bytes = file_entry.formatted_name();
+            let name = string_trimming_null(&name_bytes);
+            writeln!(self, "{} is not a directory", name).unwrap();
+            return;
+        }
+
+        let mut cluster = file_entry.first_cluster() as u64;
+        let mut remain_bytes = file_entry.file_size() as u64;
+        self.draw_cursor(false);
+        loop {
+            if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
+                break;
+            }
+            let size = cmp::min(bytes_per_cluster(), remain_bytes) as usize;
+            let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
+            let p = &p[..size];
+            for &c in p {
+                self.write_char(c as char).unwrap();
+            }
+            remain_bytes -= p.len() as u64;
+            cluster = bpb.next_cluster(cluster);
+        }
+        self.draw_cursor(true);
     }
 
     fn list_all_entries(&mut self, mut dir_cluster: u32) {
