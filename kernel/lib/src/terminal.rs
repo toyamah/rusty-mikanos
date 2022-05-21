@@ -378,35 +378,8 @@ impl Terminal {
                 //     self.print(format!("{}\n", device).as_str(), w);
                 // }
             }
-            "ls" => {
-                self.execute_ls(&argv);
-            }
-            "cat" => {
-                let bpb = boot_volume_image();
-                let first_arg = argv.get(0).unwrap_or(&"").deref();
-                let (file_entry, _) = find_file(first_arg, bpb.get_root_cluster() as u64);
-                if let Some(file_entry) = file_entry {
-                    let mut cluster = file_entry.first_cluster() as u64;
-                    let mut remain_bytes = file_entry.file_size() as u64;
-                    self.draw_cursor(false);
-                    loop {
-                        if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
-                            break;
-                        }
-                        let size = cmp::min(bytes_per_cluster(), remain_bytes) as usize;
-                        let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
-                        let p = &p[..size];
-                        for &c in p {
-                            self.write_char(c as char).unwrap();
-                        }
-                        remain_bytes -= p.len() as u64;
-                        cluster = bpb.next_cluster(cluster);
-                    }
-                    self.draw_cursor(true);
-                } else {
-                    writeln!(self, "no such file: {}", first_arg).unwrap();
-                }
-            }
+            "ls" => self.execute_ls(&argv),
+            "cat" => self.execute_cat(&argv),
             "noterm" => {
                 if let Some(&first_arg) = argv.get(1) {
                     let c = CString::_new(first_arg.as_bytes().to_vec()).unwrap();
@@ -620,6 +593,33 @@ impl Terminal {
                 .unwrap();
         } else {
             self.write_fmt(format_args!("{}\n", name)).unwrap();
+        }
+    }
+
+    fn execute_cat(&mut self, argv: &[&str]) {
+        let bpb = boot_volume_image();
+        let first_arg = argv.get(1).unwrap_or(&"").deref();
+        let (file_entry, _) = find_file(first_arg, bpb.get_root_cluster() as u64);
+        if let Some(file_entry) = file_entry {
+            let mut cluster = file_entry.first_cluster() as u64;
+            let mut remain_bytes = file_entry.file_size() as u64;
+            self.draw_cursor(false);
+            loop {
+                if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
+                    break;
+                }
+                let size = cmp::min(bytes_per_cluster(), remain_bytes) as usize;
+                let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
+                let p = &p[..size];
+                for &c in p {
+                    self.write_char(c as char).unwrap();
+                }
+                remain_bytes -= p.len() as u64;
+                cluster = bpb.next_cluster(cluster);
+            }
+            self.draw_cursor(true);
+        } else {
+            writeln!(self, "no such file: {}", first_arg).unwrap();
         }
     }
 
