@@ -580,14 +580,14 @@ impl Terminal {
         }
 
         let dir = dir.unwrap();
-        if dir.attr() == Directory {
+        if dir.is_directory() {
             self.list_all_entries(dir.first_cluster());
             return;
         }
 
-        self.list_all_entries(dir.first_cluster());
         let name_bytes = dir.formatted_name();
         let name = string_trimming_null(&name_bytes);
+
         if post_slash {
             self.write_fmt(format_args!("{} is not a directory\n", name))
                 .unwrap();
@@ -607,7 +607,7 @@ impl Terminal {
         }
 
         let file_entry = file_entry.unwrap();
-        if file_entry.attr() != Directory && post_slash {
+        if !file_entry.is_directory() && post_slash {
             let name_bytes = file_entry.formatted_name();
             let name = string_trimming_null(&name_bytes);
             writeln!(self, "{} is not a directory", name).unwrap();
@@ -642,7 +642,7 @@ impl Terminal {
                 if dir.is_free_and_no_more_allocated_after_this() {
                     break;
                 }
-                if dir.is_free() || dir.attr() == Attribute::LongName {
+                if dir.is_free() || dir.attr() == Some(Attribute::LongName) {
                     continue;
                 }
 

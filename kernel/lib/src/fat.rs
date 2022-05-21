@@ -1,3 +1,4 @@
+use core::fmt::{Display, Formatter};
 use core::mem::size_of;
 use core::{cmp, mem, slice};
 
@@ -46,7 +47,7 @@ pub mod global {
                     continue;
                 }
 
-                return if dir.attr() == Attribute::Directory && !path_last {
+                return if dir.is_directory() && !path_last {
                     find_file(next_path, dir.first_cluster() as u64)
                 } else {
                     (Some(dir), post_slash)
@@ -167,18 +168,28 @@ pub enum Attribute {
     LongName,
 }
 
-impl From<u8> for Attribute {
-    fn from(v: u8) -> Self {
-        match v {
-            0x01 => Attribute::ReadOnly,
-            0x02 => Attribute::Hidden,
-            0x04 => Attribute::System,
-            0x08 => Attribute::VolumeID,
-            0x10 => Attribute::Directory,
-            0x20 => Attribute::Archive,
-            0x0f => Attribute::LongName,
-            _ => panic!("unexpected value: {}", v),
+pub struct TryFromAttributeError(u8);
+
+impl TryFrom<u8> for Attribute {
+    type Error = TryFromAttributeError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x01 => Ok(Attribute::ReadOnly),
+            0x02 => Ok(Attribute::Hidden),
+            0x04 => Ok(Attribute::System),
+            0x08 => Ok(Attribute::VolumeID),
+            0x10 => Ok(Attribute::Directory),
+            0x20 => Ok(Attribute::Archive),
+            0x0f => Ok(Attribute::LongName),
+            _ => Err(TryFromAttributeError(value)),
         }
+    }
+}
+
+impl Display for TryFromAttributeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "unexpected attribute value {}", self.0)
     }
 }
 
@@ -208,8 +219,15 @@ impl DirectoryEntry {
         self.first_cluster_low as u32 | ((self.first_cluster_high as u32) << 16)
     }
 
-    pub fn attr(&self) -> Attribute {
-        Attribute::from(self.attr)
+    pub fn attr(&self) -> Option<Attribute> {
+        self.attr.try_into().ok()
+    }
+
+    pub fn is_directory(&self) -> bool {
+        match self.attr.try_into() {
+            Ok(Attribute::Directory) => true,
+            _ => false,
+        }
     }
 
     /// the directory entry is free (there is no file or directory name in this entry).
