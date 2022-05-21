@@ -2,7 +2,8 @@ use crate::asm::global::{call_app, get_cr3, set_cr3};
 use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
 use crate::fat::global::{boot_volume_image, bytes_per_cluster, find_file};
-use crate::fat::{Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
+use crate::fat::Attribute::Directory;
+use crate::fat::{Attribute, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
@@ -22,7 +23,7 @@ use crate::task::global::task_manager;
 use crate::task::{Task, TaskID};
 use crate::terminal::global::task_terminal;
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
-use crate::{fat, make_error, Window};
+use crate::{make_error, Window};
 use alloc::collections::VecDeque;
 use alloc::string::{String, ToString};
 use alloc::vec;
@@ -378,7 +379,7 @@ impl Terminal {
                 // }
             }
             "ls" => {
-                self.list_all_entries(boot_volume_image().get_root_cluster());
+                self.execute_ls(&argv);
             }
             "cat" => {
                 let bpb = boot_volume_image();
@@ -588,6 +589,40 @@ impl Terminal {
             .map(|l| l.get_window_mut())
     }
 
+    fn execute_ls(&mut self, argv: &[&str]) {
+        let root_cluster = boot_volume_image().get_root_cluster();
+
+        let first_arg = argv.get(1);
+        if first_arg.is_none() {
+            self.list_all_entries(root_cluster);
+            return;
+        }
+
+        let &first_arg = first_arg.unwrap();
+        let (dir, post_slash) = find_file(first_arg, root_cluster.into());
+        if dir.is_none() {
+            self.write_fmt(format_args!("No such file or directory: {}\n", first_arg))
+                .unwrap();
+            return;
+        }
+
+        let dir = dir.unwrap();
+        if dir.attr() == Directory {
+            self.list_all_entries(dir.first_cluster());
+            return;
+        }
+
+        self.list_all_entries(dir.first_cluster());
+        let name_bytes = dir.formatted_name();
+        let name = string_trimming_null(&name_bytes);
+        if post_slash {
+            self.write_fmt(format_args!("{} is not a directory\n", name))
+                .unwrap();
+        } else {
+            self.write_fmt(format_args!("{}\n", name)).unwrap();
+        }
+    }
+
     fn list_all_entries(&mut self, mut dir_cluster: u32) {
         let mut dir_cluster = dir_cluster as u64;
 
@@ -601,20 +636,8 @@ impl Terminal {
                     continue;
                 }
 
-                let base = dir.basename();
-                let ext = dir.extension();
-
-                if ext[0] != 0 {
-                    writeln!(
-                        self,
-                        "{}.{}",
-                        string_trimming_null(&base),
-                        string_trimming_null(&ext)
-                    )
-                } else {
-                    writeln!(self, "{}", string_trimming_null(&base))
-                }
-                .unwrap();
+                let name = dir.formatted_name();
+                writeln!(self, "{}", string_trimming_null(&name)).unwrap();
             }
             dir_cluster = boot_volume_image().next_cluster(dir_cluster);
         }

@@ -235,6 +235,28 @@ impl DirectoryEntry {
         base
     }
 
+    pub fn formatted_name(&self) -> [u8; 12] {
+        let mut dest = [0_u8; 12];
+        let base = self.basename();
+        let ext = self.extension();
+
+        &dest[..base.len()].copy_from_slice(&base);
+
+        if ext[0] != 0 {
+            let (null_index, _) = dest
+                .iter()
+                .enumerate()
+                .find(|(_, &b)| b == 0)
+                .expect("failed to find null terminator");
+            dest[null_index] = b'.';
+
+            let first_ext_i = null_index + 1;
+            dest[first_ext_i..first_ext_i + ext.len()].copy_from_slice(&ext);
+        }
+
+        dest
+    }
+
     pub fn extension(&self) -> [u8; 3] {
         let mut ext = [0; 3];
         ext.copy_from_slice(&self.name[8..]);
