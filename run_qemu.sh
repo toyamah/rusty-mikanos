@@ -42,6 +42,7 @@ build_and_run() {
   cd $script_dir
   make -C apps/onlyhlt/ onlyhlt
 
+  export APPS_DIR=apps
   MIKANOS_DIR=$PWD $HOME/osbook/devenv/run_mikanos.sh
 }
 
@@ -62,6 +63,7 @@ build_and_run_official() {
 #  done
 
   cd "$official_dir"
+  export APPS_DIR=apps
   ./build.sh run
 }
 

@@ -1,8 +1,9 @@
+use core::fmt::{Display, Formatter};
 use core::mem::size_of;
-use core::{cmp, mem, slice};
+use core::{cmp, slice};
 
 pub mod global {
-    use crate::fat::Bpb;
+    use crate::fat::{next_path_element, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 
     static mut BOOT_VOLUME_IMAGE: Option<&'static Bpb> = None;
     pub fn boot_volume_image() -> &'static Bpb {
@@ -19,6 +20,43 @@ pub mod global {
         let bytes_per_cluster = bpb.bytes_per_cluster();
         unsafe { BOOT_VOLUME_IMAGE = Some(bpb) };
         unsafe { BYTES_PER_CLUSTER = bytes_per_cluster }
+    }
+
+    pub fn find_file(path: &str, mut directory_cluster: u64) -> (Option<&DirectoryEntry>, bool) {
+        let mut path = path;
+        if path.starts_with('/') {
+            directory_cluster = boot_volume_image().root_cluster as u64;
+            path = &path[1..];
+        } else if directory_cluster == 0 {
+            directory_cluster = boot_volume_image().root_cluster as u64;
+        }
+
+        let (path_elem, next_path, post_slash) = match next_path_element(path) {
+            None => (path, "", false),
+            Some(p) => (p.path_before_slash, p.path_after_slash, true),
+        };
+        let path_last = next_path.is_empty();
+
+        while directory_cluster != END_OF_CLUSTER_CHAIN {
+            let dirs =
+                boot_volume_image().get_sector_by_cluster::<DirectoryEntry>(directory_cluster);
+            for dir in dirs {
+                if dir.name[0] == 0x00 {
+                    return (None, post_slash);
+                } else if !dir.name_is_equal(path_elem) {
+                    continue;
+                }
+
+                return if dir.is_directory() && !path_last {
+                    find_file(next_path, dir.first_cluster() as u64)
+                } else {
+                    (Some(dir), post_slash)
+                };
+            }
+            directory_cluster = boot_volume_image().next_cluster(directory_cluster);
+        }
+
+        (None, post_slash)
     }
 }
 
@@ -70,7 +108,7 @@ impl Bpb {
     }
 
     fn get_entries_per_cluster(&self) -> usize {
-        self.bytes_per_sector as usize / mem::size_of::<DirectoryEntry>()
+        self.bytes_per_sector as usize / size_of::<DirectoryEntry>()
             * self.sectors_per_cluster as usize
     }
 
@@ -130,25 +168,35 @@ pub enum Attribute {
     LongName,
 }
 
-impl From<u8> for Attribute {
-    fn from(v: u8) -> Self {
-        match v {
-            0x01 => Attribute::ReadOnly,
-            0x02 => Attribute::Hidden,
-            0x04 => Attribute::System,
-            0x08 => Attribute::VolumeID,
-            0x10 => Attribute::Directory,
-            0x20 => Attribute::Archive,
-            0x0f => Attribute::LongName,
-            _ => panic!("unexpected value: {}", v),
+pub struct TryFromAttributeError(u8);
+
+impl TryFrom<u8> for Attribute {
+    type Error = TryFromAttributeError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x01 => Ok(Attribute::ReadOnly),
+            0x02 => Ok(Attribute::Hidden),
+            0x04 => Ok(Attribute::System),
+            0x08 => Ok(Attribute::VolumeID),
+            0x10 => Ok(Attribute::Directory),
+            0x20 => Ok(Attribute::Archive),
+            0x0f => Ok(Attribute::LongName),
+            _ => Err(TryFromAttributeError(value)),
         }
+    }
+}
+
+impl Display for TryFromAttributeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "unexpected attribute value {}", self.0)
     }
 }
 
 /// See 27 page of https://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/fatgen103.doc
 #[repr(packed)]
 pub struct DirectoryEntry {
-    name: [u8; 11],
+    pub name: [u8; 11],
     attr: u8,
     ntres: u8,
     create_time_tenth: u8,
@@ -171,8 +219,12 @@ impl DirectoryEntry {
         self.first_cluster_low as u32 | ((self.first_cluster_high as u32) << 16)
     }
 
-    pub fn attr(&self) -> Attribute {
-        Attribute::from(self.attr)
+    pub fn attr(&self) -> Option<Attribute> {
+        self.attr.try_into().ok()
+    }
+
+    pub fn is_directory(&self) -> bool {
+        matches!(self.attr.try_into(), Ok(Attribute::Directory))
     }
 
     /// the directory entry is free (there is no file or directory name in this entry).
@@ -196,6 +248,28 @@ impl DirectoryEntry {
             base[i] = 0;
         }
         base
+    }
+
+    pub fn formatted_name(&self) -> [u8; 12] {
+        let mut dest = [0_u8; 12];
+        let base = self.basename();
+        let ext = self.extension();
+
+        dest[..base.len()].copy_from_slice(&base);
+
+        if ext[0] != 0 {
+            let (null_index, _) = dest
+                .iter()
+                .enumerate()
+                .find(|(_, &b)| b == 0)
+                .expect("failed to find null terminator");
+            dest[null_index] = b'.';
+
+            let first_ext_i = null_index + 1;
+            dest[first_ext_i..first_ext_i + ext.len()].copy_from_slice(&ext);
+        }
+
+        dest
     }
 
     pub fn extension(&self) -> [u8; 3] {
@@ -257,20 +331,49 @@ impl DirectoryEntry {
     }
 }
 
-pub fn find_file<'a>(
-    name: &'a str,
-    mut directory_cluster: u64,
-    bpb: &'a Bpb,
-) -> Option<&'a DirectoryEntry> {
-    while directory_cluster != END_OF_CLUSTER_CHAIN {
-        let dirs = bpb.get_sector_by_cluster::<DirectoryEntry>(directory_cluster);
-        for dir in dirs {
-            if dir.name_is_equal(name) {
-                return Some(dir);
-            }
-        }
-        directory_cluster = bpb.next_cluster(directory_cluster);
-    }
+#[derive(Eq, PartialEq, Debug)]
+struct PathElements<'a> {
+    path_before_slash: &'a str,
+    path_after_slash: &'a str,
+}
 
-    None
+impl<'a> PathElements<'a> {
+    fn new(path_before_slash: &'a str, path_after_slash: &'a str) -> Self {
+        Self {
+            path_before_slash,
+            path_after_slash,
+        }
+    }
+}
+
+fn next_path_element(path: &str) -> Option<PathElements> {
+    path.find('/').map(|first_slash_index| {
+        let path_before_slash = &path[..first_slash_index];
+        let path_after_slash = &path[first_slash_index + 1..];
+        PathElements::new(path_before_slash, path_after_slash)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_next_path_element() {
+        assert_eq!(next_path_element(""), None);
+        assert_eq!(next_path_element("/"), Some(PathElements::new("", "")));
+
+        assert_eq!(
+            next_path_element("/abc/def"),
+            Some(PathElements::new("", "abc/def"))
+        );
+        assert_eq!(
+            next_path_element("abc/def"),
+            Some(PathElements::new("abc", "def"))
+        );
+        assert_eq!(
+            next_path_element("abc/def/ghi"),
+            Some(PathElements::new("abc", "def/ghi"))
+        );
+    }
 }
