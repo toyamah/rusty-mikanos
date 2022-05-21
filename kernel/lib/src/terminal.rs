@@ -355,7 +355,7 @@ impl Terminal {
 
         match command {
             "echo" => {
-                if let Some(&arg) = argv.get(0) {
+                if let Some(&arg) = argv.get(1) {
                     self.print(arg);
                 }
                 self.print("\n");
