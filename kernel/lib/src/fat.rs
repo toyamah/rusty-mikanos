@@ -1,9 +1,9 @@
 use core::fmt::{Display, Formatter};
 use core::mem::size_of;
-use core::{cmp, mem, slice};
+use core::{cmp, slice};
 
 pub mod global {
-    use crate::fat::{next_path_element, Attribute, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
+    use crate::fat::{next_path_element, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 
     static mut BOOT_VOLUME_IMAGE: Option<&'static Bpb> = None;
     pub fn boot_volume_image() -> &'static Bpb {
@@ -24,7 +24,7 @@ pub mod global {
 
     pub fn find_file(path: &str, mut directory_cluster: u64) -> (Option<&DirectoryEntry>, bool) {
         let mut path = path;
-        if path.chars().next() == Some('/') {
+        if path.starts_with('/') {
             directory_cluster = boot_volume_image().root_cluster as u64;
             path = &path[1..];
         } else if directory_cluster == 0 {
@@ -35,7 +35,7 @@ pub mod global {
             None => (path, "", false),
             Some(p) => (p.path_before_slash, p.path_after_slash, true),
         };
-        let path_last = next_path == "";
+        let path_last = next_path.is_empty();
 
         while directory_cluster != END_OF_CLUSTER_CHAIN {
             let dirs =
@@ -56,7 +56,7 @@ pub mod global {
             directory_cluster = boot_volume_image().next_cluster(directory_cluster);
         }
 
-        return (None, post_slash);
+        (None, post_slash)
     }
 }
 
@@ -108,7 +108,7 @@ impl Bpb {
     }
 
     fn get_entries_per_cluster(&self) -> usize {
-        self.bytes_per_sector as usize / mem::size_of::<DirectoryEntry>()
+        self.bytes_per_sector as usize / size_of::<DirectoryEntry>()
             * self.sectors_per_cluster as usize
     }
 
@@ -224,10 +224,7 @@ impl DirectoryEntry {
     }
 
     pub fn is_directory(&self) -> bool {
-        match self.attr.try_into() {
-            Ok(Attribute::Directory) => true,
-            _ => false,
-        }
+        matches!(self.attr.try_into(), Ok(Attribute::Directory))
     }
 
     /// the directory entry is free (there is no file or directory name in this entry).
@@ -258,7 +255,7 @@ impl DirectoryEntry {
         let base = self.basename();
         let ext = self.extension();
 
-        &dest[..base.len()].copy_from_slice(&base);
+        dest[..base.len()].copy_from_slice(&base);
 
         if ext[0] != 0 {
             let (null_index, _) = dest

@@ -2,7 +2,6 @@ use crate::asm::global::{call_app, get_cr3, set_cr3};
 use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
 use crate::fat::global::{boot_volume_image, bytes_per_cluster, find_file};
-use crate::fat::Attribute::Directory;
 use crate::fat::{Attribute, DirectoryEntry, END_OF_CLUSTER_CHAIN};
 use crate::font::{write_ascii, write_string};
 use crate::graphics::{
@@ -633,7 +632,7 @@ impl Terminal {
         self.draw_cursor(true);
     }
 
-    fn list_all_entries(&mut self, mut dir_cluster: u32) {
+    fn list_all_entries(&mut self, dir_cluster: u32) {
         let mut dir_cluster = dir_cluster as u64;
 
         while dir_cluster != END_OF_CLUSTER_CHAIN {
