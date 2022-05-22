@@ -1,3 +1,4 @@
+use crate::fat::global::{boot_volume_image, bytes_per_cluster};
 use core::fmt::{Display, Formatter};
 use core::mem::size_of;
 use core::{cmp, slice};
@@ -343,6 +344,57 @@ impl<'a> PathElements<'a> {
             path_before_slash,
             path_after_slash,
         }
+    }
+}
+
+pub(crate) struct FileDescriptor {
+    // hold a raw pointer to avoid adding lifetime parameters to many structs...
+    fat_entry: *const DirectoryEntry,
+    rd_off: usize,
+    rd_cluster: u64,
+    rd_cluster_off: usize,
+}
+
+impl FileDescriptor {
+    pub(crate) fn new(fat_entry: &DirectoryEntry) -> Self {
+        Self {
+            fat_entry: fat_entry as *const _,
+            rd_off: 0,
+            rd_cluster: 0,
+            rd_cluster_off: 0,
+        }
+    }
+
+    pub fn read(&mut self, buf: &mut [u8], len: usize) -> usize {
+        let fat_entry = match unsafe { self.fat_entry.as_ref() } {
+            None => return 0,
+            Some(f) => f,
+        };
+
+        if self.rd_cluster == 0 {
+            self.rd_cluster = fat_entry.first_cluster() as u64;
+        }
+
+        let len = cmp::min(len, fat_entry.file_size as usize - self.rd_off);
+
+        let mut total = 0;
+        while total < len {
+            let sec = boot_volume_image().get_sector_by_cluster::<u8>(self.rd_cluster);
+            let n = cmp::min(
+                len - total,
+                bytes_per_cluster() as usize - self.rd_cluster_off,
+            );
+            buf[..n].copy_from_slice(&sec[self.rd_cluster_off..self.rd_cluster_off + len]);
+            total += n;
+
+            self.rd_cluster_off += n;
+            if self.rd_cluster_off as u64 == bytes_per_cluster() {
+                self.rd_cluster = boot_volume_image().next_cluster(self.rd_cluster);
+            }
+        }
+
+        self.rd_off += total;
+        total
     }
 }
 

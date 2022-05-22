@@ -1,5 +1,7 @@
 use crate::app_event::{AppEvent, AppEventArg, AppEventType, KeyPush, TimerTimeout};
 use crate::asm::global::{write_msr, SyscallEntry};
+use crate::fat::global::{boot_volume_image, find_file};
+use crate::fat::FileDescriptor;
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
@@ -11,22 +13,29 @@ use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
+use crate::task::Task;
 use crate::terminal::global::get_terminal_mut_by;
 use crate::timer::global::timer_manager;
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::Window;
 use core::arch::asm;
-use core::mem;
+use core::{mem, slice};
 use log::{debug, log, Level};
 
 type SyscallFuncType = fn(u64, u64, u64, u64, u64, u64) -> SyscallResult;
 
 // Execute command `errno -l` to see each error number
 const EPERM: i32 = 1; // Operation not permitted (POSIX.1-2001).
+const ENOENT: i32 = 2; // No such file or directory
 const E2BIG: i32 = 7; // Argument list too long
 const EBADF: i32 = 9; // Bad file descriptor
 const EFAULT: i32 = 14; // Bad address
 const EINVAL: i32 = 22; // Invalid argument
+
+const O_RDONLY: i32 = 0x0000; /* open for reading only */
+const O_WRONLY: i32 = 0x0001; /* open for writing only */
+const O_RDWR: i32 = 0x0002; /* open for reading and writing */
+const O_ACCMODE: i32 = 0x0003; /* mask for above modes */
 
 #[repr(C)]
 struct SyscallResult {
@@ -399,8 +408,70 @@ fn create_timer(
     SyscallResult::new(timeout * 1000 / TIMER_FREQ, 0)
 }
 
+fn open_file(path: u64, flag: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
+    let path = unsafe { c_str_from(path) }.to_str().unwrap();
+    let flags = flag as i32;
+    unsafe { asm!("cli") };
+    let task = task_manager().current_task_mut();
+    unsafe { asm!("sti") };
+
+    if (flags & O_ACCMODE) == O_WRONLY {
+        return SyscallResult::err(0, EINVAL);
+    }
+
+    let (dir, post_slash) = find_file(path, boot_volume_image().get_root_cluster() as u64);
+    if dir.is_none() {
+        return SyscallResult::err(0, ENOENT);
+    }
+    let dir = dir.unwrap();
+    if !dir.is_directory() && post_slash {
+        return SyscallResult::err(0, ENOENT);
+    }
+
+    let fd = allocate_fd(task);
+    task.get_files_mut()[fd] = Some(FileDescriptor::new(dir));
+    SyscallResult::ok(fd as u64)
+}
+
+fn read_file(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
+    let fd = fd as i32;
+    let buf = buf as *mut u64 as *mut u8;
+    let count = count as usize;
+    unsafe { asm!("cli") };
+    let task = task_manager().current_task_mut();
+    unsafe { asm!("sti") };
+
+    if fd < 0 || task.get_files_slice().len() <= fd as usize {
+        return SyscallResult::err(0, EBADF);
+    }
+    let fd = fd as usize;
+
+    if let Some(descriptor) = task.get_files_mut().get_mut(fd).unwrap() {
+        let buf = unsafe { slice::from_raw_parts_mut(buf, count) };
+        let size = descriptor.read(buf, count);
+        SyscallResult::ok(size as u64)
+    } else {
+        SyscallResult::err(0, EBADF)
+    }
+}
+
+fn allocate_fd(task: &mut Task) -> usize {
+    let first_empty = task
+        .get_files_mut()
+        .iter()
+        .enumerate()
+        .find(|(_, fd)| fd.is_none());
+
+    if let Some((first_empty_index, _)) = first_empty {
+        first_empty_index
+    } else {
+        task.get_files_mut().push(None);
+        task.get_files_mut().len() - 1
+    }
+}
+
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 12] = [
+static mut syscall_table: [SyscallFuncType; 14] = [
     log_string,
     put_string,
     exit,
@@ -413,6 +484,8 @@ static mut syscall_table: [SyscallFuncType; 12] = [
     close_window,
     read_event,
     create_timer,
+    open_file,
+    read_file,
 ];
 
 pub fn initialize_syscall() {

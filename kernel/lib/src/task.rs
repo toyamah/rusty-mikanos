@@ -1,4 +1,5 @@
 use crate::error::{Code, Error};
+use crate::fat::FileDescriptor;
 use crate::make_error;
 use crate::message::Message;
 use crate::segment::{KERNEL_CS, KERNEL_SS};
@@ -72,6 +73,7 @@ pub struct Task {
     messages: VecDeque<Message>,
     level: PriorityLevel,
     is_running: bool,
+    files: Vec<Option<FileDescriptor>>,
 }
 
 impl Task {
@@ -85,6 +87,7 @@ impl Task {
             messages: VecDeque::new(),
             level,
             is_running: false,
+            files: vec![],
         }
     }
 
@@ -137,6 +140,14 @@ impl Task {
 
     pub(crate) fn get_cr3(&self) -> u64 {
         self.context.cr3
+    }
+
+    pub(crate) fn get_files_slice(&self) -> &[Option<FileDescriptor>] {
+        self.files.as_slice()
+    }
+
+    pub(crate) fn get_files_mut(&mut self) -> &mut Vec<Option<FileDescriptor>> {
+        &mut self.files
     }
 
     /// needs to call `wake_up` after this method is invoked
