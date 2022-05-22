@@ -448,7 +448,7 @@ fn read_file(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sys
 
     if let Some(descriptor) = task.get_files_mut().get_mut(fd).unwrap() {
         let buf = unsafe { slice::from_raw_parts_mut(buf, count) };
-        let size = descriptor.read(buf, count);
+        let size = descriptor.read(buf, boot_volume_image());
         SyscallResult::ok(size as u64)
     } else {
         SyscallResult::err(0, EBADF)
