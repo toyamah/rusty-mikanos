@@ -150,6 +150,18 @@ impl Task {
         &mut self.files
     }
 
+    pub(crate) fn register_file_descriptor(&mut self, fd: FileDescriptor) -> usize {
+        let first_empty = self.files.iter().enumerate().find(|(_, fd)| fd.is_none());
+
+        if let Some((first_empty_index, _)) = first_empty {
+            self.files[first_empty_index] = Some(fd);
+            first_empty_index
+        } else {
+            self.files.push(Some(fd));
+            self.files.len() - 1
+        }
+    }
+
     /// needs to call `wake_up` after this method is invoked
     fn send_message(&mut self, message: Message) {
         self.messages.push_back(message)

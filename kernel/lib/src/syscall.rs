@@ -13,7 +13,6 @@ use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
-use crate::task::Task;
 use crate::terminal::global::get_terminal_mut_by;
 use crate::timer::global::timer_manager;
 use crate::timer::{Timer, TIMER_FREQ};
@@ -428,8 +427,7 @@ fn open_file(path: u64, flag: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> Sy
         return SyscallResult::err(0, ENOENT);
     }
 
-    let fd = allocate_fd(task);
-    task.get_files_mut()[fd] = Some(FileDescriptor::new(dir));
+    let fd = task.register_file_descriptor(FileDescriptor::new(dir));
     SyscallResult::ok(fd as u64)
 }
 
@@ -452,21 +450,6 @@ fn read_file(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sys
         SyscallResult::ok(size as u64)
     } else {
         SyscallResult::err(0, EBADF)
-    }
-}
-
-fn allocate_fd(task: &mut Task) -> usize {
-    let first_empty = task
-        .get_files_mut()
-        .iter()
-        .enumerate()
-        .find(|(_, fd)| fd.is_none());
-
-    if let Some((first_empty_index, _)) = first_empty {
-        first_empty_index
-    } else {
-        task.get_files_mut().push(None);
-        task.get_files_mut().len() - 1
     }
 }
 
