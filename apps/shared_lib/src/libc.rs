@@ -8,8 +8,8 @@ extern "C" {
     // pub fn strcmp(a: *const c_char, b: *const c_char) -> i32;
     pub(crate) fn exit(status: i32) -> !;
     pub(crate) fn strerror(n: i32) -> *mut c_char;
-    pub fn fopen(filename: *const c_char, mode: *const c_char) -> *mut FILE;
-    pub fn fgets(buf: *mut c_char, n: i32, stream: *mut FILE) -> *mut c_char;
+    pub(crate) fn fopen(filename: *const c_char, mode: *const c_char) -> *mut FILE;
+    pub(crate) fn fgets(buf: *mut c_char, n: i32, stream: *mut FILE) -> *mut c_char;
 }
 
 #[no_mangle]

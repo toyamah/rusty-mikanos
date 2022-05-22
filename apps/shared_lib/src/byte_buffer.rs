@@ -27,7 +27,9 @@ impl ByteBuffer {
 
     pub(crate) fn write_str_with_nul(&mut self, s: &str) {
         self.write_str(s).unwrap();
-        self.write_str("\0").unwrap();
+        if !s.ends_with("\0") {
+            self.write_str("\0").unwrap();
+        }
     }
 
     pub(crate) fn len(&self) -> usize {
