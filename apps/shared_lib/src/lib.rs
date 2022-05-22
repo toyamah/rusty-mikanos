@@ -15,6 +15,7 @@ use core::fmt;
 pub mod app_event;
 pub mod args;
 mod byte_buffer;
+pub mod file;
 pub mod libc;
 pub mod newlib_support;
 pub mod rust_official;
@@ -66,4 +67,9 @@ macro_rules! println {
     ($($arg:tt)*) => ({
         $crate::printf(format_args_nl!($($arg)*));
     })
+}
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => ($crate::printf(format_args!($($arg)*)));
 }

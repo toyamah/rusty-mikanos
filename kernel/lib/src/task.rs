@@ -1,4 +1,5 @@
 use crate::error::{Code, Error};
+use crate::fat::FileDescriptor;
 use crate::make_error;
 use crate::message::Message;
 use crate::segment::{KERNEL_CS, KERNEL_SS};
@@ -72,6 +73,7 @@ pub struct Task {
     messages: VecDeque<Message>,
     level: PriorityLevel,
     is_running: bool,
+    files: Vec<Option<FileDescriptor>>,
 }
 
 impl Task {
@@ -85,6 +87,7 @@ impl Task {
             messages: VecDeque::new(),
             level,
             is_running: false,
+            files: vec![],
         }
     }
 
@@ -137,6 +140,26 @@ impl Task {
 
     pub(crate) fn get_cr3(&self) -> u64 {
         self.context.cr3
+    }
+
+    pub(crate) fn get_files_slice(&self) -> &[Option<FileDescriptor>] {
+        self.files.as_slice()
+    }
+
+    pub(crate) fn get_files_mut(&mut self) -> &mut Vec<Option<FileDescriptor>> {
+        &mut self.files
+    }
+
+    pub(crate) fn register_file_descriptor(&mut self, fd: FileDescriptor) -> usize {
+        let first_empty = self.files.iter().enumerate().find(|(_, fd)| fd.is_none());
+
+        if let Some((first_empty_index, _)) = first_empty {
+            self.files[first_empty_index] = Some(fd);
+            first_empty_index
+        } else {
+            self.files.push(Some(fd));
+            self.files.len() - 1
+        }
     }
 
     /// needs to call `wake_up` after this method is invoked
