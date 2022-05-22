@@ -15,4 +15,5 @@ members = [
     "apps/cube",
     "apps/blocks",
     "apps/fault",
+    "apps/readfile",
 ]

@@ -55,6 +55,10 @@ extern "C" {
         timer_value: i32,
         timeout_ms: u64,
     ) -> SyscallResult;
+
+    pub(crate) fn SyscallOpenFile(path: *const c_char, flags: i32) -> SyscallResult;
+
+    pub(crate) fn SyscallReadFile(fd: i32, buf: *const c_void, count: usize) -> SyscallResult;
 }
 
 #[repr(C)]

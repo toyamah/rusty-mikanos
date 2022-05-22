@@ -67,3 +67,8 @@ macro_rules! println {
         $crate::printf(format_args_nl!($($arg)*));
     })
 }
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => ($crate::printf(format_args!($($arg)*)));
+}
