@@ -1,4 +1,4 @@
-# mikanos
+# rusty mikanos
 ## Setup
 ```shell
 git submodule update --init --recursive
