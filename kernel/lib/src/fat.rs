@@ -384,12 +384,13 @@ impl FileDescriptor {
                 len - total,
                 bytes_per_cluster as usize - self.rd_cluster_off,
             );
-            buf[..n].copy_from_slice(&sec[self.rd_cluster_off..self.rd_cluster_off + len]);
+            buf[..n].copy_from_slice(&sec[self.rd_cluster_off..self.rd_cluster_off + n]);
             total += n;
 
             self.rd_cluster_off += n;
             if self.rd_cluster_off as u64 == bytes_per_cluster {
                 self.rd_cluster = bpb.next_cluster(self.rd_cluster);
+                self.rd_cluster_off = 0;
             }
         }
 
