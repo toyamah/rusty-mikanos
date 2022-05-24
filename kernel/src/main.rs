@@ -88,7 +88,7 @@ pub extern "C" fn KernelMainNewStack(
     graphics::global::initialize(*frame_buffer_config_);
     console::global::initialize();
 
-    printk!("Welcome to MikanOS!\n");
+    printk!("Welcome to Rusty MikanOS!\n");
     logger::init(log::LevelFilter::Trace).unwrap();
 
     segment::global::initialize();

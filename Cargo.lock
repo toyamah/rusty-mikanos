@@ -224,7 +224,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mikan_os_kernel"
+name = "os_kernel"
 version = "0.1.0"
 dependencies = [
  "bit_field",
