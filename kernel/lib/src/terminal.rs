@@ -8,6 +8,7 @@ use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
     COLOR_BLACK, COLOR_WHITE,
 };
+use crate::io::FileDescriptor;
 use crate::layer::global::layer_manager;
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
@@ -20,7 +21,7 @@ use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::task::global::task_manager;
 use crate::task::{Task, TaskID};
-use crate::terminal::global::task_terminal;
+use crate::terminal::global::{get_terminal_mut_by, task_terminal};
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{make_error, Window};
 use alloc::collections::VecDeque;
@@ -436,6 +437,10 @@ impl Terminal {
 
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_e000);
         PageMapEntry::setup_page_maps(stack_frame_addr, 1, get_cr3(), memory_manager())?;
+        task.register_file_descriptor(FileDescriptor::Terminal(TerminalFileDescriptor::new(
+            task.id(),
+            self.task_id,
+        )));
 
         let entry_addr = elf_header.e_entry;
         let ret = call_app(
@@ -447,6 +452,7 @@ impl Terminal {
             task.os_stack_pointer() as *const _,
         );
 
+        task.clear_files();
         // retake pointers to free memory
         for c_arg in c_chars_vec {
             let _ = unsafe { CString::from_raw(c_arg as *mut c_char) };
@@ -728,6 +734,54 @@ impl CommandHistory {
             self.history.pop_back().unwrap();
         }
         self.history.push_front(command);
+    }
+}
+
+pub(crate) struct TerminalFileDescriptor {
+    task_id: TaskID,
+    terminal_id: TaskID,
+}
+
+impl TerminalFileDescriptor {
+    pub fn new(task_id: TaskID, terminal_id: TaskID) -> Self {
+        Self {
+            task_id,
+            terminal_id,
+        }
+    }
+
+    pub fn read(&mut self, buf: &mut [u8]) -> usize {
+        loop {
+            unsafe { asm!("cli") };
+            let task = task_manager().get_task_mut(self.task_id);
+            if task.is_none() {
+                return 0;
+            }
+            let task = task.unwrap();
+            let message = match task.receive_message() {
+                None => {
+                    task_manager().sleep(self.task_id).unwrap();
+                    continue;
+                }
+                Some(m) => m,
+            };
+            unsafe { asm!("sti") };
+            if let MessageType::KeyPush {
+                modifier: _,
+                keycode: _,
+                ascii,
+                press,
+            } = message.m_type
+            {
+                if press {
+                    let mut bytes = [0_u8; 4];
+                    let str = ascii.encode_utf8(&mut bytes);
+                    get_terminal_mut_by(self.terminal_id).unwrap().print(str);
+                    buf[..4].copy_from_slice(&bytes);
+                    return bytes.iter().filter(|&&x| x != 0).count();
+                }
+            }
+        }
     }
 }
 

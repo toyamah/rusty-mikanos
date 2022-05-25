@@ -19,6 +19,7 @@ mod font;
 pub mod frame_buffer;
 pub mod graphics;
 pub mod interrupt;
+mod io;
 pub mod keyboard;
 pub mod layer;
 pub mod memory_manager;
