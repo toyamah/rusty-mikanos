@@ -1,5 +1,5 @@
 use crate::error::{Code, Error};
-use crate::fat::FileDescriptor;
+use crate::io::FileDescriptor;
 use crate::make_error;
 use crate::message::Message;
 use crate::segment::{KERNEL_CS, KERNEL_SS};
@@ -142,12 +142,15 @@ impl Task {
         self.context.cr3
     }
 
-    pub(crate) fn get_files_slice(&self) -> &[Option<FileDescriptor>] {
-        self.files.as_slice()
+    pub(crate) fn files_len(&self) -> usize {
+        self.files.len()
     }
 
-    pub(crate) fn get_files_mut(&mut self) -> &mut Vec<Option<FileDescriptor>> {
-        &mut self.files
+    pub(crate) fn get_file_mut(&mut self, fd: usize) -> Option<&mut FileDescriptor> {
+        self.files
+            .get_mut(fd)
+            .map(|inner_op| inner_op.as_mut())
+            .unwrap_or(None)
     }
 
     pub(crate) fn register_file_descriptor(&mut self, fd: FileDescriptor) -> usize {
@@ -160,6 +163,10 @@ impl Task {
             self.files.push(Some(fd));
             self.files.len() - 1
         }
+    }
+
+    pub(crate) fn clear_files(&mut self) {
+        self.files.clear();
     }
 
     /// needs to call `wake_up` after this method is invoked

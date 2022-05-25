@@ -1,10 +1,11 @@
 use crate::app_event::{AppEvent, AppEventArg, AppEventType, KeyPush, TimerTimeout};
 use crate::asm::global::{write_msr, SyscallEntry};
 use crate::fat::global::{boot_volume_image, find_file};
-use crate::fat::FileDescriptor;
+use crate::fat::FatFileDescriptor;
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
+use crate::io::{FileDescriptor, STD_IN};
 use crate::keyboard::{KEY_Q, L_CONTROL_BIT_MASK, R_CONTROL_BIT_MASK};
 use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
 use crate::layer::LayerID;
@@ -414,6 +415,10 @@ fn open_file(path: u64, flag: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> Sy
     let task = task_manager().current_task_mut();
     unsafe { asm!("sti") };
 
+    if path == STD_IN {
+        return SyscallResult::ok(0);
+    }
+
     if (flags & O_ACCMODE) == O_WRONLY {
         return SyscallResult::err(0, EINVAL);
     }
@@ -427,7 +432,7 @@ fn open_file(path: u64, flag: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> Sy
         return SyscallResult::err(0, ENOENT);
     }
 
-    let fd = task.register_file_descriptor(FileDescriptor::new(dir));
+    let fd = task.register_file_descriptor(FileDescriptor::Fat(FatFileDescriptor::new(dir)));
     SyscallResult::ok(fd as u64)
 }
 
@@ -439,14 +444,14 @@ fn read_file(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sys
     let task = task_manager().current_task_mut();
     unsafe { asm!("sti") };
 
-    if fd < 0 || task.get_files_slice().len() <= fd as usize {
+    if fd < 0 || task.files_len() <= fd as usize {
         return SyscallResult::err(0, EBADF);
     }
     let fd = fd as usize;
 
-    if let Some(descriptor) = task.get_files_mut().get_mut(fd).unwrap() {
+    if let Some(descriptor) = task.get_file_mut(fd) {
         let buf = unsafe { slice::from_raw_parts_mut(buf, count) };
-        let size = descriptor.read(buf, boot_volume_image());
+        let size = descriptor.read(buf);
         SyscallResult::ok(size as u64)
     } else {
         SyscallResult::err(0, EBADF)

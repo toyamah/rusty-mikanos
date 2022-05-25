@@ -346,7 +346,7 @@ impl<'a> PathElements<'a> {
     }
 }
 
-pub(crate) struct FileDescriptor {
+pub(crate) struct FatFileDescriptor {
     // hold a raw pointer to avoid adding lifetime parameters to many structs...
     fat_entry: *const DirectoryEntry,
     rd_off: usize,
@@ -354,7 +354,7 @@ pub(crate) struct FileDescriptor {
     rd_cluster_off: usize,
 }
 
-impl FileDescriptor {
+impl FatFileDescriptor {
     pub(crate) fn new(fat_entry: &DirectoryEntry) -> Self {
         Self {
             fat_entry: fat_entry as *const _,
