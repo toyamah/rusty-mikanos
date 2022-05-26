@@ -21,15 +21,19 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
     let path = args.get(2);
 
     // Because implementing regexp is not the essence of OS, supported patterns are:
-    let matcher: Matcher0<_> = match args.get(1) {
-        "3FE.D000" => regex!(br".*3FE.D000.*"),
-        // TODO: Add another pattern in day26
+    match args.get(1) {
+        "3FE.D000" => grep(path, regex!(br".*3FE.D000.*")),
+        "i.t" => grep(path, regex!(br".*i.t.*")),
         p => {
             println!("Unsupported pattern: {}", p);
             exit(1);
         }
     };
 
+    exit(0);
+}
+
+fn grep<F: Fn(&[u8]) -> Option<()>>(path: &str, matcher: Matcher0<F>) {
     let fp = open_file(path, OpenMode::R);
     if fp.is_null() {
         println!("failed to open {}", path);
@@ -43,8 +47,6 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
             print!("{}", str);
         }
     }
-
-    exit(0);
 }
 
 #[panic_handler]
