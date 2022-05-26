@@ -148,16 +148,11 @@ pub mod global {
                         unsafe { asm!("sti") };
                     }
                 }
-                MessageType::KeyPush {
-                    modifier,
-                    keycode,
-                    ascii,
-                    press,
-                } => {
-                    if !press {
+                MessageType::KeyPush(arg) => {
+                    if !arg.press {
                         continue;
                     }
-                    let area = terminal().input_key(modifier, keycode, ascii);
+                    let area = terminal().input_key(arg.modifier, arg.keycode, arg.ascii);
                     if show_window {
                         let msg = Message::new(MessageType::Layer(LayerMessage {
                             layer_id: terminal().layer_id,
@@ -766,16 +761,10 @@ impl TerminalFileDescriptor {
                 Some(m) => m,
             };
             unsafe { asm!("sti") };
-            if let MessageType::KeyPush {
-                modifier: _,
-                keycode: _,
-                ascii,
-                press,
-            } = message.m_type
-            {
-                if press {
+            if let MessageType::KeyPush(arg) = message.m_type {
+                if arg.press {
                     let mut bytes = [0_u8; 4];
-                    let str = ascii.encode_utf8(&mut bytes);
+                    let str = arg.ascii.encode_utf8(&mut bytes);
                     get_terminal_mut_by(self.terminal_id).unwrap().print(str);
                     buf[..4].copy_from_slice(&bytes);
                     return bytes.iter().filter(|&&x| x != 0).count();

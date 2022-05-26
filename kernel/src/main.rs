@@ -180,21 +180,16 @@ pub extern "C" fn KernelMainNewStack(
                     layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
                 }
             }
-            MessageType::KeyPush {
-                modifier: _,
-                keycode,
-                ascii,
-                press,
-            } => {
+            MessageType::KeyPush(arg) => {
                 let act = active_layer().get_active_layer_id();
                 if act.is_none() {
                     continue;
                 }
                 let act = act.unwrap();
 
-                if act == text_window_layer_id() && press {
-                    input_text_window(ascii);
-                } else if press && keycode == KEY_F2 {
+                if act == text_window_layer_id() && arg.press {
+                    input_text_window(arg.ascii);
+                } else if arg.press && arg.keycode == KEY_F2 {
                     let id = task_manager()
                         .new_task()
                         .init_context(task_terminal, 0, get_cr3)
@@ -211,8 +206,8 @@ pub extern "C" fn KernelMainNewStack(
                     } else {
                         printk!(
                             "key push not handles: keycode {}, ascii {}\n",
-                            keycode,
-                            ascii
+                            arg.keycode,
+                            arg.ascii
                         );
                     }
                 }
