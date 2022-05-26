@@ -15,7 +15,7 @@ pub mod console;
 mod elf;
 pub mod error;
 pub mod fat;
-mod font;
+pub mod font;
 pub mod frame_buffer;
 pub mod graphics;
 pub mod interrupt;

@@ -17,9 +17,9 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
         Err(e) => exit(e.error_number()),
     };
 
-    w.write_string((7, 24), 0xc00000, "hello world!", FLAG_FORCE_DRAW);
-    w.write_string((24, 40), 0x00c000, "hello world!", FLAG_FORCE_DRAW);
-    w.write_string((40, 56), 0x0000c0, "hello world!", FLAG_FORCE_DRAW);
+    write_string(w, (7, 24), 0xc00000, "hello world!", FLAG_FORCE_DRAW);
+    write_string(w, (24, 40), 0x00c000, "hello world!", FLAG_FORCE_DRAW);
+    write_string(w, (40, 56), 0x0000c0, "hello world!", FLAG_FORCE_DRAW);
 
     let mut events = [Default::default(); 1];
     loop {

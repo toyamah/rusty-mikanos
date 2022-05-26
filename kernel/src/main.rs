@@ -12,10 +12,9 @@ use core::arch::asm;
 use core::panic::PanicInfo;
 use lib::acpi::Rsdp;
 use lib::asm::global::get_cr3;
+use lib::font::{write_ascii, write_string};
 use lib::graphics::global::{frame_buffer_config, screen_size};
-use lib::graphics::{
-    fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE,
-};
+use lib::graphics::{fill_rectangle, PixelColor, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use lib::interrupt::global::initialize_interrupt;
 use lib::keyboard::KEY_F2;
 use lib::layer::global::{
@@ -151,7 +150,7 @@ pub extern "C" fn KernelMainNewStack(
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
         let tick = unsafe { timer_manager().current_tick_with_lock() };
-        main_window().write_string(20, 4, &format!("{:010}", tick), &COLOR_BLACK);
+        write_string(main_window(), 20, 4, &format!("{:010}", tick), &COLOR_BLACK);
         layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
@@ -323,9 +322,7 @@ fn input_text_window(c: char) {
     } else if c >= ' ' && text_window_index() < max_chars {
         draw_text_cursor(false);
         let pos = pos();
-        text_window()
-            .writer()
-            .write_ascii(pos.x, pos.y, c, &COLOR_BLACK);
+        write_ascii(text_window().writer(), pos.x, pos.y, c, &COLOR_BLACK);
         unsafe { TEXT_WINDOW_INDEX += 1 };
         draw_text_cursor(true);
     }

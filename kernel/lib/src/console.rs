@@ -1,4 +1,5 @@
 use crate::console::Mode::{ConsoleWindow, Frame};
+use crate::font::{write_ascii, write_chars};
 use crate::graphics::global::pixel_writer;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
 use crate::layer::global::{console_window, layer_manager_op, screen_frame_buffer};
@@ -78,7 +79,8 @@ impl Console {
             if char == '\n' {
                 self.new_line(writer);
             } else if self.cursor_column < COLUMNS - 1 {
-                writer.write_ascii(
+                write_ascii(
+                    writer,
                     (8 * self.cursor_column) as i32,
                     (16 * self.cursor_row) as i32,
                     char,
@@ -130,7 +132,13 @@ impl Console {
                 for row in 0..ROWS - 1 {
                     let next = row + 1;
                     self.buffer.copy_within(next..=next, row);
-                    writer.write_chars(0, (16 * row) as i32, &self.buffer[row], &self.fg_color);
+                    write_chars(
+                        writer,
+                        0,
+                        (16 * row) as i32,
+                        &self.buffer[row],
+                        &self.fg_color,
+                    );
                 }
                 self.buffer[ROWS - 1].fill(char::from(0));
             }
@@ -145,7 +153,7 @@ impl Console {
             &self.bg_color,
         );
         for (i, row) in self.buffer.iter().enumerate() {
-            writer.write_chars(0, (16 * i) as i32, row, &self.fg_color);
+            write_chars(writer, 0, (16 * i) as i32, row, &self.fg_color);
         }
     }
 }
