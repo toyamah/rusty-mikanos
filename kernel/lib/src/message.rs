@@ -17,21 +17,21 @@ impl Message {
 #[derive(Debug, PartialEq)]
 pub enum MessageType {
     InterruptXhci,
-    TimerTimeout {
-        timeout: u64,
-        value: i32,
-    },
-    KeyPush {
-        modifier: u8,
-        keycode: u8,
-        ascii: char,
-        press: bool,
-    },
+    TimerTimeout { timeout: u64, value: i32 },
+    KeyPush(KeyPushMessage),
     Layer(LayerMessage),
     LayerFinish,
     MouseMove(MouseMoveMessage),
     MouseButton(MouseButtonMessage),
     WindowActive(WindowActiveMode),
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub struct KeyPushMessage {
+    pub modifier: u8,
+    pub keycode: u8,
+    pub ascii: char,
+    pub press: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -75,6 +75,17 @@ pub enum WindowActiveMode {
 }
 
 // This trait is defined here because the app crate also uses app_event::MouseMove.
+impl From<KeyPushMessage> for app_event::KeyPush {
+    fn from(m: KeyPushMessage) -> Self {
+        Self {
+            modifier: m.modifier,
+            keycode: m.keycode,
+            ascii: m.ascii,
+            press: m.press,
+        }
+    }
+}
+
 impl From<MouseMoveMessage> for app_event::MouseMove {
     fn from(m: MouseMoveMessage) -> Self {
         Self {

@@ -9,6 +9,7 @@ use crate::graphics::{
     COLOR_BLACK, COLOR_WHITE,
 };
 use crate::io::FileDescriptor;
+use crate::keyboard::{is_control_key_inputted, KEY_D};
 use crate::layer::global::layer_manager;
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
@@ -148,16 +149,11 @@ pub mod global {
                         unsafe { asm!("sti") };
                     }
                 }
-                MessageType::KeyPush {
-                    modifier,
-                    keycode,
-                    ascii,
-                    press,
-                } => {
-                    if !press {
+                MessageType::KeyPush(arg) => {
+                    if !arg.press {
                         continue;
                     }
-                    let area = terminal().input_key(modifier, keycode, ascii);
+                    let area = terminal().input_key(arg.modifier, arg.keycode, arg.ascii);
                     if show_window {
                         let msg = Message::new(MessageType::Layer(LayerMessage {
                             layer_id: terminal().layer_id,
@@ -766,21 +762,29 @@ impl TerminalFileDescriptor {
                 Some(m) => m,
             };
             unsafe { asm!("sti") };
-            if let MessageType::KeyPush {
-                modifier: _,
-                keycode: _,
-                ascii,
-                press,
-            } = message.m_type
-            {
-                if press {
-                    let mut bytes = [0_u8; 4];
-                    let str = ascii.encode_utf8(&mut bytes);
-                    get_terminal_mut_by(self.terminal_id).unwrap().print(str);
-                    buf[..4].copy_from_slice(&bytes);
-                    return bytes.iter().filter(|&&x| x != 0).count();
-                }
+            let arg = if let MessageType::KeyPush(arg) = message.m_type {
+                arg
+            } else {
+                continue;
+            };
+            if !arg.press {
+                continue;
             }
+
+            let terminal = get_terminal_mut_by(self.terminal_id).unwrap();
+            if is_control_key_inputted(arg.modifier) && arg.ascii.is_ascii() {
+                write!(terminal, "^{}", arg.ascii.to_ascii_uppercase()).unwrap();
+                if arg.keycode == KEY_D {
+                    return 0; // EOT
+                }
+                continue;
+            }
+
+            let mut bytes = [0_u8; 4];
+            let str = arg.ascii.encode_utf8(&mut bytes);
+            terminal.print(str);
+            buf[..4].copy_from_slice(&bytes);
+            return bytes.iter().filter(|&&x| x != 0).count();
         }
     }
 }

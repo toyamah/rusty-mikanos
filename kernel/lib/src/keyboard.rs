@@ -1,4 +1,4 @@
-use crate::message::{Message, MessageType};
+use crate::message::{KeyPushMessage, Message, MessageType};
 use crate::task::TaskManager;
 
 const KEYCODE_MAP: [char; 256] = [
@@ -71,6 +71,7 @@ const KEYCODE_MAP_SHIFT: [char; 256] = [
     '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', // 248
 ];
 
+pub const KEY_D: u8 = 7;
 pub const KEY_Q: u8 = 20;
 pub const KEY_F2: u8 = 59;
 pub const L_CONTROL_BIT_MASK: u8 = 0b00000001;
@@ -83,8 +84,7 @@ pub const R_ALT_BIT_MASK: u8 = 0b01000000;
 pub const R_GUIBIT_MASK: u8 = 0b10000000;
 
 pub fn on_input(modifier: u8, keycode: u8, press: bool, task_manager: &mut TaskManager) {
-    let shift_inputted = (modifier & (L_SHIFT_BIT_MASK | R_SHIFT_BIT_MASK)) != 0;
-    let ascii = if shift_inputted {
+    let ascii = if is_shift_key_inputted(modifier) {
         KEYCODE_MAP_SHIFT[keycode as usize]
     } else {
         KEYCODE_MAP[keycode as usize]
@@ -92,12 +92,20 @@ pub fn on_input(modifier: u8, keycode: u8, press: bool, task_manager: &mut TaskM
     task_manager
         .send_message(
             task_manager.main_task().id(),
-            Message::new(MessageType::KeyPush {
+            Message::new(MessageType::KeyPush(KeyPushMessage {
                 modifier,
                 keycode,
                 ascii,
                 press,
-            }),
+            })),
         )
         .unwrap();
+}
+
+pub(crate) fn is_shift_key_inputted(modifier: u8) -> bool {
+    (modifier & (L_SHIFT_BIT_MASK | R_SHIFT_BIT_MASK)) != 0
+}
+
+pub(crate) fn is_control_key_inputted(modifier: u8) -> bool {
+    (modifier & (L_CONTROL_BIT_MASK | R_CONTROL_BIT_MASK)) != 0
 }
