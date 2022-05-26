@@ -6,8 +6,6 @@ use log::error;
 
 pub struct MemoryAllocator;
 
-// I'm not sure that this implementation is correct especially about memory alignment...
-// But seems like it works.
 unsafe impl GlobalAlloc for MemoryAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let num_frames = (layout.size() + layout.align() + BYTES_PER_FRAME - 1) / BYTES_PER_FRAME;
