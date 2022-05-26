@@ -6,7 +6,7 @@ use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
 use crate::io::{FileDescriptor, STD_IN};
-use crate::keyboard::{KEY_Q, L_CONTROL_BIT_MASK, R_CONTROL_BIT_MASK};
+use crate::keyboard::{is_control_key_inputted, KEY_Q};
 use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
 use crate::layer::LayerID;
 use crate::message::MessageType;
@@ -315,9 +315,7 @@ fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
             MessageType::KeyPush(arg) => {
                 let event = unsafe { app_events.add(i).as_mut() }
                     .expect("failed to convert to AppEvent Ref");
-                let is_control_inputted =
-                    arg.modifier & (L_CONTROL_BIT_MASK | R_CONTROL_BIT_MASK) != 0;
-                if arg.keycode == KEY_Q && is_control_inputted {
+                if arg.keycode == KEY_Q && is_control_key_inputted(arg.modifier) {
                     event.type_ = AppEventType::Quit;
                     i += 1;
                 } else {
