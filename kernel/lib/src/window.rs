@@ -1,3 +1,4 @@
+use crate::font::write_string;
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
@@ -230,7 +231,7 @@ fn draw_window_title<W: PixelWriter>(writer: &mut W, title: &str, is_active: boo
         &Vector2D::new(win_w - 6, 18),
         bg_color,
     );
-    writer.write_string(24, 4, title, &PixelColor::from(0xffffff));
+    write_string(writer, 24, 4, title, &PixelColor::from(0xffffff));
 
     for (y, &str) in CLOSE_BUTTON.iter().enumerate() {
         for (x, char) in str.chars().enumerate() {

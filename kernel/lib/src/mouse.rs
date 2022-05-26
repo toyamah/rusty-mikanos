@@ -172,9 +172,7 @@ impl Mouse {
     }
 }
 
-// don't know why Rust cannot compile this signature
-// pub fn draw_mouse_cursor<W: PixelWriter>(writer: &W, position: &Vector2D<i32>) {
-pub fn draw_mouse_cursor(writer: &mut Window, position: &Vector2D<i32>) {
+pub fn draw_mouse_cursor<W: PixelWriter>(writer: &mut W, position: &Vector2D<i32>) {
     for (dy, row) in MOUSE_CURSOR_SHAPE.iter().enumerate() {
         for (dx, char) in row.chars().enumerate() {
             let color = match char {

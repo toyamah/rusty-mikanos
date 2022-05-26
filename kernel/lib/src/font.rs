@@ -1,18 +1,12 @@
 use crate::graphics::{PixelColor, PixelWriter};
 
-pub fn write_string<W: PixelWriter + ?Sized>(
-    writer: &mut W,
-    x: i32,
-    y: i32,
-    str: &str,
-    color: &PixelColor,
-) {
+pub fn write_string<W: PixelWriter>(writer: &mut W, x: i32, y: i32, str: &str, color: &PixelColor) {
     for (i, char) in str.chars().enumerate() {
         write_ascii(writer, x + 8 * i as i32, y, char, color);
     }
 }
 
-pub fn write_chars<W: PixelWriter + ?Sized>(
+pub fn write_chars<W: PixelWriter>(
     writer: &mut W,
     x: i32,
     y: i32,
@@ -24,13 +18,7 @@ pub fn write_chars<W: PixelWriter + ?Sized>(
     }
 }
 
-pub fn write_ascii<W: PixelWriter + ?Sized>(
-    writer: &mut W,
-    x: i32,
-    y: i32,
-    c: char,
-    color: &PixelColor,
-) {
+pub fn write_ascii<W: PixelWriter>(writer: &mut W, x: i32, y: i32, c: char, color: &PixelColor) {
     let font = unsafe { get_font(c) };
     let font = match font {
         None => return,

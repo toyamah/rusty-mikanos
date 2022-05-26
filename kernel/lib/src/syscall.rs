@@ -444,7 +444,7 @@ fn read_file(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sys
     let task = task_manager().current_task_mut();
     unsafe { asm!("sti") };
 
-    if fd < 0 || task.files_len() <= fd as usize {
+    if fd < 0 {
         return SyscallResult::err(0, EBADF);
     }
     let fd = fd as usize;

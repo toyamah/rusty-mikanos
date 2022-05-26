@@ -1,4 +1,3 @@
-use crate::font;
 use core::cmp::{max, min};
 use core::fmt::{Debug, Display, Formatter};
 use core::ops::{Add, AddAssign, BitAnd, Sub};
@@ -212,18 +211,6 @@ pub trait PixelWriter {
     fn write(&mut self, x: i32, y: i32, color: &PixelColor);
     fn width(&self) -> i32;
     fn height(&self) -> i32;
-
-    fn write_string(&mut self, x: i32, y: i32, str: &str, color: &PixelColor) {
-        font::write_string(self, x, y, str, color);
-    }
-
-    fn write_chars(&mut self, x: i32, y: i32, chars: &[char], color: &PixelColor) {
-        font::write_chars(self, x, y, chars, color);
-    }
-
-    fn write_ascii(&mut self, x: i32, y: i32, c: char, color: &PixelColor) {
-        font::write_ascii(self, x, y, c, color);
-    }
 }
 
 pub struct FrameBufferWriter {
