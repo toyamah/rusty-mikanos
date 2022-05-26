@@ -122,17 +122,21 @@ impl Bpb {
     }
 
     pub fn next_cluster(&self, cluster: u64) -> u64 {
-        let fat_offset = self.reserved_sector_count as usize * self.bytes_per_sector as usize;
-        let fat = unsafe { (self as *const _ as *const u8).add(fat_offset) };
-        let fat = fat as *const u32;
+        let fat = self.get_fat();
         let next = unsafe { fat.add(cluster as usize) };
         unsafe {
-            if *next >= 0x0ffffff8 {
+            if is_end_of_cluster_chain(*next as u64) {
                 END_OF_CLUSTER_CHAIN
             } else {
                 (*next).into()
             }
         }
+    }
+
+    pub fn get_fat(&self) -> *const u32 {
+        let fat_offset = self.reserved_sector_count as usize * self.bytes_per_sector as usize;
+        let fat = unsafe { (self as *const _ as *const u8).add(fat_offset) };
+        fat as *const u32
     }
 
     pub fn get_sector_by_cluster<T>(&self, cluster: u64) -> &'static [T] {
@@ -405,6 +409,10 @@ fn next_path_element(path: &str) -> Option<PathElements> {
         let path_after_slash = &path[first_slash_index + 1..];
         PathElements::new(path_before_slash, path_after_slash)
     })
+}
+
+fn is_end_of_cluster_chain(cluster: u64) -> bool {
+    cluster >= 0x0ffffff8
 }
 
 #[cfg(test)]
