@@ -133,16 +133,50 @@ impl Bpb {
         }
     }
 
-    pub fn get_fat(&self) -> *const u32 {
+    fn get_fat(&self) -> *const u32 {
         let fat_offset = self.reserved_sector_count as usize * self.bytes_per_sector as usize;
         let fat = unsafe { (self as *const _ as *const u8).add(fat_offset) };
         fat as *const u32
+    }
+
+    fn get_fat_mut(&mut self) -> *mut u32 {
+        self.get_fat() as *mut u32
     }
 
     pub fn get_sector_by_cluster<T>(&self, cluster: u64) -> &'static [T] {
         let data = self.get_cluster_addr(cluster);
         let size = self.bytes_per_cluster() as usize / size_of::<T>();
         unsafe { slice::from_raw_parts(data.cast(), size) }
+    }
+
+    fn extend_cluster(&mut self, mut eoc_cluster: u64, n: usize) -> u32 {
+        let fat = self.get_fat_mut();
+        let fat_at = |i: usize| unsafe { fat.add(i) };
+        let fat_value_at = |i: usize| unsafe { *fat_at(i) };
+
+        loop {
+            let cluster = fat_value_at(eoc_cluster as usize);
+            if is_end_of_cluster_chain(cluster as u64) {
+                break;
+            }
+            eoc_cluster = cluster as u64;
+        }
+
+        let mut num_allocated = 0;
+        let mut current = eoc_cluster;
+        let mut candidate = 2;
+        while num_allocated < n {
+            if fat_value_at(candidate) == 0 {
+                // candidate cluster is free
+                unsafe { *fat_at(current as usize) = candidate as u32 };
+                current = candidate as u64;
+                num_allocated += 1;
+            }
+            candidate += 1;
+        }
+        unsafe { *fat_at(current as usize) = END_OF_CLUSTER_CHAIN as u32 };
+
+        current as u32
     }
 
     fn bytes_per_cluster(&self) -> u64 {
