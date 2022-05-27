@@ -1,3 +1,4 @@
+use core::ffi::c_void;
 use core::fmt::{Display, Formatter};
 use core::mem::size_of;
 use core::{cmp, slice};
@@ -149,7 +150,7 @@ impl Bpb {
         unsafe { slice::from_raw_parts(data.cast(), size) }
     }
 
-    fn extend_cluster(&mut self, mut eoc_cluster: u64, n: usize) -> u32 {
+    fn extend_cluster(&mut self, mut eoc_cluster: u64, n: usize) -> u64 {
         let fat = self.get_fat_mut();
         let fat_at = |i: usize| unsafe { fat.add(i) };
         let fat_value_at = |i: usize| unsafe { *fat_at(i) };
@@ -176,7 +177,31 @@ impl Bpb {
         }
         unsafe { *fat_at(current as usize) = END_OF_CLUSTER_CHAIN as u32 };
 
-        current as u32
+        current
+    }
+
+    fn allocate_entry(&mut self, mut dir_cluster: u64) -> Option<&DirectoryEntry> {
+        loop {
+            let dirs = self.get_sector_by_cluster::<DirectoryEntry>(dir_cluster);
+            for dir in dirs {
+                if dir.name[0] == 0 || dir.name[0] == 0xe5 {
+                    return Some(dir);
+                }
+            }
+
+            let next = self.next_cluster(dir_cluster);
+            if next == END_OF_CLUSTER_CHAIN {
+                break;
+            }
+            dir_cluster = next;
+        }
+
+        dir_cluster = self.extend_cluster(dir_cluster, 1);
+
+        let data = self.get_cluster_addr(dir_cluster) as *mut u8;
+        unsafe { memset(data as *mut c_void, 0, self.bytes_per_sector as usize) };
+        let dirs = self.get_sector_by_cluster::<DirectoryEntry>(dir_cluster);
+        dirs.get(0)
     }
 
     fn bytes_per_cluster(&self) -> u64 {
@@ -367,6 +392,27 @@ impl DirectoryEntry {
 
         p.len()
     }
+
+    fn set_file_name(&mut self, name: &str) {
+        let name = name.as_bytes();
+        self.name.fill(b' ');
+
+        let dot_pos_pair = name.iter().enumerate().find(|(_, &b)| b == b'.');
+
+        if let Some((dot_pos, _)) = dot_pos_pair {
+            for i in 0..cmp::min(8, dot_pos) {
+                self.name[i] = name[i].to_ascii_uppercase();
+            }
+            let after_dot = &name[dot_pos + 1..];
+            for i in 0..cmp::min(3, after_dot.len()) {
+                self.name[8 + i] = after_dot[i].to_ascii_uppercase();
+            }
+        } else {
+            for i in 0..cmp::min(8, name.len()) {
+                self.name[i] = name[i].to_ascii_uppercase();
+            }
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -449,6 +495,10 @@ fn is_end_of_cluster_chain(cluster: u64) -> bool {
     cluster >= 0x0ffffff8
 }
 
+extern "C" {
+    pub fn memset(dest: *mut c_void, c: i32, n: usize) -> *mut c_void;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -470,5 +520,57 @@ mod tests {
             next_path_element("abc/def/ghi"),
             Some(PathElements::new("abc", "def/ghi"))
         );
+    }
+
+    #[test]
+    fn directory_entry_set_name() {
+        let mut dir = directory_entry();
+        dir.set_file_name("");
+        let expected = b"           ";
+        assert_eq!(&dir.name, expected);
+        dir.set_file_name("a");
+        let expected = b"A          ";
+        assert_eq!(&dir.name, expected);
+
+        dir.set_file_name(".");
+        let expected = b"           ";
+        assert_eq!(&dir.name, expected);
+
+        dir.set_file_name(".a");
+        let expected = b"        A  ";
+        assert_eq!(&dir.name, expected);
+
+        dir.set_file_name("1.a");
+        let expected = b"1       A  ";
+        assert_eq!(&dir.name, expected);
+
+        dir.set_file_name("12345678.ab");
+        let expected = b"12345678AB ";
+        assert_eq!(&dir.name, expected);
+
+        dir.set_file_name("123456789.ab");
+        let expected = b"12345678AB ";
+        assert_eq!(&dir.name, expected);
+
+        dir.set_file_name("1234.abcd");
+        let expected = b"1234    ABC";
+        assert_eq!(&dir.name, expected);
+    }
+
+    fn directory_entry() -> DirectoryEntry {
+        DirectoryEntry {
+            name: [0; 11],
+            attr: 0,
+            ntres: 0,
+            create_time_tenth: 0,
+            create_time: 0,
+            create_date: 0,
+            last_access_date: 0,
+            first_cluster_high: 0,
+            write_time: 0,
+            write_date: 0,
+            first_cluster_low: 0,
+            file_size: 0,
+        }
     }
 }

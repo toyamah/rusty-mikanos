@@ -984,14 +984,14 @@ mod tests {
 
     #[test]
     fn parse_command_one_arg() {
-        assert_eq!(parse_command("echo a\\aa"), Some((vec!["echo", "a\\aa"])));
+        assert_eq!(parse_command("echo a\\aa"), Some(vec!["echo", "a\\aa"]));
     }
 
     #[test]
     fn parse_command_args() {
         assert_eq!(
             parse_command("ls -l | sort"),
-            Some((vec!["ls", "-l", "|", "sort"]))
+            Some(vec!["ls", "-l", "|", "sort"])
         );
     }
 }
