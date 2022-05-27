@@ -17,4 +17,5 @@ members = [
     "apps/fault",
     "apps/readfile",
     "apps/grep",
+    "apps/cp",
 ]
