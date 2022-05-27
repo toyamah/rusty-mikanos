@@ -52,6 +52,8 @@ pub enum Code {
     InvalidFormat,
     FrameTooSmall,
     InvalidFile,
+    IsDirectory,
+    NoSuchEntry,
     LastOfCode,
 }
 

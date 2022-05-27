@@ -81,7 +81,7 @@ pub extern "C" fn KernelMainNewStack(
     frame_buffer_config_: &'static FrameBufferConfig,
     memory_map: &'static MemoryMap,
     acpi_table: &'static Rsdp,
-    volume_image: *const u8,
+    volume_image: *mut u8,
 ) -> ! {
     let memory_map = *memory_map;
     graphics::global::initialize(*frame_buffer_config_);

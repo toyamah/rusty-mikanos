@@ -1,14 +1,22 @@
+use crate::error::{Code, Error};
+use crate::make_error;
 use core::ffi::c_void;
 use core::fmt::{Display, Formatter};
 use core::mem::size_of;
 use core::{cmp, slice};
 
 pub mod global {
+    use crate::error::{Code, Error};
     use crate::fat::{next_path_element, Bpb, DirectoryEntry, END_OF_CLUSTER_CHAIN};
+    use crate::make_error;
+    use core::ptr::null_mut;
 
-    static mut BOOT_VOLUME_IMAGE: Option<&'static Bpb> = None;
+    static mut BOOT_VOLUME_IMAGE: *mut Bpb = null_mut();
     pub fn boot_volume_image() -> &'static Bpb {
-        unsafe { BOOT_VOLUME_IMAGE.unwrap() }
+        unsafe { BOOT_VOLUME_IMAGE.as_ref().unwrap() }
+    }
+    pub fn boot_volume_image_mut() -> &'static mut Bpb {
+        unsafe { BOOT_VOLUME_IMAGE.as_mut().unwrap() }
     }
 
     static mut BYTES_PER_CLUSTER: u64 = u64::MAX;
@@ -16,10 +24,12 @@ pub mod global {
         unsafe { BYTES_PER_CLUSTER }
     }
 
-    pub fn initialize(volume_image: *const u8) {
-        let bpb = unsafe { (volume_image as *const Bpb).as_ref().unwrap() };
-        let bytes_per_cluster = bpb.bytes_per_cluster();
-        unsafe { BOOT_VOLUME_IMAGE = Some(bpb) };
+    pub fn initialize(volume_image: *mut u8) {
+        // let bpb = unsafe { (volume_image as *mut Bpb).as_mut().unwrap() };
+        let bpb = volume_image as *mut Bpb;
+        unsafe { BOOT_VOLUME_IMAGE = bpb };
+
+        let bytes_per_cluster = boot_volume_image().bytes_per_cluster();
         unsafe { BYTES_PER_CLUSTER = bytes_per_cluster }
     }
 
@@ -58,6 +68,38 @@ pub mod global {
         }
 
         (None, post_slash)
+    }
+
+    pub fn create_file(path: &str) -> Result<&mut DirectoryEntry, Error> {
+        // pub fn create_file(path: &str) -> Result<(), Error> {
+        let mut parent_dir_cluster = boot_volume_image().root_cluster;
+
+        let file_name = if let Some(slash_pos) = path.find('/') {
+            let filename = &path[slash_pos + 1..];
+            if filename.is_empty() {
+                return Err(make_error!(Code::IsDirectory));
+            }
+
+            let parent_dir_name = &path[..slash_pos];
+            if !parent_dir_name.is_empty() {
+                let (parent_dir, _) =
+                    find_file(parent_dir_name, boot_volume_image().root_cluster as u64);
+                if let Some(parent) = parent_dir {
+                    parent_dir_cluster = parent.first_cluster();
+                } else {
+                    return Err(make_error!(Code::NoSuchEntry));
+                }
+            }
+
+            filename
+        } else {
+            path
+        };
+
+        let dir = boot_volume_image_mut().allocate_entry(parent_dir_cluster as u64)?;
+        dir.set_file_name(file_name);
+        dir.file_size = 0;
+        Ok(dir)
     }
 }
 
@@ -150,6 +192,12 @@ impl Bpb {
         unsafe { slice::from_raw_parts(data.cast(), size) }
     }
 
+    pub fn get_sector_by_cluster_mut<T>(&self, cluster: u64) -> &'static mut [T] {
+        let data = self.get_cluster_addr(cluster) as *mut u8;
+        let size = self.bytes_per_cluster() as usize / size_of::<T>();
+        unsafe { slice::from_raw_parts_mut(data.cast(), size) }
+    }
+
     fn extend_cluster(&mut self, mut eoc_cluster: u64, n: usize) -> u64 {
         let fat = self.get_fat_mut();
         let fat_at = |i: usize| unsafe { fat.add(i) };
@@ -180,12 +228,12 @@ impl Bpb {
         current
     }
 
-    fn allocate_entry(&mut self, mut dir_cluster: u64) -> Option<&DirectoryEntry> {
+    fn allocate_entry(&mut self, mut dir_cluster: u64) -> Result<&mut DirectoryEntry, Error> {
         loop {
-            let dirs = self.get_sector_by_cluster::<DirectoryEntry>(dir_cluster);
+            let dirs = self.get_sector_by_cluster_mut::<DirectoryEntry>(dir_cluster);
             for dir in dirs {
                 if dir.name[0] == 0 || dir.name[0] == 0xe5 {
-                    return Some(dir);
+                    return Ok(dir);
                 }
             }
 
@@ -200,8 +248,8 @@ impl Bpb {
 
         let data = self.get_cluster_addr(dir_cluster) as *mut u8;
         unsafe { memset(data as *mut c_void, 0, self.bytes_per_sector as usize) };
-        let dirs = self.get_sector_by_cluster::<DirectoryEntry>(dir_cluster);
-        dirs.get(0)
+        let dirs = self.get_sector_by_cluster_mut::<DirectoryEntry>(dir_cluster);
+        dirs.get_mut(0).ok_or(make_error!(Code::NoEnoughMemory))
     }
 
     fn bytes_per_cluster(&self) -> u64 {
