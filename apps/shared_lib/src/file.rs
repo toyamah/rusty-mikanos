@@ -29,12 +29,12 @@ pub fn open_file(path: &str, mode: OpenMode) -> *mut FILE {
     unsafe { fopen(p, m) }
 }
 
-pub fn read_file(file: *mut FILE, buf: &mut [u8]) -> *mut c_char {
+pub fn read_string(file: *mut FILE, buf: &mut [u8]) -> *mut c_char {
     let b = buf as *mut _ as *mut c_char;
     unsafe { fgets(b, buf.len() as i32, file) }
 }
 
-pub fn read_file2(file: *mut FILE, buf: &mut [u8]) -> usize {
+pub fn read_file(file: *mut FILE, buf: &mut [u8]) -> usize {
     let b = buf as *mut _ as *mut c_void;
     unsafe { fread(b, 1, buf.len(), file) }
 }

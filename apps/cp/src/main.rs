@@ -4,7 +4,7 @@
 use core::arch::asm;
 use core::panic::PanicInfo;
 use shared_lib::args::Args;
-use shared_lib::file::{open_file, read_file2, write_file, OpenMode};
+use shared_lib::file::{open_file, read_file, write_file, OpenMode};
 use shared_lib::newlib_support::exit;
 use shared_lib::println;
 use shared_lib::rust_official::cchar::c_char;
@@ -31,7 +31,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
 
     let mut buf = [0_u8; 256];
     loop {
-        let bytes = read_file2(fp_src, &mut buf);
+        let bytes = read_file(fp_src, &mut buf);
         if bytes <= 0 {
             break;
         }
