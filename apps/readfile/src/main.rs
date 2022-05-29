@@ -5,7 +5,7 @@
 use core::arch::asm;
 use core::panic::PanicInfo;
 use shared_lib::args::Args;
-use shared_lib::file::{buf_to_str, open_file, read_file, OpenMode};
+use shared_lib::file::{buf_to_str, open_file, read_string, OpenMode};
 use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::{print, println};
@@ -27,7 +27,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
 
     let mut line = [0_u8; 256];
     for _ in 0..3 {
-        if read_file(fp, &mut line).is_null() {
+        if read_string(fp, &mut line).is_null() {
             println!("failed to get a line");
         }
         let str = buf_to_str(&line).unwrap();

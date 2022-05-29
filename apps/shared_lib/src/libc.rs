@@ -1,6 +1,7 @@
 use crate::c_char;
 use crate::newlib_support::FILE;
 use crate::syscall::SyscallExit;
+use core::ffi::c_void;
 
 extern "C" {
     pub fn strlen(cs: *const c_char) -> usize;
@@ -10,6 +11,8 @@ extern "C" {
     pub(crate) fn strerror(n: i32) -> *mut c_char;
     pub(crate) fn fopen(filename: *const c_char, mode: *const c_char) -> *mut FILE;
     pub(crate) fn fgets(buf: *mut c_char, n: i32, stream: *mut FILE) -> *mut c_char;
+    pub(crate) fn fread(ptr: *mut c_void, size: usize, nobj: usize, stream: *mut FILE) -> usize;
+    pub(crate) fn fwrite(ptr: *const c_void, size: usize, nobj: usize, stream: *mut FILE) -> usize;
 }
 
 #[no_mangle]

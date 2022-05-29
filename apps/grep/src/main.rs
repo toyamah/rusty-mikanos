@@ -6,7 +6,7 @@ use core::arch::asm;
 use core::panic::PanicInfo;
 use safe_regex::{regex, Matcher0};
 use shared_lib::args::Args;
-use shared_lib::file::{buf_to_str, open_file, read_file, OpenMode};
+use shared_lib::file::{buf_to_str, open_file, read_string, OpenMode};
 use shared_lib::newlib_support::exit;
 use shared_lib::rust_official::cchar::c_char;
 use shared_lib::{print, println};
@@ -41,7 +41,7 @@ fn grep<F: Fn(&[u8]) -> Option<()>>(path: &str, matcher: Matcher0<F>) {
     }
 
     let mut line = [0_u8; 256];
-    while !read_file(fp, line.as_mut()).is_null() {
+    while !read_string(fp, line.as_mut()).is_null() {
         if matcher.is_match(line.as_slice()) {
             let str = buf_to_str(&line).unwrap();
             print!("{}", str);

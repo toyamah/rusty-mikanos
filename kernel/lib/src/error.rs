@@ -5,7 +5,7 @@ use core::fmt::Formatter;
 
 #[derive(Debug)]
 pub struct Error {
-    code: Code,
+    pub code: Code,
     file: &'static str,
     line: u32,
 }
@@ -52,6 +52,8 @@ pub enum Code {
     InvalidFormat,
     FrameTooSmall,
     InvalidFile,
+    IsDirectory,
+    NoSuchEntry,
     LastOfCode,
 }
 

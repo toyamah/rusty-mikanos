@@ -1,7 +1,8 @@
 use crate::app_event::{AppEvent, AppEventArg, AppEventType, TimerTimeout};
 use crate::asm::global::{write_msr, SyscallEntry};
+use crate::error::Code;
 use crate::fat::global::{boot_volume_image, find_file};
-use crate::fat::FatFileDescriptor;
+use crate::fat::{DirectoryEntry, FatFileDescriptor};
 use crate::font::write_string;
 use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
@@ -30,12 +31,15 @@ const ENOENT: i32 = 2; // No such file or directory
 const E2BIG: i32 = 7; // Argument list too long
 const EBADF: i32 = 9; // Bad file descriptor
 const EFAULT: i32 = 14; // Bad address
+const EISDIR: i32 = 21; // Is a directory
 const EINVAL: i32 = 22; // Invalid argument
+const ENOSPC: i32 = 28; // No space left on device
 
 const O_RDONLY: i32 = 0x0000; /* open for reading only */
 const O_WRONLY: i32 = 0x0001; /* open for writing only */
 const O_RDWR: i32 = 0x0002; /* open for reading and writing */
 const O_ACCMODE: i32 = 0x0003; /* mask for above modes */
+const O_CREAT: i32 = 0x00000200; /* create if nonexistant */
 
 #[repr(C)]
 struct SyscallResult {
@@ -408,20 +412,26 @@ fn open_file(path: u64, flag: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> Sy
         return SyscallResult::ok(0);
     }
 
-    if (flags & O_ACCMODE) == O_WRONLY {
-        return SyscallResult::err(0, EINVAL);
-    }
+    let (file, post_slash) = find_file(path, boot_volume_image().get_root_cluster() as u64);
+    let file = match file {
+        Some(f) => {
+            if !f.is_directory() && post_slash {
+                return SyscallResult::err(0, ENOENT);
+            }
+            f
+        }
+        None => {
+            if (flags & O_CREAT) == 0 {
+                return SyscallResult::err(0, ENOENT);
+            }
+            match create_file(path) {
+                Ok(f) => f,
+                Err(e) => return SyscallResult::err(0, e),
+            }
+        }
+    };
 
-    let (dir, post_slash) = find_file(path, boot_volume_image().get_root_cluster() as u64);
-    if dir.is_none() {
-        return SyscallResult::err(0, ENOENT);
-    }
-    let dir = dir.unwrap();
-    if !dir.is_directory() && post_slash {
-        return SyscallResult::err(0, ENOENT);
-    }
-
-    let fd = task.register_file_descriptor(FileDescriptor::Fat(FatFileDescriptor::new(dir)));
+    let fd = task.register_file_descriptor(FileDescriptor::Fat(FatFileDescriptor::new(file)));
     SyscallResult::ok(fd as u64)
 }
 
@@ -445,6 +455,15 @@ fn read_file(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sys
     } else {
         SyscallResult::err(0, EBADF)
     }
+}
+
+fn create_file(path: &str) -> Result<&DirectoryEntry, i32> {
+    crate::fat::global::create_file(path).map_err(|e| match e.code {
+        Code::IsDirectory => EISDIR,
+        Code::NoSuchEntry => ENOENT,
+        Code::NoEnoughMemory => ENOSPC,
+        _ => 0,
+    })
 }
 
 #[no_mangle]
