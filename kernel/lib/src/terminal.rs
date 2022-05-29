@@ -17,7 +17,7 @@ use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
 use crate::paging::global::reset_cr3;
 use crate::paging::{LinearAddress4Level, PageMapEntry};
-use crate::rust_official::c_str::{CStr, CString};
+use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::task::global::task_manager;
@@ -33,6 +33,7 @@ use core::arch::asm;
 use core::ffi::c_void;
 use core::fmt::Write;
 use core::ops::Deref;
+use core::str::Utf8Error;
 use core::{cmp, fmt, mem};
 use shared::PixelFormat;
 
@@ -391,7 +392,7 @@ impl Terminal {
                 if let (Some(file_entry), post_slash) = find_file(command, root_cluster as u64) {
                     if !file_entry.is_directory() && post_slash {
                         let name_bytes = file_entry.formatted_name();
-                        let name = string_trimming_null(&name_bytes);
+                        let name = str_trimming_nul_unchecked(&name_bytes);
                         writeln!(self, "{} is not a directory", name).unwrap();
                     } else if let Some(e) = self.execute_file(file_entry, argv.as_slice()).err() {
                         writeln!(self, "failed to exec file: {}", e).unwrap();
@@ -433,10 +434,14 @@ impl Terminal {
 
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_e000);
         PageMapEntry::setup_page_maps(stack_frame_addr, 1, get_cr3(), memory_manager())?;
-        task.register_file_descriptor(FileDescriptor::Terminal(TerminalFileDescriptor::new(
-            task.id(),
-            self.task_id,
-        )));
+
+        // register standard in/out and error file descriptors
+        for _ in 0..3 {
+            task.register_file_descriptor(FileDescriptor::Terminal(TerminalFileDescriptor::new(
+                task.id(),
+                self.task_id,
+            )));
+        }
 
         let entry_addr = elf_header.e_entry;
         let ret = call_app(
@@ -591,7 +596,7 @@ impl Terminal {
         }
 
         let name_bytes = dir.formatted_name();
-        let name = string_trimming_null(&name_bytes);
+        let name = str_trimming_nul_unchecked(&name_bytes);
 
         if post_slash {
             self.write_fmt(format_args!("{} is not a directory\n", name))
@@ -614,7 +619,7 @@ impl Terminal {
         let file_entry = file_entry.unwrap();
         if !file_entry.is_directory() && post_slash {
             let name_bytes = file_entry.formatted_name();
-            let name = string_trimming_null(&name_bytes);
+            let name = str_trimming_nul_unchecked(&name_bytes);
             writeln!(self, "{} is not a directory", name).unwrap();
             return;
         }
@@ -652,7 +657,7 @@ impl Terminal {
                 }
 
                 let name = dir.formatted_name();
-                writeln!(self, "{}", string_trimming_null(&name)).unwrap();
+                writeln!(self, "{}", str_trimming_nul_unchecked(&name)).unwrap();
             }
             dir_cluster = boot_volume_image().next_cluster(dir_cluster);
         }
@@ -787,6 +792,17 @@ impl TerminalFileDescriptor {
             return bytes.iter().filter(|&&x| x != 0).count();
         }
     }
+
+    pub fn write(&mut self, buf: &[u8]) -> usize {
+        match str_trimming_nul(buf) {
+            Ok(str) => {
+                let terminal = get_terminal_mut_by(self.terminal_id).unwrap();
+                terminal.print(str);
+                str.as_bytes().len()
+            }
+            Err(_) => 0,
+        }
+    }
 }
 
 fn draw_terminal<W: PixelWriter>(w: &mut W, pos: Vector2D<i32>, size: Vector2D<i32>) {
@@ -809,10 +825,18 @@ fn parse_command(s: &str) -> Option<Vec<&str>> {
     Some(Vec::from(parsed))
 }
 
-fn string_trimming_null(bytes: &[u8]) -> &str {
-    unsafe { CStr::from_bytes_with_nul_unchecked(bytes) }
-        .to_str()
-        .unwrap()
+fn str_trimming_nul(buf: &[u8]) -> Result<&str, Utf8Error> {
+    let nul_term_index = buf
+        .iter()
+        .enumerate()
+        .find(|(_, &b)| b == 0)
+        .map(|(i, _)| i)
+        .unwrap_or(buf.len());
+    core::str::from_utf8(&buf[..nul_term_index])
+}
+
+fn str_trimming_nul_unchecked(buf: &[u8]) -> &str {
+    str_trimming_nul(buf).unwrap()
 }
 
 fn make_argv(
@@ -993,5 +1017,13 @@ mod tests {
             parse_command("ls -l | sort"),
             Some(vec!["ls", "-l", "|", "sort"])
         );
+    }
+
+    #[test]
+    fn str_trimming_nul_unchecked_test() {
+        assert_eq!(str_trimming_nul_unchecked(b"\0"), "");
+        assert_eq!(str_trimming_nul_unchecked(b"abc\0"), "abc");
+        assert_eq!(str_trimming_nul_unchecked(b"bcd\0\0\0"), "bcd");
+        assert_eq!(str_trimming_nul_unchecked(b"\0cde\0\0\0"), "");
     }
 }
