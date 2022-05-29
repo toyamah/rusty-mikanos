@@ -15,7 +15,6 @@ use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
-use crate::terminal::global::get_terminal_mut_by;
 use crate::timer::global::timer_manager;
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::Window;
@@ -90,17 +89,24 @@ fn put_string(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sy
         return SyscallResult::err(0, E2BIG);
     }
 
-    let c_str = unsafe { c_str_from(buf) };
-    let str = str_from(&c_str.to_bytes()[..count as usize]);
+    unsafe { asm!("cli") };
+    let task = task_manager().current_task_mut();
+    unsafe { asm!("sti") };
 
-    if fd == 1 {
-        let task_id = task_manager().current_task().id();
-        let terminal = get_terminal_mut_by(task_id).expect("failed to get terminal");
-        terminal.print(str);
-        return SyscallResult::ok(count);
+    let fd = fd as i64;
+    if fd < 0 {
+        return SyscallResult::err(0, EBADF);
     }
 
-    SyscallResult::err(0, EBADF)
+    match task.get_file_mut(fd as usize) {
+        None => SyscallResult::err(0, EBADF),
+        Some(fd) => {
+            let buf = buf as *mut u64 as *mut u8;
+            let buf = unsafe { slice::from_raw_parts(buf, count as usize) };
+            let written_size = fd.write(buf);
+            SyscallResult::ok(written_size as u64)
+        }
+    }
 }
 
 fn exit(status: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {

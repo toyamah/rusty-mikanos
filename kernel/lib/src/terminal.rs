@@ -434,10 +434,14 @@ impl Terminal {
 
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_e000);
         PageMapEntry::setup_page_maps(stack_frame_addr, 1, get_cr3(), memory_manager())?;
-        task.register_file_descriptor(FileDescriptor::Terminal(TerminalFileDescriptor::new(
-            task.id(),
-            self.task_id,
-        )));
+
+        // register standard in/out and error file descriptors
+        for _ in 0..3 {
+            task.register_file_descriptor(FileDescriptor::Terminal(TerminalFileDescriptor::new(
+                task.id(),
+                self.task_id,
+            )));
+        }
 
         let entry_addr = elf_header.e_entry;
         let ret = call_app(
