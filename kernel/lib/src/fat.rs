@@ -73,7 +73,7 @@ pub mod global {
     pub fn create_file(path: &str) -> Result<&DirectoryEntry, Error> {
         let mut parent_dir_cluster = boot_volume_image().root_cluster;
 
-        let file_name = if let Some(slash_pos) = path.find('/') {
+        let file_name = if let Some(slash_pos) = path.rfind('/') {
             let filename = &path[slash_pos + 1..];
             if filename.is_empty() {
                 return Err(make_error!(Code::IsDirectory));
