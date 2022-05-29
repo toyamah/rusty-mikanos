@@ -252,6 +252,25 @@ impl Bpb {
             .ok_or_else(|| make_error!(Code::NoEnoughMemory))
     }
 
+    fn allocate_cluster_chain(&mut self, n: usize) -> u64 {
+        let fat = self.get_fat_mut();
+        let first_cluster = 2_u64;
+        loop {
+            let x = unsafe { fat.add(first_cluster as usize) };
+            unsafe {
+                if *x == 0 {
+                    *x = END_OF_CLUSTER_CHAIN as u32;
+                    break;
+                }
+            }
+        }
+
+        if n > 1 {
+            self.extend_cluster(first_cluster, n - 1);
+        }
+        first_cluster
+    }
+
     fn bytes_per_cluster(&self) -> u64 {
         (self.bytes_per_sector as u64) * self.sectors_per_cluster as u64
     }
