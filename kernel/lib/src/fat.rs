@@ -70,7 +70,7 @@ pub mod global {
         (None, post_slash)
     }
 
-    pub fn create_file(path: &str) -> Result<&mut DirectoryEntry, Error> {
+    pub fn create_file(path: &str) -> Result<&DirectoryEntry, Error> {
         // pub fn create_file(path: &str) -> Result<(), Error> {
         let mut parent_dir_cluster = boot_volume_image().root_cluster;
 
