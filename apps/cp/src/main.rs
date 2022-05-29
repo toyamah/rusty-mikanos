@@ -35,8 +35,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
         if bytes <= 0 {
             break;
         }
-        let written = write_file(fp_dest, &buf[bytes..]);
-        println!("bytes {}, written = {}", bytes, written);
+        let written = write_file(fp_dest, &buf[..bytes]);
         if bytes != written {
             println!("failed to write to {}", args.get(2));
             exit(1);
