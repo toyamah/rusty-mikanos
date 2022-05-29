@@ -254,7 +254,7 @@ impl Bpb {
 
     fn allocate_cluster_chain(&mut self, n: usize) -> u64 {
         let fat = self.get_fat_mut();
-        let first_cluster = 2_u64;
+        let mut first_cluster = 2_u64;
         loop {
             let x = unsafe { fat.add(first_cluster as usize) };
             unsafe {
@@ -263,6 +263,7 @@ impl Bpb {
                     break;
                 }
             }
+            first_cluster += 1;
         }
 
         if n > 1 {
