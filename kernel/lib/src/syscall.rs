@@ -93,11 +93,6 @@ fn put_string(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sy
     let task = task_manager().current_task_mut();
     unsafe { asm!("sti") };
 
-    let fd = fd as i64;
-    if fd < 0 {
-        return SyscallResult::err(0, EBADF);
-    }
-
     match task.get_file_mut(fd as usize) {
         None => SyscallResult::err(0, EBADF),
         Some(fd) => {
@@ -449,12 +444,7 @@ fn read_file(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sys
     let task = task_manager().current_task_mut();
     unsafe { asm!("sti") };
 
-    if fd < 0 {
-        return SyscallResult::err(0, EBADF);
-    }
-    let fd = fd as usize;
-
-    if let Some(descriptor) = task.get_file_mut(fd) {
+    if let Some(descriptor) = task.get_file_mut(fd as usize) {
         let buf = unsafe { slice::from_raw_parts_mut(buf, count) };
         let size = descriptor.read(buf);
         SyscallResult::ok(size as u64)
