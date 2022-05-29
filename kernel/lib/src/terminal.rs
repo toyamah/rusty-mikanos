@@ -1023,7 +1023,7 @@ mod tests {
     fn str_trimming_nul_unchecked_test() {
         assert_eq!(str_trimming_nul_unchecked(b"\0"), "");
         assert_eq!(str_trimming_nul_unchecked(b"abc\0"), "abc");
-        assert_eq!(str_trimming_nul_unchecked(b"bcd\0\0\0"), "123");
+        assert_eq!(str_trimming_nul_unchecked(b"bcd\0\0\0"), "bcd");
         assert_eq!(str_trimming_nul_unchecked(b"\0cde\0\0\0"), "");
     }
 }
