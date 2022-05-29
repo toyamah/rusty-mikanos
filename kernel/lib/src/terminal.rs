@@ -992,19 +992,6 @@ mod command_history_tests {
 }
 
 #[cfg(test)]
-mod terminal_descriptor_tests {
-    use super::*;
-
-    #[test]
-    fn buf_trimming_nul() {
-        let buf = b"\0";
-        assert_eq!(TerminalFileDescriptor::buf_trimming_nul(b"\0"), b"",);
-
-        assert_eq!(TerminalFileDescriptor::buf_trimming_nul(b"\0"), b"",);
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use alloc::vec;
