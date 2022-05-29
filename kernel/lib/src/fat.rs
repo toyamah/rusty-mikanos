@@ -71,7 +71,6 @@ pub mod global {
     }
 
     pub fn create_file(path: &str) -> Result<&DirectoryEntry, Error> {
-        // pub fn create_file(path: &str) -> Result<(), Error> {
         let mut parent_dir_cluster = boot_volume_image().root_cluster;
 
         let file_name = if let Some(slash_pos) = path.find('/') {
@@ -249,7 +248,8 @@ impl Bpb {
         let data = self.get_cluster_addr(dir_cluster) as *mut u8;
         unsafe { memset(data as *mut c_void, 0, self.bytes_per_sector as usize) };
         let dirs = self.get_sector_by_cluster_mut::<DirectoryEntry>(dir_cluster);
-        dirs.get_mut(0).ok_or(make_error!(Code::NoEnoughMemory))
+        dirs.get_mut(0)
+            .ok_or_else(|| make_error!(Code::NoEnoughMemory))
     }
 
     fn bytes_per_cluster(&self) -> u64 {
@@ -448,16 +448,20 @@ impl DirectoryEntry {
         let dot_pos_pair = name.iter().enumerate().find(|(_, &b)| b == b'.');
 
         if let Some((dot_pos, _)) = dot_pos_pair {
-            for i in 0..cmp::min(8, dot_pos) {
-                self.name[i] = name[i].to_ascii_uppercase();
+            let min = cmp::min(8, dot_pos);
+            for (i, &b) in name.iter().enumerate().take(min) {
+                self.name[i] = b.to_ascii_uppercase();
             }
+
             let after_dot = &name[dot_pos + 1..];
-            for i in 0..cmp::min(3, after_dot.len()) {
-                self.name[8 + i] = after_dot[i].to_ascii_uppercase();
+            let min = cmp::min(3, after_dot.len());
+            for (i, &b) in after_dot.iter().enumerate().take(min) {
+                self.name[8 + i] = b.to_ascii_uppercase();
             }
         } else {
-            for i in 0..cmp::min(8, name.len()) {
-                self.name[i] = name[i].to_ascii_uppercase();
+            let min = cmp::min(8, name.len());
+            for (i, &b) in name.iter().enumerate().take(min) {
+                self.name[i] = b.to_ascii_uppercase();
             }
         }
     }
