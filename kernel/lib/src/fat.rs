@@ -507,6 +507,9 @@ pub(crate) struct FatFileDescriptor {
     rd_off: usize,
     rd_cluster: u64,
     rd_cluster_off: usize,
+    wr_off: usize,
+    wr_cluster: u64,
+    wr_cluster_off: usize,
 }
 
 impl FatFileDescriptor {
@@ -516,6 +519,9 @@ impl FatFileDescriptor {
             rd_off: 0,
             rd_cluster: 0,
             rd_cluster_off: 0,
+            wr_off: 0,
+            wr_cluster: 0,
+            wr_cluster_off: 0,
         }
     }
 
@@ -550,6 +556,53 @@ impl FatFileDescriptor {
         }
 
         self.rd_off += total;
+        total
+    }
+
+    pub fn write(&mut self, buf: &[u8], bpb: &mut Bpb) -> usize {
+        let bytes_per_cluster = bpb.bytes_per_cluster();
+        let fat_entry = match unsafe { (self.fat_entry as *mut DirectoryEntry).as_mut() } {
+            None => return 0,
+            Some(f) => f,
+        };
+        let num_cluster = |bytes: usize| (bytes as u64 + bytes_per_cluster - 1) / bytes_per_cluster;
+
+        if self.wr_cluster == 0 {
+            if fat_entry.first_cluster() != 0 {
+                self.wr_cluster = fat_entry.first_cluster() as u64;
+            } else {
+                self.wr_cluster = bpb.allocate_cluster_chain(num_cluster(buf.len()) as usize);
+                fat_entry.first_cluster_low = (self.wr_cluster & 0xffff) as u16;
+                fat_entry.first_cluster_high = ((self.wr_cluster >> 16) & 0xffff) as u16;
+            }
+        }
+
+        let mut total = 0;
+        while total < buf.len() {
+            if self.wr_cluster_off as u64 == bytes_per_cluster {
+                let next_cluster = bpb.next_cluster(self.wr_cluster);
+                if next_cluster == END_OF_CLUSTER_CHAIN {
+                    self.wr_cluster = bpb
+                        .extend_cluster(self.wr_cluster, num_cluster(buf.len() - total) as usize);
+                } else {
+                    self.wr_cluster = next_cluster;
+                }
+                self.wr_cluster_off = 0;
+            }
+
+            let sec = bpb.get_sector_by_cluster_mut::<u8>(self.wr_cluster);
+            let n = cmp::min(
+                buf.len(),
+                (bytes_per_cluster - self.wr_cluster_off as u64) as usize,
+            );
+            sec[self.wr_cluster_off..self.wr_cluster_off + n].copy_from_slice(&buf[..n]);
+            total += n;
+
+            self.wr_cluster_off += n;
+        }
+
+        self.wr_off += total;
+        fat_entry.file_size = self.wr_off as u32;
         total
     }
 }
