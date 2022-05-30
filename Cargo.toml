@@ -18,4 +18,5 @@ members = [
     "apps/readfile",
     "apps/grep",
     "apps/cp",
+    "apps/dpage",
 ]
