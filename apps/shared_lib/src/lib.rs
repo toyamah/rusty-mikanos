@@ -6,8 +6,8 @@ use crate::byte_buffer::ByteBuffer;
 use crate::newlib_support::write;
 use crate::rust_official::cchar::c_char;
 use crate::syscall::{
-    SyscallCreateTimer, SyscallError, SyscallGetCurrentTick, SyscallLogString, SyscallOpenWindow,
-    SyscallReadEvent, SyscallWinWriteString,
+    SyscallCreateTimer, SyscallDemandPages, SyscallError, SyscallGetCurrentTick, SyscallLogString,
+    SyscallOpenWindow, SyscallReadEvent, SyscallResult, SyscallWinWriteString,
 };
 use core::ffi::c_void;
 use core::fmt;
@@ -46,6 +46,10 @@ pub fn current_tick_millis() -> u64 {
 
 pub fn read_event(events: &mut [AppEvent], len: usize) -> Result<u64, SyscallError> {
     unsafe { SyscallReadEvent(events.as_ptr() as *const c_void, len) }.to_result()
+}
+
+pub fn demand_page(num_pages: usize, flags: i32) -> Result<u64, SyscallError> {
+    unsafe { SyscallDemandPages(num_pages, flags) }.to_result()
 }
 
 pub enum TimerType {

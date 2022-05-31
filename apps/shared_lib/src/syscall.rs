@@ -59,6 +59,8 @@ extern "C" {
     pub(crate) fn SyscallOpenFile(path: *const c_char, flags: i32) -> SyscallResult;
 
     pub(crate) fn SyscallReadFile(fd: i32, buf: *const c_void, count: usize) -> SyscallResult;
+
+    pub(crate) fn SyscallDemandPages(num_pages: usize, flags: i32) -> SyscallResult;
 }
 
 #[repr(C)]
