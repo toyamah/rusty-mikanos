@@ -71,7 +71,6 @@ pub extern "C" fn sbrk(incr: i32) -> i64 {
             let res = SyscallDemandPages(num_pages as usize, 0);
             if !res.is_ok() {
                 ERRNO = res.error;
-                // return -1 as *const _ as *const c_void;
                 return -1;
             }
 
