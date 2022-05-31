@@ -238,6 +238,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mmap"
+version = "0.1.0"
+dependencies = [
+ "shared_lib",
+]
+
+[[package]]
 name = "os_kernel"
 version = "0.1.0"
 dependencies = [
