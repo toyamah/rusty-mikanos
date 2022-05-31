@@ -347,7 +347,13 @@ pub mod global {
     use super::{
         PDPTable, PM4Table, PageDirectory, PAGE_DIRECTORY_COUNT, PAGE_SIZE_1G, PAGE_SIZE_2M,
     };
-    use crate::asm::global::set_cr3;
+    use crate::asm::global::{get_cr3, set_cr3};
+    use crate::error::{Code, Error};
+    use crate::make_error;
+    use crate::memory_manager::global::memory_manager;
+    use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
+    use crate::paging::{LinearAddress4Level, PageMapEntry};
+    use crate::task::global::task_manager;
 
     static mut PML4_TABLE: PM4Table = PM4Table([0; 512]);
     static mut PDP_TABLE: PDPTable = PDPTable([0; 512]);
@@ -377,5 +383,29 @@ pub mod global {
 
     pub(crate) fn reset_cr3() {
         unsafe { set_cr3(&PML4_TABLE.0[0] as *const _ as u64) }
+    }
+
+    pub(crate) fn handle_page_fault(error_code: u64, causal_addr: u64) -> Result<(), Error> {
+        if error_code & 1 == 1 {
+            return Err(make_error!(Code::AlreadyAllocated));
+        }
+
+        let task = task_manager().current_task();
+        if causal_addr < task.dpaging_begin || task.dpaging_end <= causal_addr {
+            return Err(make_error!(Code::IndexOutOfRange));
+        }
+
+        PageMapEntry::setup_page_maps(
+            LinearAddress4Level::new(causal_addr),
+            1,
+            get_cr3(),
+            memory_manager(),
+        )
+    }
+
+    pub fn free_page_map(table: *mut PageMapEntry) -> Result<(), Error> {
+        let addr = table as *const _ as usize;
+        let frame_id = FrameID::new(addr as usize / BYTES_PER_FRAME);
+        memory_manager().free(frame_id, 1)
     }
 }

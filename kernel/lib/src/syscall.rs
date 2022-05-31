@@ -453,6 +453,16 @@ fn read_file(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sys
     }
 }
 
+fn demand_page(num_pages: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
+    unsafe { asm!("cli") };
+    let task = task_manager().current_task_mut();
+    unsafe { asm!("sti") };
+
+    let dp_end = task.dpaging_end;
+    task.dpaging_end = dp_end + 4096 * num_pages;
+    SyscallResult::ok(dp_end)
+}
+
 fn create_file(path: &str) -> Result<&DirectoryEntry, i32> {
     crate::fat::global::create_file(path).map_err(|e| match e.code {
         Code::IsDirectory => EISDIR,
@@ -463,7 +473,7 @@ fn create_file(path: &str) -> Result<&DirectoryEntry, i32> {
 }
 
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 14] = [
+static mut syscall_table: [SyscallFuncType; 15] = [
     log_string,
     put_string,
     exit,
@@ -478,6 +488,7 @@ static mut syscall_table: [SyscallFuncType; 14] = [
     create_timer,
     open_file,
     read_file,
+    demand_page,
 ];
 
 pub fn initialize_syscall() {

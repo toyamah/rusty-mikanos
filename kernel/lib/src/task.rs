@@ -74,6 +74,8 @@ pub struct Task {
     level: PriorityLevel,
     is_running: bool,
     files: Vec<Option<FileDescriptor>>,
+    pub(crate) dpaging_begin: u64,
+    pub(crate) dpaging_end: u64,
 }
 
 impl Task {
@@ -88,6 +90,8 @@ impl Task {
             level,
             is_running: false,
             files: vec![],
+            dpaging_begin: 0,
+            dpaging_end: 0,
         }
     }
 

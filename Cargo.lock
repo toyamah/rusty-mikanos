@@ -104,6 +104,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dpage"
+version = "0.1.0"
+dependencies = [
+ "shared_lib",
+]
+
+[[package]]
 name = "eye"
 version = "0.1.0"
 dependencies = [

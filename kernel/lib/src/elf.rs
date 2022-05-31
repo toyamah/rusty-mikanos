@@ -2,7 +2,7 @@ use crate::error::{Code, Error};
 use crate::make_error;
 use crate::memory_manager::BitmapMemoryManager;
 use crate::paging::{LinearAddress4Level, PageMapEntry};
-use core::mem;
+use core::{cmp, mem};
 
 const EI_NIDENT: usize = 16;
 
@@ -76,7 +76,7 @@ impl Elf64Ehdr {
         &mut self,
         cr_3: u64,
         memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<(), Error> {
+    ) -> Result<u64, Error> {
         if self.e_type != ET_EXEC {
             return Err(make_error!(Code::InvalidFormat));
         }
@@ -93,8 +93,9 @@ impl Elf64Ehdr {
         &mut self,
         cr_3: u64,
         memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<(), Error> {
+    ) -> Result<u64, Error> {
         let phdr = unsafe { self.get_program_header() };
+        let mut last_addr = 0;
         for i in 0..self.e_phnum {
             let p = unsafe { phdr.add(i as usize).as_ref().unwrap() };
             if p.p_type != PT_LOAD {
@@ -102,6 +103,7 @@ impl Elf64Ehdr {
             }
 
             let dest_addr = LinearAddress4Level::new(p.p_vaddr as u64);
+            last_addr = cmp::max(last_addr, p.p_vaddr as u64 + p.p_memsz);
             let num_4kpages: usize = ((p.p_memsz + 4095) / 4096) as usize;
             PageMapEntry::setup_page_maps(dest_addr, num_4kpages, cr_3, memory_manager)?;
 
@@ -114,7 +116,7 @@ impl Elf64Ehdr {
                     .write_bytes(0, (p.p_memsz - p.p_filesz) as usize);
             }
         }
-        Ok(())
+        Ok(last_addr)
     }
 }
 

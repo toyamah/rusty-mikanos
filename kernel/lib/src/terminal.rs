@@ -13,9 +13,8 @@ use crate::keyboard::{is_control_key_inputted, KEY_D};
 use crate::layer::global::layer_manager;
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
-use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
-use crate::paging::global::reset_cr3;
+use crate::paging::global::{free_page_map, reset_cr3};
 use crate::paging::{LinearAddress4Level, PageMapEntry};
 use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
@@ -418,7 +417,7 @@ impl Terminal {
         unsafe { asm!("sti") };
         setup_pml4(task)?;
 
-        elf_header.load_elf(get_cr3(), memory_manager())?;
+        let elf_last_addr = elf_header.load_elf(get_cr3(), memory_manager())?;
 
         let args_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000);
         PageMapEntry::setup_page_maps(args_frame_addr, 1, get_cr3(), memory_manager())?;
@@ -442,6 +441,10 @@ impl Terminal {
                 self.task_id,
             )));
         }
+
+        let elf_next_page = (elf_last_addr + 4095) & 0xffff_ffff_ffff_f000;
+        task.dpaging_begin = elf_next_page;
+        task.dpaging_end = elf_next_page;
 
         let entry_addr = elf_header.e_entry;
         let ret = call_app(
@@ -898,8 +901,7 @@ pub fn free_pml4(current_task: &mut Task) -> Result<(), Error> {
     let cr3 = current_task.get_cr3();
     current_task.set_cr3(0);
     reset_cr3();
-    let frame_id = FrameID::new(cr3 as usize / BYTES_PER_FRAME);
-    memory_manager().free(frame_id, 1)
+    free_page_map(cr3 as *mut u64 as *mut PageMapEntry)
 }
 
 extern "C" {

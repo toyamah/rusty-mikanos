@@ -39,6 +39,10 @@ pub fn read_file(file: *mut FILE, buf: &mut [u8]) -> usize {
     unsafe { fread(b, 1, buf.len(), file) }
 }
 
+pub fn read_file_raw(file: *mut FILE, ptr: *mut c_void, size: usize, nobj: usize) -> usize {
+    unsafe { fread(ptr, size, nobj, file) }
+}
+
 pub fn write_file(file: *mut FILE, buf: &[u8]) -> usize {
     let b = buf as *const _ as *const c_void;
     unsafe { fwrite(b, 1, buf.len(), file) }

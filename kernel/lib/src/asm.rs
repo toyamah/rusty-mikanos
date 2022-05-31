@@ -12,6 +12,7 @@ pub mod global {
         fn LoadTR(sel: u16);
         fn SetDSAll(value: u16);
         fn SetCSSS(cs: u16, ss: u16);
+        fn GetCR2() -> u64;
         fn SetCR3(value: u64);
         fn GetCR3() -> u64;
         fn SwitchContext(next_ctx: *const c_void, current_ctx: *const c_void);
@@ -60,6 +61,10 @@ pub mod global {
 
     pub fn set_csss(cs: u16, ss: u16) {
         unsafe { SetCSSS(cs, ss) }
+    }
+
+    pub fn get_cr2() -> u64 {
+        unsafe { GetCR2() }
     }
 
     pub fn set_cr3(value: u64) {
