@@ -7,7 +7,7 @@ use crate::newlib_support::write;
 use crate::rust_official::cchar::c_char;
 use crate::syscall::{
     SyscallCreateTimer, SyscallDemandPages, SyscallError, SyscallGetCurrentTick, SyscallLogString,
-    SyscallOpenWindow, SyscallReadEvent, SyscallResult, SyscallWinWriteString,
+    SyscallOpenWindow, SyscallReadEvent, SyscallWinWriteString,
 };
 use core::ffi::c_void;
 use core::fmt;
