@@ -1,7 +1,8 @@
-use crate::libc::{fgets, fopen, fread, fwrite};
+use crate::libc::{fgets, fileno, fopen, fread, fwrite};
 use crate::newlib_support::FILE;
 use crate::rust_official::cstr::CStr;
-use crate::{c_char, ByteBuffer};
+use crate::syscall::SyscallMapFile;
+use crate::{c_char, ByteBuffer, SyscallError};
 use core::ffi::c_void;
 use core::str::Utf8Error;
 
@@ -46,6 +47,11 @@ pub fn read_file_raw(file: *mut FILE, ptr: *mut c_void, size: usize, nobj: usize
 pub fn write_file(file: *mut FILE, buf: &[u8]) -> usize {
     let b = buf as *const _ as *const c_void;
     unsafe { fwrite(b, 1, buf.len(), file) }
+}
+
+pub fn map_file(file: *mut FILE, file_size: &mut usize, flags: i32) -> Result<u64, SyscallError> {
+    let fd = unsafe { fileno(file) };
+    unsafe { SyscallMapFile(fd, file_size as *mut usize, flags) }.to_result()
 }
 
 pub fn buf_to_str(buf: &[u8]) -> Result<&str, Utf8Error> {

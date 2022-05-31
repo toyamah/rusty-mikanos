@@ -14,6 +14,7 @@ extern "C" {
     pub(crate) fn fgets(buf: *mut c_char, n: i32, stream: *mut FILE) -> *mut c_char;
     pub(crate) fn fread(ptr: *mut c_void, size: usize, nobj: usize, stream: *mut FILE) -> usize;
     pub(crate) fn fwrite(ptr: *const c_void, size: usize, nobj: usize, stream: *mut FILE) -> usize;
+    pub(crate) fn fileno(stream: *mut FILE) -> i32;
 }
 
 #[no_mangle]

@@ -1,6 +1,6 @@
+use crate::c_char;
 use crate::libc::atoi;
 use crate::rust_official::cstr::CStr;
-use crate::{c_char, println};
 
 pub struct Args {
     argc: i32,
