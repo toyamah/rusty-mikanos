@@ -4,16 +4,20 @@ use bit_field::BitField;
 
 pub mod global {
     use super::{InterruptDescriptor, InterruptDescriptorAttribute, InterruptVectorNumber};
-    use crate::asm::global::{exit_app, load_interrupt_descriptor_table, IntHandlerLAPICTimer};
+    use crate::asm::global::{
+        exit_app, get_cr2, load_interrupt_descriptor_table, IntHandlerLAPICTimer,
+    };
     use crate::font::{write_ascii, write_string};
     use crate::graphics::global::pixel_writer;
     use crate::graphics::COLOR_BLACK;
     use crate::interrupt::{InterruptFrame, InterruptStackFrame};
     use crate::message::{Message, MessageType};
+    use crate::paging::global::handle_page_fault;
     use crate::segment::KERNEL_CS;
     use crate::task::global::task_manager;
     use crate::x86_descriptor::SystemDescriptorType;
     use core::arch::asm;
+    use log::error;
 
     const SIGSEGV: i32 = 11;
 
@@ -129,6 +133,12 @@ pub mod global {
         _fault_handler_with_error("#GP", &frame.value, error_code);
     }
     extern "x86-interrupt" fn int_handler_pf(frame: InterruptStackFrame, error_code: u64) {
+        let cr2 = get_cr2();
+        match handle_page_fault(error_code, cr2) {
+            Ok(_) => return,
+            Err(e) => error!("failed to handle_page_fault. {}", e),
+        }
+
         _fault_handler_with_error("#PF", &frame.value, error_code);
     }
     extern "x86-interrupt" fn int_handler_mf(frame: InterruptStackFrame) {
