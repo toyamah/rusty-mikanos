@@ -351,6 +351,7 @@ pub mod global {
     use crate::error::{Code, Error};
     use crate::make_error;
     use crate::memory_manager::global::memory_manager;
+    use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
     use crate::paging::{LinearAddress4Level, PageMapEntry};
     use crate::task::global::task_manager;
 
@@ -400,5 +401,11 @@ pub mod global {
             get_cr3(),
             memory_manager(),
         )
+    }
+
+    pub fn free_page_map(table: *mut PageMapEntry) -> Result<(), Error> {
+        let addr = table as *const _ as usize;
+        let frame_id = FrameID::new(addr as usize / BYTES_PER_FRAME);
+        memory_manager().free(frame_id, 1)
     }
 }
