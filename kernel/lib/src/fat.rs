@@ -606,6 +606,26 @@ impl FatFileDescriptor {
         fat_entry.file_size = self.wr_off as u32;
         total
     }
+
+    pub fn load(&self, buf: &mut [u8], mut offset: usize, bpb: &Bpb) -> usize {
+        let bytes_per_cluster = bpb.bytes_per_cluster();
+        let mut fd = match unsafe { (self.fat_entry as *mut DirectoryEntry).as_mut() } {
+            None => return 0,
+            Some(f) => FatFileDescriptor::new(f),
+        };
+        fd.rd_off = offset;
+
+        let mut cluster = unsafe { (*self.fat_entry).first_cluster() } as u64;
+        while offset as u64 >= bytes_per_cluster {
+            offset -= bytes_per_cluster as usize;
+            cluster = bpb.next_cluster(cluster);
+        }
+
+        fd.rd_cluster = cluster;
+        fd.rd_cluster_off = offset;
+
+        return fd.read(buf, bpb);
+    }
 }
 
 fn next_path_element(path: &str) -> Option<PathElements> {
