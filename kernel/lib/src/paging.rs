@@ -427,9 +427,8 @@ pub mod global {
         PageMapEntry::setup_page_maps(page_vaddr, 1, get_cr3(), memory_manager())?;
 
         let file_offset = page_vaddr.value() - fm.vaddr_begin;
-        let page_cache = unsafe {
-            slice::from_raw_parts_mut(&mut page_vaddr.value() as *mut _ as *mut u8, 4096)
-        };
+        let page_cache =
+            unsafe { slice::from_raw_parts_mut(page_vaddr.value() as *mut u64 as *mut u8, 4096) };
         fd.load(page_cache, file_offset as usize);
         Ok(())
     }
