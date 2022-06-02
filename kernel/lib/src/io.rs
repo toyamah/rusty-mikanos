@@ -23,4 +23,11 @@ impl FileDescriptor {
             FileDescriptor::Terminal(fd) => fd.write(buf),
         }
     }
+
+    pub(crate) fn load(&mut self, buf: &mut [u8], offset: usize) -> usize {
+        match self {
+            FileDescriptor::Fat(fd) => fd.load(buf, offset, boot_volume_image_mut()),
+            FileDescriptor::Terminal(fd) => fd.load(buf, offset),
+        }
+    }
 }
