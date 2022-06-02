@@ -438,27 +438,7 @@ impl DirectoryEntry {
     }
 
     pub fn load_file(&self, buf: &mut [u8], bpb: &Bpb) -> usize {
-        fn is_valid_cluster(c: u64) -> bool {
-            c != 0 && c != END_OF_CLUSTER_CHAIN
-        }
-
-        let mut cluster = self.first_cluster() as u64;
-        let buffer_len = buf.len();
-        let mut p = buf;
-
-        let mut remain_bytes = buffer_len;
-        let bytes_per_cluster = bpb.bytes_per_cluster() as usize;
-        while is_valid_cluster(cluster) {
-            let copy_bytes = cmp::min(bytes_per_cluster, remain_bytes);
-            let sector = bpb.get_sector_by_cluster::<u8>(cluster as u64);
-            p[..copy_bytes].copy_from_slice(&sector[..copy_bytes]);
-
-            remain_bytes -= copy_bytes;
-            p = &mut p[copy_bytes..];
-            cluster = bpb.next_cluster(cluster);
-        }
-
-        p.len()
+        FatFileDescriptor::new(self).read(buf, bpb)
     }
 
     fn set_file_name(&mut self, name: &str) {
@@ -608,7 +588,7 @@ impl FatFileDescriptor {
         total
     }
 
-    pub fn load(&self, buf: &mut [u8], mut offset: usize, bpb: &Bpb) -> usize {
+    pub fn load(&mut self, buf: &mut [u8], mut offset: usize, bpb: &Bpb) -> usize {
         let bytes_per_cluster = bpb.bytes_per_cluster();
         let mut fd = match unsafe { (self.fat_entry as *mut DirectoryEntry).as_mut() } {
             None => return 0,
@@ -625,7 +605,7 @@ impl FatFileDescriptor {
         fd.rd_cluster = cluster;
         fd.rd_cluster_off = offset;
 
-        return fd.read(buf, bpb);
+        fd.read(buf, bpb)
     }
 }
 
