@@ -445,6 +445,7 @@ impl Terminal {
         let elf_next_page = (elf_last_addr + 4095) & 0xffff_ffff_ffff_f000;
         task.dpaging_begin = elf_next_page;
         task.dpaging_end = elf_next_page;
+        task.file_map_end = 0xffff_ffff_ffff_e000;
 
         let entry_addr = elf_header.e_entry;
         let ret = call_app(
@@ -457,6 +458,7 @@ impl Terminal {
         );
 
         task.clear_files();
+        task.clear_file_mappings();
         // retake pointers to free memory
         for c_arg in c_chars_vec {
             let _ = unsafe { CString::from_raw(c_arg as *mut c_char) };
@@ -805,6 +807,14 @@ impl TerminalFileDescriptor {
             }
             Err(_) => 0,
         }
+    }
+
+    pub fn load(&mut self, _buf: &mut [u8], _offset: usize) -> usize {
+        0
+    }
+
+    pub fn size(&self) -> usize {
+        0
     }
 }
 

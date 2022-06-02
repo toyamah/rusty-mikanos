@@ -438,27 +438,7 @@ impl DirectoryEntry {
     }
 
     pub fn load_file(&self, buf: &mut [u8], bpb: &Bpb) -> usize {
-        fn is_valid_cluster(c: u64) -> bool {
-            c != 0 && c != END_OF_CLUSTER_CHAIN
-        }
-
-        let mut cluster = self.first_cluster() as u64;
-        let buffer_len = buf.len();
-        let mut p = buf;
-
-        let mut remain_bytes = buffer_len;
-        let bytes_per_cluster = bpb.bytes_per_cluster() as usize;
-        while is_valid_cluster(cluster) {
-            let copy_bytes = cmp::min(bytes_per_cluster, remain_bytes);
-            let sector = bpb.get_sector_by_cluster::<u8>(cluster as u64);
-            p[..copy_bytes].copy_from_slice(&sector[..copy_bytes]);
-
-            remain_bytes -= copy_bytes;
-            p = &mut p[copy_bytes..];
-            cluster = bpb.next_cluster(cluster);
-        }
-
-        p.len()
+        FatFileDescriptor::new(self).read(buf, bpb)
     }
 
     fn set_file_name(&mut self, name: &str) {
@@ -546,7 +526,8 @@ impl FatFileDescriptor {
                 len - total,
                 bytes_per_cluster as usize - self.rd_cluster_off,
             );
-            buf[..n].copy_from_slice(&sec[self.rd_cluster_off..self.rd_cluster_off + n]);
+            buf[total..total + n]
+                .copy_from_slice(&sec[self.rd_cluster_off..self.rd_cluster_off + n]);
             total += n;
 
             self.rd_cluster_off += n;
@@ -605,6 +586,30 @@ impl FatFileDescriptor {
         self.wr_off += total;
         fat_entry.file_size = self.wr_off as u32;
         total
+    }
+
+    pub fn load(&mut self, buf: &mut [u8], mut offset: usize, bpb: &Bpb) -> usize {
+        let bytes_per_cluster = bpb.bytes_per_cluster();
+        let mut fd = match unsafe { (self.fat_entry as *mut DirectoryEntry).as_mut() } {
+            None => return 0,
+            Some(f) => FatFileDescriptor::new(f),
+        };
+        fd.rd_off = offset;
+
+        let mut cluster = unsafe { (*self.fat_entry).first_cluster() } as u64;
+        while offset as u64 >= bytes_per_cluster {
+            offset -= bytes_per_cluster as usize;
+            cluster = bpb.next_cluster(cluster);
+        }
+
+        fd.rd_cluster = cluster;
+        fd.rd_cluster_off = offset;
+
+        fd.read(buf, bpb)
+    }
+
+    pub fn size(&self) -> usize {
+        (unsafe { (*self.fat_entry).file_size }) as usize
     }
 }
 

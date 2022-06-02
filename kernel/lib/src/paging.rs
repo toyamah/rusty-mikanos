@@ -349,11 +349,14 @@ pub mod global {
     };
     use crate::asm::global::{get_cr3, set_cr3};
     use crate::error::{Code, Error};
+    use crate::io::FileDescriptor;
     use crate::make_error;
     use crate::memory_manager::global::memory_manager;
     use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
     use crate::paging::{LinearAddress4Level, PageMapEntry};
     use crate::task::global::task_manager;
+    use crate::task::FileMapping;
+    use core::slice;
 
     static mut PML4_TABLE: PM4Table = PM4Table([0; 512]);
     static mut PDP_TABLE: PDPTable = PDPTable([0; 512]);
@@ -390,22 +393,43 @@ pub mod global {
             return Err(make_error!(Code::AlreadyAllocated));
         }
 
-        let task = task_manager().current_task();
-        if causal_addr < task.dpaging_begin || task.dpaging_end <= causal_addr {
-            return Err(make_error!(Code::IndexOutOfRange));
-        }
+        let task = task_manager().current_task_mut();
 
-        PageMapEntry::setup_page_maps(
-            LinearAddress4Level::new(causal_addr),
-            1,
-            get_cr3(),
-            memory_manager(),
-        )
+        if task.dpaging_begin <= causal_addr && causal_addr < task.dpaging_end {
+            PageMapEntry::setup_page_maps(
+                LinearAddress4Level::new(causal_addr),
+                1,
+                get_cr3(),
+                memory_manager(),
+            )
+        } else if let Some(fm) = task.find_file_mapping(causal_addr) {
+            let fm = fm.clone();
+            let fd = task.get_file_mut(fm.fd).unwrap();
+            prepare_page_cache(fd, fm, causal_addr)
+        } else {
+            Err(make_error!(Code::IndexOutOfRange))
+        }
     }
 
     pub fn free_page_map(table: *mut PageMapEntry) -> Result<(), Error> {
         let addr = table as *const _ as usize;
         let frame_id = FrameID::new(addr as usize / BYTES_PER_FRAME);
         memory_manager().free(frame_id, 1)
+    }
+
+    pub(crate) fn prepare_page_cache(
+        fd: &mut FileDescriptor,
+        fm: FileMapping,
+        causal_vaddr: u64,
+    ) -> Result<(), Error> {
+        let mut page_vaddr = LinearAddress4Level::new(causal_vaddr);
+        page_vaddr.set_offset(0);
+        PageMapEntry::setup_page_maps(page_vaddr, 1, get_cr3(), memory_manager())?;
+
+        let file_offset = page_vaddr.value() - fm.vaddr_begin;
+        let page_cache =
+            unsafe { slice::from_raw_parts_mut(page_vaddr.value() as *mut u64 as *mut u8, 4096) };
+        fd.load(page_cache, file_offset as usize);
+        Ok(())
     }
 }

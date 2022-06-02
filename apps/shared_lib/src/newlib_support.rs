@@ -57,8 +57,6 @@ pub extern "C" fn read(fd: i32, buf: *const c_void, count: usize) -> i32 {
     }
 }
 
-static mut HEAP: [u8; 4096] = [0; 4096];
-static mut I: i32 = 0;
 static mut DPAGE_END: i64 = 0;
 static mut PROGRAM_BREAK: i64 = 0;
 
