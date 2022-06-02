@@ -38,6 +38,23 @@ pub mod global {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct FileMapping {
+    pub(crate) fd: usize,
+    pub(crate) vaddr_begin: u64,
+    vaddr_end: u64,
+}
+
+impl FileMapping {
+    pub(crate) fn new(fd: usize, vaddr_begin: u64, vaddr_end: u64) -> Self {
+        Self {
+            fd,
+            vaddr_begin,
+            vaddr_end,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct TaskID(u64);
 
@@ -76,6 +93,8 @@ pub struct Task {
     files: Vec<Option<FileDescriptor>>,
     pub(crate) dpaging_begin: u64,
     pub(crate) dpaging_end: u64,
+    pub(crate) file_map_end: u64,
+    file_maps: Vec<FileMapping>,
 }
 
 impl Task {
@@ -92,6 +111,8 @@ impl Task {
             files: vec![],
             dpaging_begin: 0,
             dpaging_end: 0,
+            file_map_end: 0,
+            file_maps: vec![],
         }
     }
 
@@ -176,6 +197,20 @@ impl Task {
     /// needs to call `wake_up` after this method is invoked
     fn send_message(&mut self, message: Message) {
         self.messages.push_back(message)
+    }
+
+    pub(crate) fn find_file_mapping(&self, causal_vaddr: u64) -> Option<&FileMapping> {
+        self.file_maps
+            .iter()
+            .find(|&m| m.vaddr_begin <= causal_vaddr && causal_vaddr < m.vaddr_end)
+    }
+
+    pub(crate) fn add_file_mapping(&mut self, fm: FileMapping) {
+        self.file_maps.push(fm);
+    }
+
+    pub fn clear_file_mappings(&mut self) {
+        self.file_maps.clear();
     }
 
     pub fn receive_message(&mut self) -> Option<Message> {
