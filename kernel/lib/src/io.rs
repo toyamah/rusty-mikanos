@@ -30,4 +30,11 @@ impl FileDescriptor {
             FileDescriptor::Terminal(fd) => fd.load(buf, offset),
         }
     }
+
+    pub(crate) fn size(&self) -> usize {
+        match self {
+            FileDescriptor::Fat(fd) => fd.size(),
+            FileDescriptor::Terminal(fd) => fd.size(),
+        }
+    }
 }

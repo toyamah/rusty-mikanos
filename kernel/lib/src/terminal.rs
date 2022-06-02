@@ -812,6 +812,10 @@ impl TerminalFileDescriptor {
     pub fn load(&mut self, _buf: &mut [u8], _offset: usize) -> usize {
         0
     }
+
+    pub fn size(&self) -> usize {
+        0
+    }
 }
 
 fn draw_terminal<W: PixelWriter>(w: &mut W, pos: Vector2D<i32>, size: Vector2D<i32>) {

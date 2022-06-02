@@ -607,6 +607,10 @@ impl FatFileDescriptor {
 
         fd.read(buf, bpb)
     }
+
+    pub fn size(&self) -> usize {
+        (unsafe { (*self.fat_entry).file_size }) as usize
+    }
 }
 
 fn next_path_element(path: &str) -> Option<PathElements> {

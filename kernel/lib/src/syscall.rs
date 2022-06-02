@@ -15,6 +15,7 @@ use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
+use crate::task::FileMapping;
 use crate::timer::global::timer_manager;
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::Window;
@@ -463,6 +464,27 @@ fn demand_page(num_pages: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
     SyscallResult::ok(dp_end)
 }
 
+fn map_file(fd: u64, file_size: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
+    let fd = fd as usize;
+    let file_size = unsafe { (file_size as *mut usize).as_mut() }.unwrap();
+
+    unsafe { asm!("cli") };
+    let task = task_manager().current_task_mut();
+    unsafe { asm!("sti") };
+
+    let task_file_size = match task.get_file_mut(fd) {
+        None => return SyscallResult::err(0, EBADF),
+        Some(fd) => fd.size(),
+    };
+    *file_size = task_file_size;
+
+    let vaddr_end = task.file_map_end;
+    let vaddr_begin = (vaddr_end - (*file_size) as u64) & 0xffff_ffff_ffff_f000;
+    task.file_map_end = vaddr_begin;
+    task.add_file_mapping(FileMapping::new(fd, vaddr_begin, vaddr_end));
+    SyscallResult::ok(vaddr_begin)
+}
+
 fn create_file(path: &str) -> Result<&DirectoryEntry, i32> {
     crate::fat::global::create_file(path).map_err(|e| match e.code {
         Code::IsDirectory => EISDIR,
@@ -473,7 +495,7 @@ fn create_file(path: &str) -> Result<&DirectoryEntry, i32> {
 }
 
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 15] = [
+static mut syscall_table: [SyscallFuncType; 16] = [
     log_string,
     put_string,
     exit,
@@ -489,6 +511,7 @@ static mut syscall_table: [SyscallFuncType; 15] = [
     open_file,
     read_file,
     demand_page,
+    map_file,
 ];
 
 pub fn initialize_syscall() {
