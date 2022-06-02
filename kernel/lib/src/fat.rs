@@ -546,7 +546,8 @@ impl FatFileDescriptor {
                 len - total,
                 bytes_per_cluster as usize - self.rd_cluster_off,
             );
-            buf[..n].copy_from_slice(&sec[self.rd_cluster_off..self.rd_cluster_off + n]);
+            buf[total..total + n]
+                .copy_from_slice(&sec[self.rd_cluster_off..self.rd_cluster_off + n]);
             total += n;
 
             self.rd_cluster_off += n;
