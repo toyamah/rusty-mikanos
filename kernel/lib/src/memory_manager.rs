@@ -83,6 +83,28 @@ impl FrameID {
     }
 }
 
+pub struct MemoryStat {
+    pub allocated_frames: usize,
+    pub total_frames: usize,
+}
+
+impl MemoryStat {
+    fn new(allocated_frames: usize, total_frames: usize) -> Self {
+        Self {
+            allocated_frames,
+            total_frames,
+        }
+    }
+
+    pub fn calc_allocated_size_in_mb(&self) -> usize {
+        self.allocated_frames * BYTES_PER_FRAME / 1024 / 1024
+    }
+
+    pub fn calc_total_size_in_mb(&self) -> usize {
+        self.total_frames * BYTES_PER_FRAME / 1024 / 1024
+    }
+}
+
 //
 // BitmapMemoryManager
 //
@@ -146,6 +168,13 @@ impl BitmapMemoryManager {
     pub fn set_memory_range(&mut self, range_begin: FrameID, range_end: FrameID) {
         self.range_begin = range_begin;
         self.range_end = range_end;
+    }
+
+    pub fn stat(&self) -> MemoryStat {
+        let start = self.range_begin.id() / BITS_PER_MAP_LINE;
+        let end = self.range_end.id() / BITS_PER_MAP_LINE;
+        let sum = (start..end).fold(0, |acc, i| acc + self.alloc_map[i].count_ones() as usize);
+        MemoryStat::new(sum, self.range_end.id() - self.range_begin.id())
     }
 
     fn get_bit(&self, frame: FrameID) -> bool {

@@ -386,6 +386,7 @@ impl Terminal {
                     task_manager().wake_up(task_id).unwrap();
                 }
             }
+            "memstat" => self.execute_memstat(),
             _ => {
                 let root_cluster = boot_volume_image().get_root_cluster();
                 if let (Some(file_entry), post_slash) = find_file(command, root_cluster as u64) {
@@ -646,6 +647,19 @@ impl Terminal {
             cluster = bpb.next_cluster(cluster);
         }
         self.draw_cursor(true);
+    }
+
+    fn execute_memstat(&mut self) {
+        let p_stat = memory_manager().stat();
+        writeln!(
+            self,
+            "Phys used : {} frames ({} MiB)\nPhys total: {} frames ({} MiB)",
+            p_stat.allocated_frames,
+            p_stat.calc_allocated_size_in_mb(),
+            p_stat.total_frames,
+            p_stat.calc_total_size_in_mb(),
+        )
+        .unwrap()
     }
 
     fn list_all_entries(&mut self, dir_cluster: u32) {
