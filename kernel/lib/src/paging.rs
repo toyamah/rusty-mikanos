@@ -47,11 +47,13 @@ impl PageMapEntry {
     }
 
     // uint64_t writable : 1;
-    pub fn writable(&self) -> u64 {
-        self.0.get_bits(1..2) as u64
+    pub fn writable(&self) -> bool {
+        let v = self.0.get_bits(1..2) as u64;
+        1 == v
     }
-    pub fn set_writable(&mut self, v: u64) {
-        self.0.set_bits(1..2, v);
+    pub fn set_writable(&mut self, writable: bool) {
+        let value = if writable { 1 } else { 0 };
+        self.0.set_bits(1..2, value);
     }
 
     // uint64_t user : 1;
@@ -121,11 +123,13 @@ impl PageMapEntry {
     pub fn setup_page_maps(
         addr: LinearAddress4Level,
         num4_kpages: usize,
+        writable: bool,
         cr_3: u64,
         memory_manager: &mut BitmapMemoryManager,
     ) -> Result<(), Error> {
         let pml4_table = cr_3 as *mut u64 as *mut PageMapEntry;
-        let (_, error) = Self::setup_page_map(pml4_table, 4, addr, num4_kpages, memory_manager);
+        let (_, error) =
+            Self::setup_page_map(pml4_table, 4, writable, addr, num4_kpages, memory_manager);
         match error {
             None => Ok(()),
             Some(e) => Err(e),
@@ -135,6 +139,7 @@ impl PageMapEntry {
     fn setup_page_map(
         page_map: *mut PageMapEntry,
         page_map_level: i32,
+        writable: bool,
         mut addr: LinearAddress4Level,
         mut num_4kpages: usize,
         memory_manager: &mut BitmapMemoryManager,
@@ -150,15 +155,17 @@ impl PageMapEntry {
             }
 
             let child_map = child_map_result.unwrap();
-            page_map_ref.set_writable(1);
             page_map_ref.set_user(1);
 
             if page_map_level == 1 {
+                page_map_ref.set_writable(writable);
                 num_4kpages -= 1;
             } else {
+                page_map_ref.set_writable(true);
                 let (num_remain_pages, error) = Self::setup_page_map(
                     child_map,
                     page_map_level - 1,
+                    writable,
                     addr,
                     num_4kpages,
                     memory_manager,
@@ -253,10 +260,11 @@ impl PageMapEntry {
                 Self::clean_page_map(entry.pointer(), page_map_level - 1, memory_manager)?;
             }
 
-            let entry_addr = entry.pointer() as usize;
-            let map_frame = FrameID::new(entry_addr / BYTES_PER_FRAME);
-            memory_manager.free(map_frame, 1)?;
-
+            if entry.writable() {
+                let entry_addr = entry.pointer() as usize;
+                let map_frame = FrameID::new(entry_addr / BYTES_PER_FRAME);
+                memory_manager.free(map_frame, 1)?;
+            }
             entry.reset();
         }
 
@@ -347,7 +355,7 @@ pub mod global {
     use super::{
         PDPTable, PM4Table, PageDirectory, PAGE_DIRECTORY_COUNT, PAGE_SIZE_1G, PAGE_SIZE_2M,
     };
-    use crate::asm::global::{get_cr3, set_cr3};
+    use crate::asm::global::{get_cr0, get_cr3, set_cr0, set_cr3};
     use crate::error::{Code, Error};
     use crate::io::FileDescriptor;
     use crate::make_error;
@@ -381,6 +389,7 @@ pub mod global {
 
             // set the address of PM4_TABLE to the cr3 register
             set_cr3(&PML4_TABLE.0[0] as *const _ as u64);
+            set_cr0(get_cr0() & 0xfffeffff);
         }
     }
 
@@ -389,16 +398,22 @@ pub mod global {
     }
 
     pub(crate) fn handle_page_fault(error_code: u64, causal_addr: u64) -> Result<(), Error> {
-        if error_code & 1 == 1 {
+        let task = task_manager().current_task_mut();
+        let present = ((error_code >> 0) & 1) == 1;
+        let rw = ((error_code >> 1) & 1) == 1;
+        let user = ((error_code >> 2) & 1) == 1;
+
+        if present && rw && user {
+            todo!("call copy_on_page")
+        } else if present {
             return Err(make_error!(Code::AlreadyAllocated));
         }
-
-        let task = task_manager().current_task_mut();
 
         if task.dpaging_begin <= causal_addr && causal_addr < task.dpaging_end {
             PageMapEntry::setup_page_maps(
                 LinearAddress4Level::new(causal_addr),
                 1,
+                true,
                 get_cr3(),
                 memory_manager(),
             )
@@ -424,7 +439,7 @@ pub mod global {
     ) -> Result<(), Error> {
         let mut page_vaddr = LinearAddress4Level::new(causal_vaddr);
         page_vaddr.set_offset(0);
-        PageMapEntry::setup_page_maps(page_vaddr, 1, get_cr3(), memory_manager())?;
+        PageMapEntry::setup_page_maps(page_vaddr, 1, true, get_cr3(), memory_manager())?;
 
         let file_offset = page_vaddr.value() - fm.vaddr_begin;
         let page_cache =
