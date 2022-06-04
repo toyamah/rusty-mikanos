@@ -1,3 +1,4 @@
+use crate::asm::global::invalidate_tlb;
 use crate::error::Error;
 use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use bit_field::BitField;
@@ -351,6 +352,26 @@ impl LinearAddress4Level {
     }
 }
 
+fn set_page_content(
+    table: *mut PageMapEntry,
+    part: i32,
+    addr: LinearAddress4Level,
+    content: *const PageMapEntry,
+) {
+    if part == 1 {
+        let i = addr.part(part) as usize;
+        let entry = unsafe { table.add(i).as_mut() }.unwrap();
+        entry.set_pointer(content);
+        entry.set_writable(true);
+        invalidate_tlb(addr.value());
+        return;
+    }
+
+    let i = addr.part(part) as usize;
+    let entry = unsafe { table.add(i).as_mut() }.unwrap();
+    set_page_content(entry.pointer(), part - 1, addr, content)
+}
+
 pub mod global {
     use super::{
         PDPTable, PM4Table, PageDirectory, PAGE_DIRECTORY_COUNT, PAGE_SIZE_1G, PAGE_SIZE_2M,
@@ -358,12 +379,14 @@ pub mod global {
     use crate::asm::global::{get_cr0, get_cr3, set_cr0, set_cr3};
     use crate::error::{Code, Error};
     use crate::io::FileDescriptor;
+    use crate::libc::memcpy;
     use crate::make_error;
     use crate::memory_manager::global::memory_manager;
     use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
-    use crate::paging::{LinearAddress4Level, PageMapEntry};
+    use crate::paging::{set_page_content, LinearAddress4Level, PageMapEntry};
     use crate::task::global::task_manager;
     use crate::task::FileMapping;
+    use core::ffi::c_void;
     use core::slice;
 
     static mut PML4_TABLE: PM4Table = PM4Table([0; 512]);
@@ -404,7 +427,7 @@ pub mod global {
         let user = ((error_code >> 2) & 1) == 1;
 
         if present && rw && user {
-            todo!("call copy_on_page")
+            return copy_on_page(causal_addr);
         } else if present {
             return Err(make_error!(Code::AlreadyAllocated));
         }
@@ -445,6 +468,19 @@ pub mod global {
         let page_cache =
             unsafe { slice::from_raw_parts_mut(page_vaddr.value() as *mut u64 as *mut u8, 4096) };
         fd.load(page_cache, file_offset as usize);
+        Ok(())
+    }
+
+    fn copy_on_page(causal_addr: u64) -> Result<(), Error> {
+        let p = PageMapEntry::new_page_map(memory_manager())?;
+        let aligned_addr = causal_addr & 0xffff_ffff_ffff_f000;
+        unsafe { memcpy(p as *mut c_void, aligned_addr as *const c_void, 4096) };
+        set_page_content(
+            get_cr3() as *mut u64 as *mut PageMapEntry,
+            4,
+            LinearAddress4Level::new(causal_addr),
+            p,
+        );
         Ok(())
     }
 }

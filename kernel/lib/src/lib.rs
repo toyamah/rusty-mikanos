@@ -22,6 +22,7 @@ pub mod interrupt;
 mod io;
 pub mod keyboard;
 pub mod layer;
+mod libc;
 pub mod memory_manager;
 pub mod memory_map;
 pub mod message;
