@@ -14,14 +14,16 @@ use crate::layer::global::layer_manager;
 use crate::layer::{LayerID, LayerManager};
 use crate::memory_manager::global::memory_manager;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
-use crate::paging::global::{free_page_map, reset_cr3};
+use crate::paging::global::{copy_page_maps, free_page_map, reset_cr3};
 use crate::paging::{LinearAddress4Level, PageMapEntry};
 use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::task::global::task_manager;
 use crate::task::{Task, TaskID};
-use crate::terminal::global::{get_terminal_mut_by, task_terminal};
+use crate::terminal::global::{
+    get_app_load_mut, get_app_load_ref, get_terminal_mut_by, insert_app_load, task_terminal,
+};
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{make_error, Window};
 use alloc::collections::VecDeque;
@@ -37,6 +39,7 @@ use core::{cmp, fmt, mem};
 use shared::PixelFormat;
 
 pub mod global {
+    use crate::fat::DirectoryEntry;
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
     use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
@@ -46,7 +49,7 @@ pub mod global {
     use crate::rust_official::cchar::c_char;
     use crate::task::global::task_manager;
     use crate::task::TaskID;
-    use crate::terminal::Terminal;
+    use crate::terminal::{AppLoadInfo, Terminal};
     use crate::timer::global::timer_manager;
     use crate::timer::{Timer, TIMER_FREQ};
     use crate::Window;
@@ -55,9 +58,25 @@ pub mod global {
     use core::arch::asm;
 
     static mut TERMINALS: BTreeMap<TaskID, Terminal> = BTreeMap::new();
-
     pub(crate) fn get_terminal_mut_by(task_id: TaskID) -> Option<&'static mut Terminal> {
         unsafe { TERMINALS.get_mut(&task_id) }
+    }
+
+    static mut APP_LOADS: BTreeMap<usize, AppLoadInfo> = BTreeMap::new();
+    // fn app_loads() -> &'static mut BTreeMap<usize, AppLoadInfo> {
+    //     unsafe { &mut APP_LOADS }
+    // }
+
+    pub(super) fn get_app_load_ref(e: &DirectoryEntry) -> Option<&'static AppLoadInfo> {
+        unsafe { APP_LOADS.get(&(e as *const _ as usize)) }
+    }
+
+    pub(super) fn get_app_load_mut(e: &DirectoryEntry) -> Option<&'static mut AppLoadInfo> {
+        unsafe { APP_LOADS.get_mut(&(e as *const _ as usize)) }
+    }
+
+    pub(super) fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {
+        unsafe { APP_LOADS.insert(e as *const _ as usize, app_load) };
     }
 
     pub fn task_terminal(task_id: u64, command: usize) {
@@ -178,6 +197,22 @@ pub mod global {
             .get_layer_mut(terminal_layer_id)
             .expect("couldn't find terminal window")
             .get_window_mut()
+    }
+}
+
+struct AppLoadInfo {
+    vaddr_end: u64,
+    entry: u64,
+    pml4: *const PageMapEntry,
+}
+
+impl AppLoadInfo {
+    fn new(vaddr_end: u64, entry: u64, pml4: *const PageMapEntry) -> Self {
+        Self {
+            vaddr_end,
+            entry,
+            pml4,
+        }
     }
 }
 
@@ -405,23 +440,15 @@ impl Terminal {
     }
 
     fn execute_file(&mut self, file_entry: &DirectoryEntry, args: &[&str]) -> Result<(), Error> {
-        let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
-        file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image());
-
-        let elf_header = unsafe { Elf64Ehdr::from_mut(&mut file_buf) }.unwrap();
-        if !elf_header.is_elf() {
-            return Err(make_error!(Code::InvalidFile));
-        }
-
         unsafe { asm!("cli") };
         let task = task_manager().current_task_mut();
         unsafe { asm!("sti") };
-        setup_pml4(task)?;
 
-        let elf_last_addr = elf_header.load_elf(get_cr3(), memory_manager())?;
+        self.load_app(file_entry, task)?;
+        let app_load = get_app_load_ref(file_entry).unwrap();
 
         let args_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000);
-        PageMapEntry::setup_page_maps(args_frame_addr, 1, get_cr3(), memory_manager())?;
+        PageMapEntry::setup_page_maps(args_frame_addr, 1, true, get_cr3(), memory_manager())?;
         let argv = args_frame_addr.value() as *mut u64 as *mut *mut c_char;
         let argv_len = 32; // argv = 8x32 = 256 bytes
         let p_p_cchar_size = mem::size_of::<*const *const c_char>();
@@ -433,7 +460,7 @@ impl Terminal {
         let argc = make_argv(&c_chars_vec, argv, argv_len, argbuf, argbuf_len)?;
 
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_e000);
-        PageMapEntry::setup_page_maps(stack_frame_addr, 1, get_cr3(), memory_manager())?;
+        PageMapEntry::setup_page_maps(stack_frame_addr, 1, true, get_cr3(), memory_manager())?;
 
         // register standard in/out and error file descriptors
         for _ in 0..3 {
@@ -443,17 +470,16 @@ impl Terminal {
             )));
         }
 
-        let elf_next_page = (elf_last_addr + 4095) & 0xffff_ffff_ffff_f000;
+        let elf_next_page = (app_load.vaddr_end + 4095) & 0xffff_ffff_ffff_f000;
         task.dpaging_begin = elf_next_page;
         task.dpaging_end = elf_next_page;
         task.file_map_end = 0xffff_ffff_ffff_e000;
 
-        let entry_addr = elf_header.e_entry;
         let ret = call_app(
             argc as i32,
             argv as *const *const c_char,
             3 << 3 | 3,
-            entry_addr as u64,
+            app_load.entry,
             stack_frame_addr.value() + 4096 - 8,
             task.os_stack_pointer() as *const _,
         );
@@ -468,14 +494,40 @@ impl Terminal {
         self.write_fmt(format_args!("app exited. ret = {}\n", ret))
             .unwrap();
 
-        let addr_first = unsafe { elf_header.get_first_load_address() };
         PageMapEntry::clean_page_maps(
-            LinearAddress4Level::new(addr_first as u64),
+            LinearAddress4Level::new(0xffff_8000_0000_0000),
             get_cr3(),
             memory_manager(),
-        )
-        .unwrap();
+        )?;
         free_pml4(task_manager().get_task_mut(task.id()).unwrap())
+    }
+
+    fn load_app(&mut self, file_entry: &DirectoryEntry, task: &mut Task) -> Result<(), Error> {
+        let temp_pml4 = setup_pml4(task)?;
+        if let Some(app_load) = get_app_load_mut(file_entry) {
+            copy_page_maps(temp_pml4, app_load.pml4, 4, 256)?;
+            app_load.pml4 = temp_pml4;
+            return Ok(());
+        }
+
+        let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
+        file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image());
+
+        let elf_header = unsafe { Elf64Ehdr::from_mut(&mut file_buf) }.unwrap();
+        if !elf_header.is_elf() {
+            return Err(make_error!(Code::InvalidFile));
+        }
+
+        let elf_last_addr = elf_header.load_elf(get_cr3(), memory_manager())?;
+        insert_app_load(
+            file_entry,
+            AppLoadInfo::new(elf_last_addr, elf_header.e_entry as u64, temp_pml4),
+        );
+
+        let app_load = get_app_load_mut(file_entry).unwrap();
+        app_load.pml4 = setup_pml4(task)?;
+        copy_page_maps(app_load.pml4 as *mut _, temp_pml4, 4, 256)?;
+        Ok(())
     }
 
     pub(crate) fn print(&mut self, s: &str) {

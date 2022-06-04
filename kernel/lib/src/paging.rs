@@ -387,7 +387,7 @@ pub mod global {
     use crate::task::global::task_manager;
     use crate::task::FileMapping;
     use core::ffi::c_void;
-    use core::slice;
+    use core::{mem, ptr, slice};
 
     static mut PML4_TABLE: PM4Table = PM4Table([0; 512]);
     static mut PDP_TABLE: PDPTable = PDPTable([0; 512]);
@@ -481,6 +481,50 @@ pub mod global {
             LinearAddress4Level::new(causal_addr),
             p,
         );
+        Ok(())
+    }
+
+    pub(crate) fn copy_page_maps(
+        dest: *mut PageMapEntry,
+        src: *const PageMapEntry,
+        part: i32,
+        start: i32,
+    ) -> Result<(), Error> {
+        let dest_at = |i: usize| unsafe { dest.add(i).as_mut() }.unwrap();
+        let src_at = |i: usize| unsafe { src.add(i).as_ref() }.unwrap();
+
+        if part == 1 {
+            for i in start as usize..512 {
+                if src_at(i).present() == 0 {
+                    continue;
+                }
+
+                unsafe {
+                    ptr::copy_nonoverlapping(
+                        src.add(i),
+                        dest.add(i),
+                        mem::size_of::<PageMapEntry>(),
+                    );
+                }
+                dest_at(i).set_writable(false);
+            }
+            return Ok(());
+        }
+
+        for i in start as usize..512 {
+            let s = src_at(i);
+            if s.present() == 0 {
+                continue;
+            }
+
+            let table = PageMapEntry::new_page_map(memory_manager())?;
+            unsafe {
+                ptr::copy_nonoverlapping(src.add(i), dest.add(i), mem::size_of::<PageMapEntry>());
+            }
+            dest_at(i).set_writable(false);
+            copy_page_maps(table, s.pointer(), part - 1, 0)?;
+        }
+
         Ok(())
     }
 }

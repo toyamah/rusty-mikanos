@@ -13,7 +13,7 @@ pub mod global {
         fn SetDSAll(value: u16);
         fn SetCSSS(cs: u16, ss: u16);
         fn GetCR0() -> u64;
-        fn SetCR0(value: u64) -> u64;
+        fn SetCR0(value: u64);
         fn GetCR2() -> u64;
         fn SetCR3(value: u64);
         fn GetCR3() -> u64;
@@ -67,11 +67,11 @@ pub mod global {
     }
 
     pub fn get_cr0() -> u64 {
-        unsafe { GetCR3() }
+        unsafe { GetCR0() }
     }
 
     pub fn set_cr0(value: u64) {
-        unsafe { SetCR3(value) }
+        unsafe { SetCR0(value) }
     }
 
     pub fn get_cr2() -> u64 {
