@@ -105,7 +105,7 @@ impl Elf64Ehdr {
             let dest_addr = LinearAddress4Level::new(p.p_vaddr as u64);
             last_addr = cmp::max(last_addr, p.p_vaddr as u64 + p.p_memsz);
             let num_4kpages: usize = ((p.p_memsz + 4095) / 4096) as usize;
-            PageMapEntry::setup_page_maps(dest_addr, num_4kpages, cr_3, memory_manager)?;
+            PageMapEntry::setup_page_maps(dest_addr, num_4kpages, false, cr_3, memory_manager)?;
 
             let src = unsafe { (self as *mut _ as *mut u8).offset(p.p_offset as isize) };
             let dst = p.p_vaddr as *mut Elf64Addr as *mut u8;
