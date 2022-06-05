@@ -387,7 +387,7 @@ pub mod global {
     use crate::task::global::task_manager;
     use crate::task::FileMapping;
     use core::ffi::c_void;
-    use core::{mem, ptr, slice};
+    use core::slice;
 
     static mut PML4_TABLE: PM4Table = PM4Table([0; 512]);
     static mut PDP_TABLE: PDPTable = PDPTable([0; 512]);
@@ -422,7 +422,7 @@ pub mod global {
 
     pub(crate) fn handle_page_fault(error_code: u64, causal_addr: u64) -> Result<(), Error> {
         let task = task_manager().current_task_mut();
-        let present = ((error_code >> 0) & 1) == 1;
+        let present = (error_code & 1) == 1;
         let rw = ((error_code >> 1) & 1) == 1;
         let user = ((error_code >> 2) & 1) == 1;
 
@@ -499,14 +499,9 @@ pub mod global {
                     continue;
                 }
 
-                unsafe {
-                    ptr::copy_nonoverlapping(
-                        src.add(i),
-                        dest.add(i),
-                        mem::size_of::<PageMapEntry>(),
-                    );
-                }
-                dest_at(i).set_writable(false);
+                let d = dest_at(i);
+                d.0 = src_at(i).0;
+                d.set_writable(false);
             }
             return Ok(());
         }
@@ -517,11 +512,11 @@ pub mod global {
                 continue;
             }
 
+            let d = dest_at(i);
+            d.0 = s.0;
+            d.set_writable(false);
+
             let table = PageMapEntry::new_page_map(memory_manager())?;
-            unsafe {
-                ptr::copy_nonoverlapping(src.add(i), dest.add(i), mem::size_of::<PageMapEntry>());
-            }
-            dest_at(i).set_writable(false);
             copy_page_maps(table, s.pointer(), part - 1, 0)?;
         }
 
