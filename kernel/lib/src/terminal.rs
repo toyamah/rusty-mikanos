@@ -63,18 +63,12 @@ pub mod global {
     }
 
     static mut APP_LOADS: BTreeMap<usize, AppLoadInfo> = BTreeMap::new();
-    // fn app_loads() -> &'static mut BTreeMap<usize, AppLoadInfo> {
-    //     unsafe { &mut APP_LOADS }
-    // }
-
     pub(super) fn get_app_load_ref(e: &DirectoryEntry) -> Option<&'static AppLoadInfo> {
         unsafe { APP_LOADS.get(&(e as *const _ as usize)) }
     }
-
     pub(super) fn get_app_load_mut(e: &DirectoryEntry) -> Option<&'static mut AppLoadInfo> {
         unsafe { APP_LOADS.get_mut(&(e as *const _ as usize)) }
     }
-
     pub(super) fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {
         unsafe { APP_LOADS.insert(e as *const _ as usize, app_load) };
     }
