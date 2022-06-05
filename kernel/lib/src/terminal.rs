@@ -1,9 +1,9 @@
 use crate::asm::global::{call_app, get_cr3, set_cr3};
 use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
-use crate::fat::global::{boot_volume_image, bytes_per_cluster, find_file};
-use crate::fat::{Attribute, DirectoryEntry, END_OF_CLUSTER_CHAIN};
-use crate::font::{write_ascii, write_string};
+use crate::fat::global::{boot_volume_image, find_file};
+use crate::fat::{Attribute, DirectoryEntry, FatFileDescriptor, END_OF_CLUSTER_CHAIN};
+use crate::font::{convert_utf8_to_u32, count_utf8_size, write_ascii, write_string, write_unicode};
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
     COLOR_BLACK, COLOR_WHITE,
@@ -33,7 +33,7 @@ use core::ffi::c_void;
 use core::fmt::Write;
 use core::ops::Deref;
 use core::str::Utf8Error;
-use core::{cmp, fmt, mem};
+use core::{fmt, mem};
 use shared::PixelFormat;
 
 pub mod global {
@@ -510,24 +510,43 @@ impl Terminal {
     }
 
     fn print_char(&mut self, c: char) {
+        let window = match self.window_mut() {
+            None => return,
+            Some(w) => w,
+        };
+
         if c == '\n' {
             self.new_line();
-        } else {
-            let pos = self.calc_cursor_pos();
-            if let Some(window) = self.window_mut() {
-                write_ascii(
-                    &mut window.normal_window_writer(),
-                    pos.x,
-                    pos.y,
-                    c,
-                    &COLOR_WHITE,
-                );
-            }
-            if self.cursor.x == COLUMNS as i32 - 1 {
+            return;
+        }
+
+        let columns = COLUMNS as i32;
+        if c.is_ascii() {
+            if self.cursor.x == columns {
                 self.new_line();
-            } else {
-                self.cursor.x += 1;
             }
+            let pos = self.calc_cursor_pos();
+            write_unicode(
+                &mut window.normal_window_writer(),
+                pos.x,
+                pos.y,
+                c,
+                &COLOR_WHITE,
+            );
+            self.cursor.x += 1;
+        } else {
+            if self.cursor.x == columns - 1 {
+                self.new_line();
+            }
+            let pos = self.calc_cursor_pos();
+            write_unicode(
+                &mut window.normal_window_writer(),
+                pos.x,
+                pos.y,
+                c,
+                &COLOR_WHITE,
+            );
+            self.cursor.x += 2;
         }
     }
 
@@ -630,21 +649,20 @@ impl Terminal {
             return;
         }
 
-        let mut cluster = file_entry.first_cluster() as u64;
-        let mut remain_bytes = file_entry.file_size() as u64;
+        let mut fd = FatFileDescriptor::new(file_entry);
+        let mut u8buf = [0; 4];
         self.draw_cursor(false);
         loop {
-            if cluster == 0 || cluster == END_OF_CLUSTER_CHAIN {
+            if fd.read(&mut u8buf[0..1], bpb) != 1 {
                 break;
             }
-            let size = cmp::min(bytes_per_cluster(), remain_bytes) as usize;
-            let p = bpb.get_sector_by_cluster::<u8>(cluster as u64);
-            let p = &p[..size];
-            for &c in p {
-                self.write_char(c as char).unwrap();
+
+            let u8_remain = count_utf8_size(u8buf[0]) - 1;
+            if u8_remain > 0 && fd.read(&mut u8buf[1..1 + u8_remain], bpb) != u8_remain {
+                break;
             }
-            remain_bytes -= p.len() as u64;
-            cluster = bpb.next_cluster(cluster);
+            let char = char::from_u32(convert_utf8_to_u32(&u8buf)).unwrap_or('□');
+            self.print_char(char);
         }
         self.draw_cursor(true);
     }

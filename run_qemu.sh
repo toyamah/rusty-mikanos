@@ -43,27 +43,25 @@ build_and_run() {
   make -C apps/onlyhlt/ onlyhlt
 
   export APPS_DIR=apps
+  export RESOURCE_DIR=resource
   MIKANOS_DIR=$PWD $HOME/osbook/devenv/run_mikanos.sh
 }
 
 build_and_run_official() {
   official_dir="$script_dir"/official
 
-#  export RUSTFLAGS="-C link-arg=$LDFLAGS"
-#  for cargo_manifest in $(ls apps/*/Cargo.toml)
-#  do
-#    app_dir=$(dirname $cargo_manifest)
-#    if [ $app_dir == "apps/shared_lib" ]; then
-#      continue
-#    fi
-#    app=$(basename $app_dir)
-#    cd "${script_dir}/${app_dir}"
-#    cargo build --release
-#    cp ${app} $official_dir/apps/${app}/
-#  done
+  export RUSTFLAGS="-C link-arg=$LDFLAGS"
+  if [ ${#apps[@]} -gt 0 ]; then
+    for app in ${apps[@]}; do
+      cd "${script_dir}/apps/${app}"
+      cargo build --release
+      cp ${app} $official_dir/apps/${app}/
+    done
+  fi
 
   cd "$official_dir"
   export APPS_DIR=apps
+  export RESOURCE_DIR=resource
   ./build.sh run
 }
 
