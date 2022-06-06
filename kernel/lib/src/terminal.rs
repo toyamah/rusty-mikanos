@@ -453,8 +453,15 @@ impl Terminal {
         let c_chars_vec = new_c_chars_vec(args);
         let argc = make_argv(&c_chars_vec, argv, argv_len, argbuf, argbuf_len)?;
 
-        let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_e000);
-        PageMapEntry::setup_page_maps(stack_frame_addr, 1, true, get_cr3(), memory_manager())?;
+        let stack_size = Task::DEFAULT_STACK_BYTES;
+        let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000 - stack_size as u64);
+        PageMapEntry::setup_page_maps(
+            stack_frame_addr,
+            stack_size / 4096,
+            true,
+            get_cr3(),
+            memory_manager(),
+        )?;
 
         // register standard in/out and error file descriptors
         for _ in 0..3 {
@@ -467,14 +474,14 @@ impl Terminal {
         let elf_next_page = (app_load.vaddr_end + 4095) & 0xffff_ffff_ffff_f000;
         task.dpaging_begin = elf_next_page;
         task.dpaging_end = elf_next_page;
-        task.file_map_end = 0xffff_ffff_ffff_e000;
+        task.file_map_end = stack_frame_addr.value();
 
         let ret = call_app(
             argc as i32,
             argv as *const *const c_char,
             3 << 3 | 3,
             app_load.entry,
-            stack_frame_addr.value() + 4096 - 8,
+            stack_frame_addr.value() + stack_size as u64 - 8,
             task.os_stack_pointer() as *const _,
         );
 
