@@ -12,6 +12,8 @@ pub mod global {
         fn LoadTR(sel: u16);
         fn SetDSAll(value: u16);
         fn SetCSSS(cs: u16, ss: u16);
+        fn GetCR0() -> u64;
+        fn SetCR0(value: u64);
         fn GetCR2() -> u64;
         fn SetCR3(value: u64);
         fn GetCR3() -> u64;
@@ -29,6 +31,7 @@ pub mod global {
         fn WriteMSR(msr: u32, value: u64);
         pub fn SyscallEntry();
         fn ExitApp(rsp: u64, ret_val: i32);
+        fn InvalidateTLB(addr: u64);
     }
 
     pub fn io_out_32(addr: u16, data: u32) {
@@ -61,6 +64,14 @@ pub mod global {
 
     pub fn set_csss(cs: u16, ss: u16) {
         unsafe { SetCSSS(cs, ss) }
+    }
+
+    pub fn get_cr0() -> u64 {
+        unsafe { GetCR0() }
+    }
+
+    pub fn set_cr0(value: u64) {
+        unsafe { SetCR0(value) }
     }
 
     pub fn get_cr2() -> u64 {
@@ -107,5 +118,9 @@ pub mod global {
 
     pub fn exit_app(rsp: u64, ret_val: i32) {
         unsafe { ExitApp(rsp, ret_val) }
+    }
+
+    pub fn invalidate_tlb(addr: u64) {
+        unsafe { InvalidateTLB(addr) }
     }
 }
