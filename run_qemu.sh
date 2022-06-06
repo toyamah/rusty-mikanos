@@ -50,14 +50,14 @@ build_and_run() {
 build_and_run_official() {
   official_dir="$script_dir"/official
 
-  export RUSTFLAGS="-C link-arg=$LDFLAGS"
-  if [ ${#apps[@]} -gt 0 ]; then
-    for app in ${apps[@]}; do
-      cd "${script_dir}/apps/${app}"
-      cargo build --release
-      cp ${app} $official_dir/apps/${app}/
-    done
-  fi
+#  export RUSTFLAGS="-C link-arg=$LDFLAGS"
+#  if [ ${#apps[@]} -gt 0 ]; then
+#    for app in ${apps[@]}; do
+#      cd "${script_dir}/apps/${app}"
+#      cargo build --release
+#      cp ${app} $official_dir/apps/${app}/
+#    done
+#  fi
 
   cd "$official_dir"
   export APPS_DIR=apps
