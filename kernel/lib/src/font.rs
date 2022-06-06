@@ -1,8 +1,10 @@
 use crate::graphics::{PixelColor, PixelWriter};
 
 pub fn write_string<W: PixelWriter>(writer: &mut W, x: i32, y: i32, str: &str, color: &PixelColor) {
-    for (i, char) in str.chars().enumerate() {
-        write_ascii(writer, x + 8 * i as i32, y, char, color);
+    let mut offset = 0;
+    for (_, char) in str.chars().enumerate() {
+        write_ascii(writer, x + 8 * offset as i32, y, char, color);
+        offset += if char.is_ascii() { 1 } else { 2 }
     }
 }
 
@@ -13,8 +15,10 @@ pub fn write_chars<W: PixelWriter>(
     chars: &[char],
     color: &PixelColor,
 ) {
-    for (i, char) in chars.iter().enumerate() {
-        write_ascii(writer, x + 8 * i as i32, y, *char, color);
+    let mut offset = 0;
+    for (_, char) in chars.iter().enumerate() {
+        write_ascii(writer, x + 8 * offset as i32, y, *char, color);
+        offset += if char.is_ascii() { 1 } else { 2 }
     }
 }
 
@@ -32,6 +36,46 @@ pub fn write_ascii<W: PixelWriter>(writer: &mut W, x: i32, y: i32, c: char, colo
                 writer.write(x + dx, y + dy as i32, color);
             }
         }
+    }
+}
+
+pub fn write_unicode<W: PixelWriter>(writer: &mut W, x: i32, y: i32, c: char, color: &PixelColor) {
+    if c.is_ascii() {
+        write_ascii(writer, x, y, c, color);
+    } else {
+        write_ascii(writer, x, y, '?', color);
+        write_ascii(writer, x + 8, y, '?', color);
+    }
+}
+
+pub fn count_utf8_size(c: u8) -> usize {
+    if c < 0x80 {
+        1
+    } else if (0xc0..0xe0).contains(&c) {
+        2
+    } else if (0xe0..0xf0).contains(&c) {
+        3
+    } else if (0xf0..0xf8).contains(&c) {
+        4
+    } else {
+        0
+    }
+}
+
+pub fn convert_utf8_to_u32(bytes: &[u8]) -> u32 {
+    let at = |i: usize| bytes[i] as u32;
+
+    match count_utf8_size(bytes[0]) {
+        1 => at(0),
+        2 => (at(0) & 0b0001_1111) << 6 | (at(1) & 0b0011_1111),
+        3 => (at(0) & 0b0000_1111) << 12 | (at(1) & 0b0011_1111) << 6 | (at(2) & 0b0011_1111),
+        4 => {
+            (at(0) & 0b0000_0111) << 18
+                | (at(1) & 0b0011_1111) << 12
+                | (at(2) & 0b0011_1111) << 6
+                | (at(3) & 0b0011_1111)
+        }
+        _ => 0,
     }
 }
 
