@@ -1,9 +1,77 @@
+use crate::error::{Code, Error};
+use crate::fat::global::{boot_volume_image, find_file};
 use crate::graphics::{PixelColor, PixelWriter};
+use crate::make_error;
+use alloc::vec;
+use alloc::vec::Vec;
+use fontdue::Font;
+
+static mut NIHONGO_BUF: Vec<u8> = vec![];
+
+static mut FONT: Option<Font> = None;
+
+pub fn initialize() {
+    let (entry, pos_slash) = find_file(
+        "/nihongo.ttf",
+        boot_volume_image().get_root_cluster() as u64,
+    );
+    if entry.is_none() || pos_slash {
+        panic!("failed to find font");
+    }
+    let entry = entry.unwrap();
+
+    let size = entry.file_size() as usize;
+    unsafe { NIHONGO_BUF = vec![0; size] };
+    let loaded = unsafe { entry.load_file(&mut NIHONGO_BUF, boot_volume_image()) };
+    if loaded != size {
+        panic!(
+            "failed to load font. expected = {}, actual = {}",
+            size, loaded
+        );
+    }
+
+    let settings = fontdue::FontSettings::default();
+    unsafe { FONT = Some(Font::from_bytes(unsafe { NIHONGO_BUF.as_slice() }, settings).unwrap()) };
+}
+
+pub fn write_unicode<W: PixelWriter>(
+    writer: &mut W,
+    x: i32,
+    y: i32,
+    c: char,
+    color: &PixelColor,
+) -> Result<(), Error> {
+    if c.is_ascii() {
+        write_ascii(writer, x, y, c, color);
+        return Ok(());
+    }
+
+    let font = unsafe { FONT.as_mut().unwrap() };
+    let (metrics, bitmap) = font.rasterize(c, 16.0);
+
+    if bitmap.is_empty() {
+        write_ascii(writer, x, y, '?', color);
+        write_ascii(writer, x + 8, y, '?', color);
+        return Err(make_error!(Code::FreeTypeError));
+    }
+
+    for dy in 0..metrics.height {
+        for dx in 0..metrics.width {
+            let char_s = bitmap[dx + dy * metrics.width];
+            let v = if char_s != 0 { 1 } else { 0 };
+            if v != 0 {
+                writer.write(x + dx as i32, y + dy as i32, color);
+            }
+        }
+    }
+
+    Ok(())
+}
 
 pub fn write_string<W: PixelWriter>(writer: &mut W, x: i32, y: i32, str: &str, color: &PixelColor) {
     let mut offset = 0;
     for (_, char) in str.chars().enumerate() {
-        write_ascii(writer, x + 8 * offset as i32, y, char, color);
+        write_unicode(writer, x + 8 * offset as i32, y, char, color).unwrap_or_default();
         offset += if char.is_ascii() { 1 } else { 2 }
     }
 }
@@ -36,15 +104,6 @@ pub fn write_ascii<W: PixelWriter>(writer: &mut W, x: i32, y: i32, c: char, colo
                 writer.write(x + dx, y + dy as i32, color);
             }
         }
-    }
-}
-
-pub fn write_unicode<W: PixelWriter>(writer: &mut W, x: i32, y: i32, c: char, color: &PixelColor) {
-    if c.is_ascii() {
-        write_ascii(writer, x, y, c, color);
-    } else {
-        write_ascii(writer, x, y, '?', color);
-        write_ascii(writer, x + 8, y, '?', color);
     }
 }
 
@@ -94,5 +153,25 @@ unsafe fn get_font(c: char) -> Option<*mut u8> {
         Some(start.add(index))
     } else {
         None
+    }
+}
+
+// https://github.com/mooman219/fontdue/issues/98#issuecomment-1091163388
+#[no_mangle]
+fn fminf(a: f32, b: f32) -> f32 {
+    if a < b {
+        a
+    } else {
+        b
+    }
+}
+
+// https://github.com/mooman219/fontdue/issues/98#issuecomment-1091163388
+#[no_mangle]
+fn fmaxf(a: f32, b: f32) -> f32 {
+    if a > b {
+        a
+    } else {
+        b
     }
 }

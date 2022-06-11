@@ -31,8 +31,8 @@ use lib::timer::global::timer_manager;
 use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
 use lib::{
-    acpi, console, fat, graphics, keyboard, layer, memory_manager, mouse, paging, pci, segment,
-    syscall, task, timer,
+    acpi, console, fat, font, graphics, keyboard, layer, memory_manager, mouse, paging, pci,
+    segment, syscall, task, timer,
 };
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
@@ -97,6 +97,7 @@ pub extern "C" fn KernelMainNewStack(
     initialize_interrupt();
 
     fat::global::initialize(volume_image);
+    font::initialize();
     pci::initialize();
     usb::register_mouse_observer(mouse_observer);
 

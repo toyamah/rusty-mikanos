@@ -585,7 +585,8 @@ impl Terminal {
                 pos.y,
                 c,
                 &COLOR_WHITE,
-            );
+            )
+            .unwrap_or_default();
             self.cursor.x += 1;
         } else {
             if self.cursor.x == columns - 1 {
@@ -598,7 +599,8 @@ impl Terminal {
                 pos.y,
                 c,
                 &COLOR_WHITE,
-            );
+            )
+            .unwrap_or_default();
             self.cursor.x += 2;
         }
     }
