@@ -30,8 +30,9 @@ pub fn initialize() {
         );
     }
 
-    let settings = fontdue::FontSettings::default();
-    unsafe { FONT = Some(Font::from_bytes(unsafe { NIHONGO_BUF.as_slice() }, settings).unwrap()) };
+    // Comment out because font initialization takes too time...
+    // let settings = fontdue::FontSettings::default();
+    // unsafe { FONT = Some(Font::from_bytes(unsafe { NIHONGO_BUF.as_slice() }, settings).unwrap()) };
 }
 
 pub fn write_unicode<W: PixelWriter>(
@@ -46,7 +47,16 @@ pub fn write_unicode<W: PixelWriter>(
         return Ok(());
     }
 
-    let font = unsafe { FONT.as_mut().unwrap() };
+    let font = unsafe {
+        match FONT.as_mut() {
+            None => {
+                write_ascii(writer, x, y, '?', color);
+                write_ascii(writer, x + 8, y, '?', color);
+                return Err(make_error!(Code::FreeTypeError));
+            }
+            Some(f) => f,
+        }
+    };
     let (metrics, bitmap) = font.rasterize(c, 16.0);
 
     if bitmap.is_empty() {
