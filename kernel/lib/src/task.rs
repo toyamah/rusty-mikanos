@@ -98,7 +98,7 @@ pub struct Task {
 }
 
 impl Task {
-    const DEFAULT_STACK_BYTES: usize = 4096;
+    pub(crate) const DEFAULT_STACK_BYTES: usize = 8 * 4096;
     fn new(id: TaskID, level: PriorityLevel) -> Task {
         Self {
             id,

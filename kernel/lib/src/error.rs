@@ -54,6 +54,7 @@ pub enum Code {
     InvalidFile,
     IsDirectory,
     NoSuchEntry,
+    FreeTypeError,
     LastOfCode,
 }
 
