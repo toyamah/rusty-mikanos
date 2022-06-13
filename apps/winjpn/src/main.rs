@@ -35,6 +35,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
         }
     }
 
+    window.close();
     exit(0)
 }
 
