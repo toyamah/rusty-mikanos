@@ -3,10 +3,7 @@ use crate::fat::global::{boot_volume_image, find_file};
 use crate::graphics::{PixelColor, PixelWriter};
 use crate::make_error;
 use alloc::vec;
-use alloc::vec::Vec;
 use fontdue::Font;
-
-static mut NIHONGO_BUF: Vec<u8> = vec![];
 
 static mut FONT: Option<Font> = None;
 
@@ -21,8 +18,8 @@ pub fn initialize() {
     let entry = entry.unwrap();
 
     let size = entry.file_size() as usize;
-    unsafe { NIHONGO_BUF = vec![0; size] };
-    let loaded = unsafe { entry.load_file(&mut NIHONGO_BUF, boot_volume_image()) };
+    let mut nihongo_buf = vec![0; size];
+    let loaded = entry.load_file(&mut nihongo_buf, boot_volume_image());
     if loaded != size {
         panic!(
             "failed to load font. expected = {}, actual = {}",
@@ -32,7 +29,7 @@ pub fn initialize() {
 
     // Comment out because font initialization takes too time...
     // let settings = fontdue::FontSettings::default();
-    // unsafe { FONT = Some(Font::from_bytes(unsafe { NIHONGO_BUF.as_slice() }, settings).unwrap()) };
+    // unsafe { FONT = Some(Font::from_bytes(nihongo_buf, settings).unwrap()) };
 }
 
 pub fn write_unicode<W: PixelWriter>(
