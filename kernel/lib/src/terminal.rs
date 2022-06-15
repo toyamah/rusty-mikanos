@@ -8,7 +8,7 @@ use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
     COLOR_BLACK, COLOR_WHITE,
 };
-use crate::io::FileDescriptor;
+use crate::io::{FileDescriptor, STD_ERR, STD_OUT};
 use crate::keyboard::{is_control_key_inputted, KEY_D};
 use crate::layer::global::layer_manager;
 use crate::layer::{LayerID, LayerManager};
@@ -16,6 +16,7 @@ use crate::memory_manager::global::memory_manager;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
 use crate::paging::global::{copy_page_maps, free_page_map, reset_cr3};
 use crate::paging::{LinearAddress4Level, PageMapEntry};
+use crate::pci::devices;
 use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
@@ -221,11 +222,18 @@ pub(crate) struct Terminal {
     is_cursor_visible: bool,
     line_buf: String,
     command_history: CommandHistory,
+    files: [FileDescriptor; STD_ERR + 1],
 }
 
 /// Some functions depend on global functions although Terminal is not in a global module.
 impl Terminal {
     fn new(task_id: TaskID) -> Terminal {
+        let mut files = [
+            FileDescriptor::Terminal(TerminalFileDescriptor::new(task_id)),
+            FileDescriptor::Terminal(TerminalFileDescriptor::new(task_id)),
+            FileDescriptor::Terminal(TerminalFileDescriptor::new(task_id)),
+        ];
+
         Self {
             task_id,
             layer_id: LayerID::MAX,
@@ -233,6 +241,7 @@ impl Terminal {
             is_cursor_visible: false,
             line_buf: String::with_capacity(LINE_MAX),
             command_history: CommandHistory::new(),
+            files,
         }
     }
 
@@ -382,9 +391,9 @@ impl Terminal {
         match command {
             "echo" => {
                 if let Some(&arg) = argv.get(1) {
-                    self.print(arg);
+                    write!(self.stdout(), "{}", arg).unwrap();
                 }
-                self.print("\n");
+                writeln!(self.stdout()).unwrap();
             }
             "clear" => {
                 if let Some(window) = self.window_mut() {
@@ -398,10 +407,9 @@ impl Terminal {
                 self.cursor = Vector2D::new(0, 0);
             }
             "lspci" => {
-                // comment out because of referencing a global variable
-                // for device in devices() {
-                //     self.print(format!("{}\n", device).as_str(), w);
-                // }
+                for device in devices() {
+                    writeln!(self.stdout(), "{}", device).unwrap();
+                }
             }
             "ls" => self.execute_ls(&argv),
             "cat" => self.execute_cat(&argv),
@@ -422,12 +430,12 @@ impl Terminal {
                     if !file_entry.is_directory() && post_slash {
                         let name_bytes = file_entry.formatted_name();
                         let name = str_trimming_nul_unchecked(&name_bytes);
-                        writeln!(self, "{} is not a directory", name).unwrap();
+                        writeln!(self.stderr(), "{} is not a directory", name).unwrap();
                     } else if let Some(e) = self.execute_file(file_entry, argv.as_slice()).err() {
-                        writeln!(self, "failed to exec file: {}", e).unwrap();
+                        writeln!(self.stderr(), "failed to exec file: {}", e).unwrap();
                     }
                 } else {
-                    writeln!(self, "no such command: {}", command).unwrap();
+                    writeln!(self.stderr(), "no such command: {}", command).unwrap();
                 }
             }
         }
@@ -466,7 +474,6 @@ impl Terminal {
         // register standard in/out and error file descriptors
         for _ in 0..3 {
             task.register_file_descriptor(FileDescriptor::Terminal(TerminalFileDescriptor::new(
-                task.id(),
                 self.task_id,
             )));
         }
@@ -657,21 +664,20 @@ impl Terminal {
 
         let first_arg = argv.get(1);
         if first_arg.is_none() {
-            self.list_all_entries(root_cluster);
+            list_all_entries(self.stdout(), root_cluster);
             return;
         }
 
         let &first_arg = first_arg.unwrap();
         let (dir, post_slash) = find_file(first_arg, root_cluster.into());
         if dir.is_none() {
-            self.write_fmt(format_args!("No such file or directory: {}\n", first_arg))
-                .unwrap();
+            writeln!(self.stderr(), "No such file or directory: {}", first_arg).unwrap();
             return;
         }
 
         let dir = dir.unwrap();
         if dir.is_directory() {
-            self.list_all_entries(dir.first_cluster());
+            list_all_entries(self.stdout(), dir.first_cluster());
             return;
         }
 
@@ -679,10 +685,9 @@ impl Terminal {
         let name = str_trimming_nul_unchecked(&name_bytes);
 
         if post_slash {
-            self.write_fmt(format_args!("{} is not a directory\n", name))
-                .unwrap();
+            writeln!(self.stderr(), "{} is not a directory", name).unwrap();
         } else {
-            self.write_fmt(format_args!("{}\n", name)).unwrap();
+            writeln!(self.stdout(), "{}", name).unwrap();
         }
     }
 
@@ -692,7 +697,7 @@ impl Terminal {
 
         let (file_entry, post_slash) = find_file(first_arg, bpb.get_root_cluster() as u64);
         if file_entry.is_none() {
-            writeln!(self, "no such file: {}", first_arg).unwrap();
+            writeln!(self.stderr(), "no such file: {}", first_arg).unwrap();
             return;
         }
 
@@ -700,7 +705,7 @@ impl Terminal {
         if !file_entry.is_directory() && post_slash {
             let name_bytes = file_entry.formatted_name();
             let name = str_trimming_nul_unchecked(&name_bytes);
-            writeln!(self, "{} is not a directory", name).unwrap();
+            writeln!(self.stderr(), "{} is not a directory", name).unwrap();
             return;
         }
 
@@ -717,7 +722,7 @@ impl Terminal {
                 break;
             }
             let char = char::from_u32(convert_utf8_to_u32(&u8buf)).unwrap_or('□');
-            self.print_char(char);
+            write!(self.stdout(), "{}", char).unwrap();
         }
         self.draw_cursor(true);
     }
@@ -725,7 +730,7 @@ impl Terminal {
     fn execute_memstat(&mut self) {
         let p_stat = memory_manager().stat();
         writeln!(
-            self,
+            self.stdout(),
             "Phys used : {} frames ({} MiB)\nPhys total: {} frames ({} MiB)",
             p_stat.allocated_frames,
             p_stat.calc_allocated_size_in_mb(),
@@ -735,24 +740,32 @@ impl Terminal {
         .unwrap()
     }
 
-    fn list_all_entries(&mut self, dir_cluster: u32) {
-        let mut dir_cluster = dir_cluster as u64;
+    fn stdout(&mut self) -> &mut FileDescriptor {
+        &mut self.files[STD_OUT]
+    }
 
-        while dir_cluster != END_OF_CLUSTER_CHAIN {
-            let dirs = boot_volume_image().get_sector_by_cluster::<DirectoryEntry>(dir_cluster);
-            for dir in dirs {
-                if dir.is_free_and_no_more_allocated_after_this() {
-                    break;
-                }
-                if dir.is_free() || dir.attr() == Some(Attribute::LongName) {
-                    continue;
-                }
+    fn stderr(&mut self) -> &mut FileDescriptor {
+        &mut self.files[STD_ERR]
+    }
+}
 
-                let name = dir.formatted_name();
-                writeln!(self, "{}", str_trimming_nul_unchecked(&name)).unwrap();
+fn list_all_entries(fd: &mut FileDescriptor, dir_cluster: u32) {
+    let mut dir_cluster = dir_cluster as u64;
+
+    while dir_cluster != END_OF_CLUSTER_CHAIN {
+        let dirs = boot_volume_image().get_sector_by_cluster::<DirectoryEntry>(dir_cluster);
+        for dir in dirs {
+            if dir.is_free_and_no_more_allocated_after_this() {
+                break;
             }
-            dir_cluster = boot_volume_image().next_cluster(dir_cluster);
+            if dir.is_free() || dir.attr() == Some(Attribute::LongName) {
+                continue;
+            }
+
+            let name = dir.formatted_name();
+            writeln!(fd, "{}", str_trimming_nul_unchecked(&name)).unwrap();
         }
+        dir_cluster = boot_volume_image().next_cluster(dir_cluster);
     }
 }
 
@@ -831,29 +844,26 @@ impl CommandHistory {
 }
 
 pub(crate) struct TerminalFileDescriptor {
-    task_id: TaskID,
     terminal_id: TaskID,
 }
 
 impl TerminalFileDescriptor {
-    pub fn new(task_id: TaskID, terminal_id: TaskID) -> Self {
-        Self {
-            task_id,
-            terminal_id,
-        }
+    pub fn new(terminal_id: TaskID) -> Self {
+        Self { terminal_id }
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> usize {
         loop {
             unsafe { asm!("cli") };
-            let task = task_manager().get_task_mut(self.task_id);
+            let task =
+                task_manager().get_task_mut(get_terminal_mut_by(self.terminal_id).unwrap().task_id);
             if task.is_none() {
                 return 0;
             }
             let task = task.unwrap();
             let message = match task.receive_message() {
                 None => {
-                    task_manager().sleep(self.task_id).unwrap();
+                    task_manager().sleep(task.id()).unwrap();
                     continue;
                 }
                 Some(m) => m,

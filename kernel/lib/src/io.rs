@@ -1,8 +1,11 @@
 use crate::fat::global::{boot_volume_image, boot_volume_image_mut};
 use crate::fat::FatFileDescriptor;
 use crate::terminal::TerminalFileDescriptor;
+use core::fmt::Write;
 
-pub(crate) const STD_IN: &str = "@stdin";
+pub(crate) const STD_IN: usize = 0;
+pub(crate) const STD_OUT: usize = 1;
+pub(crate) const STD_ERR: usize = 2;
 
 pub(crate) enum FileDescriptor {
     Fat(FatFileDescriptor),
@@ -36,5 +39,12 @@ impl FileDescriptor {
             FileDescriptor::Fat(fd) => fd.size(),
             FileDescriptor::Terminal(fd) => fd.size(),
         }
+    }
+}
+
+impl Write for FileDescriptor {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.write(s.as_bytes());
+        Ok(())
     }
 }
