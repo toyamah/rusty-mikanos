@@ -28,13 +28,15 @@ use crate::terminal::global::{
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{make_error, Window};
 use alloc::collections::VecDeque;
+use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::arch::asm;
+use core::cell::{RefCell, RefMut};
 use core::ffi::c_void;
 use core::fmt::Write;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 use core::str::Utf8Error;
 use core::{fmt, mem};
 use shared::PixelFormat;
@@ -222,16 +224,22 @@ pub(crate) struct Terminal {
     is_cursor_visible: bool,
     line_buf: String,
     command_history: CommandHistory,
-    files: [FileDescriptor; STD_ERR + 1],
+    files: [Rc<RefCell<FileDescriptor>>; STD_ERR + 1],
 }
 
 /// Some functions depend on global functions although Terminal is not in a global module.
 impl Terminal {
     fn new(task_id: TaskID) -> Terminal {
-        let mut files = [
-            FileDescriptor::Terminal(TerminalFileDescriptor::new(task_id)),
-            FileDescriptor::Terminal(TerminalFileDescriptor::new(task_id)),
-            FileDescriptor::Terminal(TerminalFileDescriptor::new(task_id)),
+        let files = [
+            Rc::new(RefCell::new(FileDescriptor::Terminal(
+                TerminalFileDescriptor::new(task_id),
+            ))),
+            Rc::new(RefCell::new(FileDescriptor::Terminal(
+                TerminalFileDescriptor::new(task_id),
+            ))),
+            Rc::new(RefCell::new(FileDescriptor::Terminal(
+                TerminalFileDescriptor::new(task_id),
+            ))),
         ];
 
         Self {
@@ -472,7 +480,7 @@ impl Terminal {
         )?;
 
         // register standard in/out and error file descriptors
-        for _ in 0..3 {
+        for _ in 0..self.files.len() {
             task.register_file_descriptor(FileDescriptor::Terminal(TerminalFileDescriptor::new(
                 self.task_id,
             )));
@@ -740,16 +748,16 @@ impl Terminal {
         .unwrap()
     }
 
-    fn stdout(&mut self) -> &mut FileDescriptor {
-        &mut self.files[STD_OUT]
+    fn stdout(&mut self) -> RefMut<'_, FileDescriptor> {
+        self.files[STD_OUT].borrow_mut()
     }
 
-    fn stderr(&mut self) -> &mut FileDescriptor {
-        &mut self.files[STD_ERR]
+    fn stderr(&mut self) -> RefMut<'_, FileDescriptor> {
+        self.files[STD_ERR].borrow_mut()
     }
 }
 
-fn list_all_entries(fd: &mut FileDescriptor, dir_cluster: u32) {
+fn list_all_entries<T: DerefMut<Target = FileDescriptor>>(mut fd: T, dir_cluster: u32) {
     let mut dir_cluster = dir_cluster as u64;
 
     while dir_cluster != END_OF_CLUSTER_CHAIN {
