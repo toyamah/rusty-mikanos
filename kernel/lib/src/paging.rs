@@ -512,11 +512,10 @@ pub mod global {
                 continue;
             }
 
+            let table = PageMapEntry::new_page_map(memory_manager())?;
             let d = dest_at(i);
             d.0 = s.0;
-            d.set_writable(false);
-
-            let table = PageMapEntry::new_page_map(memory_manager())?;
+            d.set_pointer(table);
             copy_page_maps(table, s.pointer(), part - 1, 0)?;
         }
 
