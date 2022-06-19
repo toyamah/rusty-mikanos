@@ -90,7 +90,7 @@ pub struct Task {
     messages: VecDeque<Message>,
     level: PriorityLevel,
     is_running: bool,
-    files: Vec<Option<FileDescriptor>>,
+    files: Vec<FileDescriptor>,
     pub(crate) dpaging_begin: u64,
     pub(crate) dpaging_end: u64,
     pub(crate) file_map_end: u64,
@@ -167,27 +167,13 @@ impl Task {
         self.context.cr3
     }
 
-    pub(crate) fn files_len(&self) -> usize {
-        self.files.len()
-    }
-
     pub(crate) fn get_file_mut(&mut self, fd: usize) -> Option<&mut FileDescriptor> {
-        self.files
-            .get_mut(fd)
-            .map(|inner_op| inner_op.as_mut())
-            .unwrap_or(None)
+        self.files.get_mut(fd)
     }
 
     pub(crate) fn register_file_descriptor(&mut self, fd: FileDescriptor) -> usize {
-        let first_empty = self.files.iter().enumerate().find(|(_, fd)| fd.is_none());
-
-        if let Some((first_empty_index, _)) = first_empty {
-            self.files[first_empty_index] = Some(fd);
-            first_empty_index
-        } else {
-            self.files.push(Some(fd));
-            self.files.len() - 1
-        }
+        self.files.push(fd);
+        self.files.len() - 1
     }
 
     pub(crate) fn clear_files(&mut self) {
