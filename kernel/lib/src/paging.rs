@@ -387,6 +387,7 @@ pub mod global {
     use crate::task::global::task_manager;
     use crate::task::FileMapping;
     use core::ffi::c_void;
+    use core::ops::DerefMut;
     use core::slice;
 
     static mut PML4_TABLE: PM4Table = PM4Table([0; 512]);
@@ -442,8 +443,11 @@ pub mod global {
             )
         } else if let Some(fm) = task.find_file_mapping(causal_addr) {
             let fm = fm.clone();
-            let fd = task.get_file_mut(fm.fd).unwrap();
-            prepare_page_cache(fd, fm, causal_addr)
+            prepare_page_cache(
+                task.get_file_mut(fm.fd).unwrap().deref_mut(),
+                fm,
+                causal_addr,
+            )
         } else {
             Err(make_error!(Code::IndexOutOfRange))
         }

@@ -96,10 +96,10 @@ fn put_string(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sy
 
     match task.get_file_mut(fd as usize) {
         None => SyscallResult::err(0, EBADF),
-        Some(fd) => {
+        Some(mut fd) => {
             let buf = buf as *mut u64 as *mut u8;
             let buf = unsafe { slice::from_raw_parts(buf, count as usize) };
-            let written_size = fd.write(buf);
+            let written_size = (*fd).write(buf);
             SyscallResult::ok(written_size as u64)
         }
     }
@@ -445,9 +445,9 @@ fn read_file(fd: u64, buf: u64, count: u64, _a4: u64, _a5: u64, _a6: u64) -> Sys
     let task = task_manager().current_task_mut();
     unsafe { asm!("sti") };
 
-    if let Some(descriptor) = task.get_file_mut(fd as usize) {
+    if let Some(mut descriptor) = task.get_file_mut(fd as usize) {
         let buf = unsafe { slice::from_raw_parts_mut(buf, count) };
-        let size = descriptor.read(buf);
+        let size = (*descriptor).read(buf);
         SyscallResult::ok(size as u64)
     } else {
         SyscallResult::err(0, EBADF)
@@ -472,7 +472,7 @@ fn map_file(fd: u64, file_size: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> 
     let task = task_manager().current_task_mut();
     unsafe { asm!("sti") };
 
-    let task_file_size = match task.get_file_mut(fd) {
+    let task_file_size = match task.get_file(fd) {
         None => return SyscallResult::err(0, EBADF),
         Some(fd) => fd.size(),
     };

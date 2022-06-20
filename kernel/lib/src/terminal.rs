@@ -480,10 +480,8 @@ impl Terminal {
         )?;
 
         // register standard in/out and error file descriptors
-        for _ in 0..self.files.len() {
-            task.register_file_descriptor(FileDescriptor::Terminal(TerminalFileDescriptor::new(
-                self.task_id,
-            )));
+        for file_rc in &self.files {
+            task.register_file_descriptor_rc(Rc::clone(file_rc));
         }
 
         let elf_next_page = (app_load.vaddr_end + 4095) & 0xffff_ffff_ffff_f000;
