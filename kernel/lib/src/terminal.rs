@@ -1,7 +1,7 @@
 use crate::asm::global::{call_app, get_cr3, set_cr3};
 use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
-use crate::fat::global::{boot_volume_image, find_file};
+use crate::fat::global::{boot_volume_image, create_file, find_file};
 use crate::fat::{Attribute, DirectoryEntry, FatFileDescriptor, END_OF_CLUSTER_CHAIN};
 use crate::font::{convert_utf8_to_u32, count_utf8_size, write_ascii, write_string, write_unicode};
 use crate::graphics::{
@@ -389,14 +389,48 @@ impl Terminal {
 
     fn execute_line(&mut self) {
         let line_buf = mem::take(&mut self.line_buf);
-        let argv = if let Some(argv) = parse_command(line_buf.as_str()) {
+        let mut argv = if let Some(argv) = parse_command(line_buf.as_str()) {
             argv
         } else {
             return;
         };
-        let command = argv.first().unwrap().deref();
+        let command = argv.first().unwrap().deref().to_string();
 
-        match command {
+        let original_stdout = Rc::clone(&self.files[STD_OUT]);
+
+        if let Some(redirect_dest_index) = find_redirect_dest(&argv) {
+            let redirect_dest = argv[redirect_dest_index];
+            argv = argv[..redirect_dest_index - 1].to_vec();
+            let (file, post_slash) =
+                find_file(redirect_dest, boot_volume_image().get_root_cluster() as u64);
+            let fat_entry = if let Some(file) = file {
+                if file.is_directory() || post_slash {
+                    writeln!(
+                        self.stderr(),
+                        "cannot redirect to a directory: {}",
+                        redirect_dest
+                    )
+                    .unwrap_or_default();
+                    return;
+                }
+                file
+            } else {
+                match create_file(redirect_dest) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        writeln!(self.stderr(), "failed to create a redirect file: {}", e)
+                            .unwrap_or_default();
+                        return;
+                    }
+                }
+            };
+
+            self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Fat(
+                FatFileDescriptor::new(fat_entry),
+            )));
+        }
+
+        match command.as_str() {
             "echo" => {
                 if let Some(&arg) = argv.get(1) {
                     write!(self.stdout(), "{}", arg).unwrap();
@@ -434,7 +468,7 @@ impl Terminal {
             "memstat" => self.execute_memstat(),
             _ => {
                 let root_cluster = boot_volume_image().get_root_cluster();
-                if let (Some(file_entry), post_slash) = find_file(command, root_cluster as u64) {
+                if let (Some(file_entry), post_slash) = find_file(&command, root_cluster as u64) {
                     if !file_entry.is_directory() && post_slash {
                         let name_bytes = file_entry.formatted_name();
                         let name = str_trimming_nul_unchecked(&name_bytes);
@@ -447,6 +481,8 @@ impl Terminal {
                 }
             }
         }
+
+        self.files[STD_OUT] = original_stdout;
     }
 
     fn execute_file(&mut self, file_entry: &DirectoryEntry, args: &[&str]) -> Result<(), Error> {
@@ -983,6 +1019,13 @@ fn make_argv(
     }
 
     Ok(argc)
+}
+
+fn find_redirect_dest(argv: &[&str]) -> Option<usize> {
+    match argv.iter().position(|&x| x == ">") {
+        None => None,
+        Some(i) => argv.get(i + 1).map(|_| i + 1),
+    }
 }
 
 fn new_c_chars_vec(strs: &[&str]) -> Vec<*const c_char> {
