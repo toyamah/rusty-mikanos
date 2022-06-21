@@ -23,7 +23,7 @@ use crate::rust_official::strlen;
 use crate::task::global::task_manager;
 use crate::task::{Task, TaskID};
 use crate::terminal::global::{
-    get_app_load_mut, get_app_load_ref, get_terminal_mut_by, insert_app_load, task_terminal,
+    get_app_load_mut, get_terminal_mut_by, insert_app_load, task_terminal,
 };
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{make_error, Window};
@@ -197,6 +197,7 @@ pub mod global {
     }
 }
 
+#[derive(Clone)]
 struct AppLoadInfo {
     vaddr_end: u64,
     entry: u64,
@@ -490,8 +491,7 @@ impl Terminal {
         let task = task_manager().current_task_mut();
         unsafe { asm!("sti") };
 
-        self.load_app(file_entry, task)?;
-        let app_load = get_app_load_ref(file_entry).unwrap();
+        let app_load = self.load_app(file_entry, task)?;
 
         let args_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000);
         PageMapEntry::setup_page_maps(args_frame_addr, 1, true, get_cr3(), memory_manager())?;
@@ -549,15 +549,19 @@ impl Terminal {
             get_cr3(),
             memory_manager(),
         )?;
-        free_pml4(task_manager().get_task_mut(task.id()).unwrap())
+        free_pml4(task)
     }
 
-    fn load_app(&mut self, file_entry: &DirectoryEntry, task: &mut Task) -> Result<(), Error> {
+    fn load_app(
+        &mut self,
+        file_entry: &DirectoryEntry,
+        task: &mut Task,
+    ) -> Result<AppLoadInfo, Error> {
         let temp_pml4 = setup_pml4(task)?;
-        if let Some(app_load) = get_app_load_mut(file_entry) {
+        if let Some(mut app_load) = get_app_load_mut(file_entry).cloned() {
             copy_page_maps(temp_pml4, app_load.pml4, 4, 256)?;
             app_load.pml4 = temp_pml4;
-            return Ok(());
+            return Ok(app_load);
         }
 
         let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
@@ -569,15 +573,12 @@ impl Terminal {
         }
 
         let elf_last_addr = elf_header.load_elf(get_cr3(), memory_manager())?;
-        insert_app_load(
-            file_entry,
-            AppLoadInfo::new(elf_last_addr, elf_header.e_entry as u64, temp_pml4),
-        );
+        let mut app_load = AppLoadInfo::new(elf_last_addr, elf_header.e_entry as u64, temp_pml4);
+        insert_app_load(file_entry, app_load.clone());
 
-        let app_load = get_app_load_mut(file_entry).unwrap();
         app_load.pml4 = setup_pml4(task)?;
         copy_page_maps(app_load.pml4 as *mut _, temp_pml4, 4, 256)?;
-        Ok(())
+        Ok(app_load)
     }
 
     pub(crate) fn print(&mut self, s: &str) {

@@ -233,32 +233,23 @@ impl PageMapEntry {
         memory_manager: &mut BitmapMemoryManager,
     ) -> Result<(), Error> {
         let pm4_table = cr3 as *mut u64 as *mut PageMapEntry;
-        let pdp_table =
-            unsafe { pm4_table.offset(addr.pml4() as isize).as_ref().unwrap() }.pointer();
-        unsafe { pm4_table.offset(addr.pml4() as isize).as_mut() }
-            .unwrap()
-            .reset();
-
-        Self::clean_page_map(pdp_table, 3, memory_manager)?;
-
-        let pdp_addr = pdp_table as usize;
-        let pdp_frame = FrameID::new(pdp_addr / BYTES_PER_FRAME);
-        memory_manager.free(pdp_frame, 1)
+        Self::clean_page_map(pm4_table, 4, addr, memory_manager)
     }
 
     fn clean_page_map(
         page_map: *mut PageMapEntry,
         page_map_level: i32,
+        addr: LinearAddress4Level,
         memory_manager: &mut BitmapMemoryManager,
     ) -> Result<(), Error> {
-        for i in 0..512 {
+        for i in addr.part(page_map_level) as usize..512 {
             let entry = unsafe { page_map.add(i).as_mut() }.unwrap();
             if entry.present() == 0 {
                 continue; // no need to clean this page map entry
             }
 
             if page_map_level > 1 {
-                Self::clean_page_map(entry.pointer(), page_map_level - 1, memory_manager)?;
+                Self::clean_page_map(entry.pointer(), page_map_level - 1, addr, memory_manager)?;
             }
 
             if entry.writable() {
@@ -516,11 +507,10 @@ pub mod global {
                 continue;
             }
 
+            let table = PageMapEntry::new_page_map(memory_manager())?;
             let d = dest_at(i);
             d.0 = s.0;
-            d.set_writable(false);
-
-            let table = PageMapEntry::new_page_map(memory_manager())?;
+            d.set_pointer(table);
             copy_page_maps(table, s.pointer(), part - 1, 0)?;
         }
 
