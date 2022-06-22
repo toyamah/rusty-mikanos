@@ -30,8 +30,8 @@ use crate::{make_error, Window};
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
-use alloc::vec;
 use alloc::vec::Vec;
+use alloc::{format, vec};
 use core::arch::asm;
 use core::cell::{RefCell, RefMut};
 use core::ffi::c_void;
@@ -395,43 +395,29 @@ impl Terminal {
         } else {
             return;
         };
-        let command = argv.first().unwrap().deref().to_string();
-
         let original_stdout = Rc::clone(&self.files[STD_OUT]);
 
+        // handles redirect
         if let Some(redirect_dest_index) = find_redirect_dest(&argv) {
-            let redirect_dest = argv[redirect_dest_index];
-            argv = argv[..redirect_dest_index - 1].to_vec();
-            let (file, post_slash) =
-                find_file(redirect_dest, boot_volume_image().get_root_cluster() as u64);
-            let fat_entry = if let Some(file) = file {
-                if file.is_directory() || post_slash {
-                    writeln!(
-                        self.stderr(),
-                        "cannot redirect to a directory: {}",
-                        redirect_dest
-                    )
-                    .unwrap_or_default();
+            match extract_redirect(&argv, redirect_dest_index) {
+                Ok(redirect_dest_file) => {
+                    self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Fat(
+                        FatFileDescriptor::new(redirect_dest_file),
+                    )))
+                }
+                Err(e) => {
+                    writeln!(self.stderr(), "{}", e).unwrap_or_default();
                     return;
                 }
-                file
-            } else {
-                match create_file(redirect_dest) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        writeln!(self.stderr(), "failed to create a redirect file: {}", e)
-                            .unwrap_or_default();
-                        return;
-                    }
-                }
-            };
-
-            self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Fat(
-                FatFileDescriptor::new(fat_entry),
-            )));
+            }
+            argv = argv[..redirect_dest_index - 1].to_vec();
         }
 
-        match command.as_str() {
+        let command = match argv.first() {
+            None => return, // if enters a line that starts with '>' such as '> foo'
+            Some(&c) => c,
+        };
+        match command {
             "echo" => {
                 if let Some(&arg) = argv.get(1) {
                     write!(self.stdout(), "{}", arg).unwrap();
@@ -469,7 +455,7 @@ impl Terminal {
             "memstat" => self.execute_memstat(),
             _ => {
                 let root_cluster = boot_volume_image().get_root_cluster();
-                if let (Some(file_entry), post_slash) = find_file(&command, root_cluster as u64) {
+                if let (Some(file_entry), post_slash) = find_file(command, root_cluster as u64) {
                     if !file_entry.is_directory() && post_slash {
                         let name_bytes = file_entry.formatted_name();
                         let name = str_trimming_nul_unchecked(&name_bytes);
@@ -1026,6 +1012,24 @@ fn find_redirect_dest(argv: &[&str]) -> Option<usize> {
     match argv.iter().position(|&x| x == ">") {
         None => None,
         Some(i) => argv.get(i + 1).map(|_| i + 1),
+    }
+}
+
+fn extract_redirect<'a>(
+    argv: &'a [&str],
+    redirect_dest_index: usize,
+) -> Result<&'a DirectoryEntry, String> {
+    let redirect_dest = argv[redirect_dest_index];
+    let (file, post_slash) =
+        find_file(redirect_dest, boot_volume_image().get_root_cluster() as u64);
+    if let Some(file) = file {
+        if file.is_directory() || post_slash {
+            Err(format!("cannot redirect to a directory: {}", redirect_dest))
+        } else {
+            Ok(file)
+        }
+    } else {
+        create_file(redirect_dest).map_err(|e| format!("failed to create a redirect file: {}", e))
     }
 }
 
