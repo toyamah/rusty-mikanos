@@ -1,4 +1,5 @@
 use crate::error::{Code, Error};
+use crate::libc::memset;
 use crate::make_error;
 use core::ffi::c_void;
 use core::fmt::{Display, Formatter};
@@ -623,10 +624,6 @@ fn next_path_element(path: &str) -> Option<PathElements> {
 
 fn is_end_of_cluster_chain(cluster: u64) -> bool {
     cluster >= 0x0ffffff8
-}
-
-extern "C" {
-    pub fn memset(dest: *mut c_void, c: i32, n: usize) -> *mut c_void;
 }
 
 #[cfg(test)]

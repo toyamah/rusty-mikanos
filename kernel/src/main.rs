@@ -26,7 +26,7 @@ use lib::message::{Message, MessageType};
 use lib::mouse::global::mouse;
 use lib::task::global::task_manager;
 use lib::task::TaskID;
-use lib::terminal::global::task_terminal;
+use lib::terminal::lib::task_terminal;
 use lib::timer::global::timer_manager;
 use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
