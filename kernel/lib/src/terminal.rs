@@ -226,6 +226,7 @@ pub(crate) struct Terminal {
     line_buf: String,
     command_history: CommandHistory,
     files: [Rc<RefCell<FileDescriptor>>; STD_ERR + 1],
+    last_exit_code: i32,
 }
 
 /// Some functions depend on global functions although Terminal is not in a global module.
@@ -251,6 +252,7 @@ impl Terminal {
             line_buf: String::with_capacity(LINE_MAX),
             command_history: CommandHistory::new(),
             files,
+            last_exit_code: 0,
         }
     }
 
@@ -417,12 +419,18 @@ impl Terminal {
             None => return, // if enters a line that starts with '>' such as '> foo'
             Some(&c) => c,
         };
-        match command {
+        let exit_code = match command {
             "echo" => {
                 if let Some(&arg) = argv.get(1) {
-                    write!(self.stdout(), "{}", arg).unwrap();
+                    let _ = if arg == "$?" {
+                        let last = self.last_exit_code;
+                        write!(self.stdout(), "{}", last)
+                    } else {
+                        write!(self.stdout(), "{}", arg)
+                    };
                 }
-                writeln!(self.stdout()).unwrap();
+                let _ = writeln!(self.stdout());
+                0
             }
             "clear" => {
                 if let Some(window) = self.window_mut() {
@@ -434,11 +442,13 @@ impl Terminal {
                     );
                 }
                 self.cursor = Vector2D::new(0, 0);
+                0
             }
             "lspci" => {
                 for device in devices() {
                     writeln!(self.stdout(), "{}", device).unwrap();
                 }
+                0
             }
             "ls" => self.execute_ls(&argv),
             "cat" => self.execute_cat(&argv),
@@ -451,6 +461,7 @@ impl Terminal {
                         .id();
                     task_manager().wake_up(task_id).unwrap();
                 }
+                0
             }
             "memstat" => self.execute_memstat(),
             _ => {
@@ -460,27 +471,41 @@ impl Terminal {
                         let name_bytes = file_entry.formatted_name();
                         let name = str_trimming_nul_unchecked(&name_bytes);
                         writeln!(self.stderr(), "{} is not a directory", name).unwrap();
-                    } else if let Some(e) = self.execute_file(file_entry, argv.as_slice()).err() {
-                        writeln!(self.stderr(), "failed to exec file: {}", e).unwrap();
+                        1
+                    } else {
+                        match self.execute_file(file_entry, argv.as_slice()) {
+                            Ok(ec) => ec,
+                            Err((ec, err)) => {
+                                let _ = writeln!(self.stderr(), "failed to exec file: {}", err);
+                                -ec
+                            }
+                        }
                     }
                 } else {
                     writeln!(self.stderr(), "no such command: {}", command).unwrap();
+                    1
                 }
             }
-        }
+        };
 
+        self.last_exit_code = exit_code;
         self.files[STD_OUT] = original_stdout;
     }
 
-    fn execute_file(&mut self, file_entry: &DirectoryEntry, args: &[&str]) -> Result<(), Error> {
+    fn execute_file(
+        &mut self,
+        file_entry: &DirectoryEntry,
+        args: &[&str],
+    ) -> Result<i32, (i32, Error)> {
         unsafe { asm!("cli") };
         let task = task_manager().current_task_mut();
         unsafe { asm!("sti") };
 
-        let app_load = self.load_app(file_entry, task)?;
+        let app_load = self.load_app(file_entry, task).map_err(|e| (0, e))?;
 
         let args_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000);
-        PageMapEntry::setup_page_maps(args_frame_addr, 1, true, get_cr3(), memory_manager())?;
+        PageMapEntry::setup_page_maps(args_frame_addr, 1, true, get_cr3(), memory_manager())
+            .map_err(|e| (0, e))?;
         let argv = args_frame_addr.value() as *mut u64 as *mut *mut c_char;
         let argv_len = 32; // argv = 8x32 = 256 bytes
         let p_p_cchar_size = mem::size_of::<*const *const c_char>();
@@ -489,7 +514,8 @@ impl Terminal {
         let argbuf_len = 4096 - p_p_cchar_size * argv_len;
 
         let c_chars_vec = new_c_chars_vec(args);
-        let argc = make_argv(&c_chars_vec, argv, argv_len, argbuf, argbuf_len)?;
+        let argc =
+            make_argv(&c_chars_vec, argv, argv_len, argbuf, argbuf_len).map_err(|e| (0, e))?;
 
         let stack_size = Task::DEFAULT_STACK_BYTES;
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000 - stack_size as u64);
@@ -499,7 +525,8 @@ impl Terminal {
             true,
             get_cr3(),
             memory_manager(),
-        )?;
+        )
+        .map_err(|e| (0, e))?;
 
         // register standard in/out and error file descriptors
         for file_rc in &self.files {
@@ -527,15 +554,14 @@ impl Terminal {
             let _ = unsafe { CString::from_raw(c_arg as *mut c_char) };
         }
 
-        self.write_fmt(format_args!("app exited. ret = {}\n", ret))
-            .unwrap();
-
         PageMapEntry::clean_page_maps(
             LinearAddress4Level::new(0xffff_8000_0000_0000),
             get_cr3(),
             memory_manager(),
-        )?;
-        free_pml4(task)
+        )
+        .map_err(|e| (ret, e))?;
+
+        free_pml4(task).map(|_| ret).map_err(|e| (ret, e))
     }
 
     fn load_app(
@@ -688,26 +714,26 @@ impl Terminal {
             .map(|l| l.get_window_mut())
     }
 
-    fn execute_ls(&mut self, argv: &[&str]) {
+    fn execute_ls(&mut self, argv: &[&str]) -> i32 {
         let root_cluster = boot_volume_image().get_root_cluster();
 
         let first_arg = argv.get(1);
         if first_arg.is_none() {
             list_all_entries(self.stdout(), root_cluster);
-            return;
+            return 0;
         }
 
         let &first_arg = first_arg.unwrap();
         let (dir, post_slash) = find_file(first_arg, root_cluster.into());
         if dir.is_none() {
             writeln!(self.stderr(), "No such file or directory: {}", first_arg).unwrap();
-            return;
+            return 1;
         }
 
         let dir = dir.unwrap();
         if dir.is_directory() {
             list_all_entries(self.stdout(), dir.first_cluster());
-            return;
+            return 1;
         }
 
         let name_bytes = dir.formatted_name();
@@ -715,19 +741,21 @@ impl Terminal {
 
         if post_slash {
             writeln!(self.stderr(), "{} is not a directory", name).unwrap();
+            1
         } else {
             writeln!(self.stdout(), "{}", name).unwrap();
+            0
         }
     }
 
-    fn execute_cat(&mut self, argv: &[&str]) {
+    fn execute_cat(&mut self, argv: &[&str]) -> i32 {
         let bpb = boot_volume_image();
         let first_arg = argv.get(1).unwrap_or(&"").deref();
 
         let (file_entry, post_slash) = find_file(first_arg, bpb.get_root_cluster() as u64);
         if file_entry.is_none() {
             writeln!(self.stderr(), "no such file: {}", first_arg).unwrap();
-            return;
+            return 1;
         }
 
         let file_entry = file_entry.unwrap();
@@ -735,7 +763,7 @@ impl Terminal {
             let name_bytes = file_entry.formatted_name();
             let name = str_trimming_nul_unchecked(&name_bytes);
             writeln!(self.stderr(), "{} is not a directory", name).unwrap();
-            return;
+            return 1;
         }
 
         let mut fd = FatFileDescriptor::new(file_entry);
@@ -754,9 +782,10 @@ impl Terminal {
             write!(self.stdout(), "{}", char).unwrap();
         }
         self.draw_cursor(true);
+        0
     }
 
-    fn execute_memstat(&mut self) {
+    fn execute_memstat(&mut self) -> i32 {
         let p_stat = memory_manager().stat();
         writeln!(
             self.stdout(),
@@ -766,7 +795,8 @@ impl Terminal {
             p_stat.total_frames,
             p_stat.calc_total_size_in_mb(),
         )
-        .unwrap()
+        .unwrap();
+        1
     }
 
     fn stdout(&mut self) -> RefMut<'_, FileDescriptor> {
