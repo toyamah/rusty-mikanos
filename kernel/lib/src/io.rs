@@ -1,6 +1,6 @@
 use crate::fat::global::{boot_volume_image, boot_volume_image_mut};
 use crate::fat::FatFileDescriptor;
-use crate::terminal::TerminalFileDescriptor;
+use crate::terminal::file_descriptor::TerminalFileDescriptor;
 use core::fmt::Write;
 
 pub(crate) const STD_IN: usize = 0;
