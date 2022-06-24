@@ -12,6 +12,7 @@ use crate::graphics::{
 use crate::io::{FileDescriptor, STD_ERR, STD_OUT};
 use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
 use crate::layer::{LayerID, LayerManager};
+use crate::libc::{memcpy, strcpy};
 use crate::memory_manager::global::memory_manager;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
 use crate::paging::global::{copy_page_maps, free_page_map, reset_cr3};
@@ -924,11 +925,6 @@ pub fn free_pml4(current_task: &mut Task) -> Result<(), Error> {
     current_task.set_cr3(0);
     reset_cr3();
     free_page_map(cr3 as *mut u64 as *mut PageMapEntry)
-}
-
-extern "C" {
-    fn strcpy(dst: *mut c_char, src: *const c_char) -> *mut c_char;
-    fn memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void;
 }
 
 #[cfg(test)]
