@@ -3,7 +3,7 @@ use crate::io::FileDescriptor;
 use crate::make_error;
 use crate::message::Message;
 use crate::segment::{KERNEL_CS, KERNEL_SS};
-use alloc::collections::VecDeque;
+use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -228,6 +228,8 @@ pub struct TaskManager {
     running_task_ids: [VecDeque<TaskID>; PriorityLevel::MAX.as_usize() + 1],
     current_level: PriorityLevel,
     level_changed: bool,
+    finish_tasks: BTreeMap<TaskID, i32>,
+    finish_waiter: BTreeMap<TaskID, TaskID>,
     switch_context: unsafe fn(next_ctx: &TaskContext, current_ctx: &TaskContext),
     restore_context: unsafe fn(task_ctx: &TaskContext),
 }
@@ -245,6 +247,8 @@ impl TaskManager {
             running_task_ids: Default::default(),
             current_level: PriorityLevel::MAX,
             level_changed: false,
+            finish_tasks: BTreeMap::new(),
+            finish_waiter: BTreeMap::new(),
             switch_context,
             restore_context,
         }
@@ -413,6 +417,36 @@ impl TaskManager {
         }
 
         current_task_id
+    }
+
+    pub fn finish(&mut self, exit_code: i32) {
+        let current_task_id = self.rotate_current_run_queue(true);
+
+        self.tasks.remove(current_task_id.as_usize());
+        self.finish_tasks.insert(current_task_id, exit_code);
+
+        if let Some(waiter_task_id) = self.finish_waiter.remove(&current_task_id) {
+            self.wake_up(waiter_task_id)
+                .expect("failed to wake up a task");
+        }
+
+        unsafe { (self.restore_context)(&self.current_task().context) }
+    }
+
+    pub fn wait_finish(&mut self, task_id: TaskID) -> i32 {
+        let mut exit_code = 0;
+        let current_task_id = self.current_task().id;
+        loop {
+            if let Some(ec) = self.finish_tasks.remove(&task_id) {
+                exit_code = ec;
+                break;
+            }
+
+            self.finish_waiter.insert(task_id, current_task_id);
+            self.sleep(current_task_id).expect("failed to sleep a task");
+        }
+
+        exit_code
     }
 
     fn current_running_task_ids(&self) -> &VecDeque<TaskID> {
