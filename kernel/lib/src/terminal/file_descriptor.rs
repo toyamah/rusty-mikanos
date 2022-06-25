@@ -1,11 +1,22 @@
+use crate::io::FileDescriptor;
 use crate::keyboard::{is_control_key_inputted, KEY_D};
 use crate::message::MessageType;
 use crate::str_trimming_nul;
 use crate::task::global::task_manager;
 use crate::task::TaskID;
 use crate::terminal::lib::get_terminal_mut_by;
+use alloc::rc::Rc;
+use alloc::string::String;
 use core::arch::asm;
+use core::cell::RefCell;
 use core::fmt::Write;
+
+pub(super) struct TerminalDescriptor {
+    pub(super) command_line: String,
+    pub(super) exit_after_command: bool,
+    pub(super) show_window: bool,
+    pub(super) files: [Rc<RefCell<FileDescriptor>>; 3],
+}
 
 pub(crate) struct TerminalFileDescriptor {
     terminal_id: TaskID,

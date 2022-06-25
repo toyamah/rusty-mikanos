@@ -23,12 +23,13 @@ use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::task::global::task_manager;
 use crate::task::{Task, TaskID};
-use crate::terminal::file_descriptor::TerminalFileDescriptor;
+use crate::terminal::file_descriptor::{TerminalDescriptor, TerminalFileDescriptor};
 use crate::terminal::history::{CommandHistory, Direction};
 use crate::timer::global::timer_manager;
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{make_error, str_trimming_nul_unchecked, Window};
+use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
@@ -58,25 +59,26 @@ pub(super) fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {
     unsafe { APP_LOADS.insert(e as *const _ as usize, app_load) };
 }
 
-pub fn task_terminal(task_id: u64, command: usize) {
-    let command = {
-        let ptr = command as *const usize as *const c_char;
+pub fn task_terminal(task_id: u64, data: usize) {
+    let td = {
+        let ptr = data as *mut usize as *mut TerminalDescriptor;
         if ptr.is_null() {
-            "".to_string()
+            None
         } else {
-            // use CString to free memory
-            let c_string = unsafe { CString::from_raw(ptr as *mut c_char) };
-            String::from_utf8(c_string.into_bytes()).unwrap()
+            let b = unsafe { Box::from_raw(data as *mut TerminalDescriptor) };
+            Some(*b)
         }
     };
-    let show_window = command.is_empty();
+    let term_desc = td.as_ref();
+    let command = term_desc.map(|td| td.command_line.as_str()).unwrap_or("");
+    let show_window = term_desc.is_none();
 
     unsafe { asm!("cli") };
     let task_id = TaskID::new(task_id);
     let current_task_id = task_manager().current_task().id();
     {
         // Initialize Terminal
-        let mut terminal = Terminal::new(task_id);
+        let mut terminal = Terminal::new(task_id, term_desc);
         terminal.initialize(
             show_window,
             layer_manager(),
@@ -210,20 +212,23 @@ pub(crate) struct Terminal {
     last_exit_code: i32,
 }
 
-/// Some functions depend on global functions although Terminal is not in a global module.
 impl Terminal {
-    fn new(task_id: TaskID) -> Terminal {
-        let files = [
-            Rc::new(RefCell::new(FileDescriptor::Terminal(
-                TerminalFileDescriptor::new(task_id),
-            ))),
-            Rc::new(RefCell::new(FileDescriptor::Terminal(
-                TerminalFileDescriptor::new(task_id),
-            ))),
-            Rc::new(RefCell::new(FileDescriptor::Terminal(
-                TerminalFileDescriptor::new(task_id),
-            ))),
-        ];
+    fn new(task_id: TaskID, terminal_desc: Option<&TerminalDescriptor>) -> Terminal {
+        let files = if let Some(td) = terminal_desc {
+            td.files.clone()
+        } else {
+            [
+                Rc::new(RefCell::new(FileDescriptor::Terminal(
+                    TerminalFileDescriptor::new(task_id),
+                ))),
+                Rc::new(RefCell::new(FileDescriptor::Terminal(
+                    TerminalFileDescriptor::new(task_id),
+                ))),
+                Rc::new(RefCell::new(FileDescriptor::Terminal(
+                    TerminalFileDescriptor::new(task_id),
+                ))),
+            ]
+        };
 
         Self {
             task_id,
@@ -439,10 +444,16 @@ impl Terminal {
             "cat" => self.execute_cat(&argv),
             "noterm" => {
                 if let Some(&first_arg) = argv.get(1) {
-                    let c = CString::_new(first_arg.as_bytes().to_vec()).unwrap();
+                    let term_dec = TerminalDescriptor {
+                        command_line: first_arg.to_string(),
+                        exit_after_command: true,
+                        show_window: false,
+                        files: self.files.clone(),
+                    };
+                    let b = Box::new(term_dec);
                     let task_id = task_manager()
                         .new_task()
-                        .init_context(task_terminal, c.into_raw() as u64, get_cr3)
+                        .init_context(task_terminal, Box::into_raw(b) as u64, get_cr3)
                         .id();
                     task_manager().wake_up(task_id).unwrap();
                 }
