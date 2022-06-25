@@ -78,3 +78,28 @@ impl TerminalFileDescriptor {
         0
     }
 }
+
+pub(crate) struct PipeDescriptor {
+    task_id: TaskID,
+    data: [u8; 16],
+    len: usize,
+    closed: bool,
+}
+
+impl PipeDescriptor {
+    pub fn read(&mut self, buf: &mut [u8]) -> usize {
+        todo!()
+    }
+
+    pub fn write(&mut self, buf: &[u8]) -> usize {
+        todo!()
+    }
+
+    pub fn load(&mut self, _buf: &mut [u8], _offset: usize) -> usize {
+        0
+    }
+
+    pub fn size(&self) -> usize {
+        0
+    }
+}
