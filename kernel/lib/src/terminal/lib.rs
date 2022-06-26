@@ -442,23 +442,7 @@ impl Terminal {
             }
             "ls" => self.execute_ls(&argv),
             "cat" => self.execute_cat(&argv),
-            "noterm" => {
-                if let Some(&first_arg) = argv.get(1) {
-                    let term_dec = TerminalDescriptor {
-                        command_line: first_arg.to_string(),
-                        exit_after_command: true,
-                        show_window: false,
-                        files: self.files.clone(),
-                    };
-                    let b = Box::new(term_dec);
-                    let task_id = task_manager()
-                        .new_task()
-                        .init_context(task_terminal, Box::into_raw(b) as u64, get_cr3)
-                        .id();
-                    task_manager().wake_up(task_id).unwrap();
-                }
-                0
-            }
+            "noterm" => self.exec_noterm(&argv),
             "memstat" => self.execute_memstat(),
             _ => {
                 let root_cluster = boot_volume_image().get_root_cluster();
@@ -793,6 +777,27 @@ impl Terminal {
         )
         .unwrap();
         1
+    }
+
+    fn exec_noterm(&mut self, first_arg: &[&str]) -> i32 {
+        let first_arg = match first_arg.get(1) {
+            None => return 0,
+            Some(&f) => f,
+        };
+
+        let term_dec = TerminalDescriptor {
+            command_line: first_arg.to_string(),
+            exit_after_command: true,
+            show_window: false,
+            files: self.files.clone(),
+        };
+        let b = Box::new(term_dec);
+        let task_id = task_manager()
+            .new_task()
+            .init_context(task_terminal, Box::into_raw(b) as u64, get_cr3)
+            .id();
+        task_manager().wake_up(task_id).unwrap();
+        0
     }
 
     fn stdout(&mut self) -> RefMut<'_, FileDescriptor> {
