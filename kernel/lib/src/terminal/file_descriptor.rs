@@ -1,6 +1,7 @@
 use crate::io::FileDescriptor;
 use crate::keyboard::{is_control_key_inputted, KEY_D};
-use crate::message::MessageType;
+use crate::libc::memmove;
+use crate::message::{Message, MessageType, PipeMessage};
 use crate::str_trimming_nul;
 use crate::task::global::task_manager;
 use crate::task::TaskID;
@@ -9,7 +10,9 @@ use alloc::rc::Rc;
 use alloc::string::String;
 use core::arch::asm;
 use core::cell::RefCell;
+use core::ffi::c_void;
 use core::fmt::Write;
+use core::{cmp, mem};
 
 pub(super) struct TerminalDescriptor {
     pub(super) command_line: String,
@@ -98,12 +101,76 @@ pub(crate) struct PipeDescriptor {
 }
 
 impl PipeDescriptor {
+    pub fn new(task_id: TaskID) -> Self {
+        Self {
+            task_id,
+            data: [0; 16],
+            len: 0,
+            closed: false,
+        }
+    }
+
     pub fn read(&mut self, buf: &mut [u8]) -> usize {
-        todo!()
+        if self.len > 0 {
+            let copy_bytes = cmp::min(self.len, buf.len());
+            buf[..copy_bytes].copy_from_slice(&self.data[..copy_bytes]);
+            self.len -= copy_bytes;
+            unsafe {
+                memmove(
+                    self.data.as_mut_ptr() as *mut c_void,
+                    self.data.as_ptr().add(copy_bytes) as *const c_void,
+                    self.len,
+                )
+            };
+            return copy_bytes;
+        }
+
+        if self.closed {
+            return 0;
+        }
+
+        let pipe_message = loop {
+            unsafe { asm!("cli") };
+            let message = match task_manager()
+                .get_task_mut(self.task_id)
+                .and_then(|t| t.receive_message())
+            {
+                None => {
+                    task_manager().sleep(self.task_id).unwrap();
+                    continue;
+                }
+                Some(m) => m,
+            };
+            unsafe { asm!("sti") };
+
+            let pipe_message = match message.m_type {
+                MessageType::Pipe(p) => p,
+                _ => continue,
+            };
+            break pipe_message;
+        };
+
+        let copy_bytes = cmp::min(pipe_message.len, self.len);
+        buf[..copy_bytes].copy_from_slice(&pipe_message.data[..copy_bytes]);
+        self.len = pipe_message.len - copy_bytes;
+        self.data[..self.len].copy_from_slice(&pipe_message.data[copy_bytes..]);
+        copy_bytes
     }
 
     pub fn write(&mut self, buf: &[u8]) -> usize {
-        todo!()
+        let mut sent_bytes = 0;
+        while sent_bytes < buf.len() {
+            let mut data = [0_u8; 16];
+            let len = cmp::min(buf.len() - sent_bytes, mem::size_of_val(&data));
+            data[..len].copy_from_slice(&buf[sent_bytes..len]);
+            sent_bytes += len;
+
+            let message = Message::new(MessageType::Pipe(PipeMessage { data, len }));
+            unsafe { asm!("cli") };
+            task_manager().send_message(self.task_id, message).unwrap();
+            unsafe { asm!("sti") };
+        }
+        buf.len()
     }
 
     pub fn load(&mut self, _buf: &mut [u8], _offset: usize) -> usize {
