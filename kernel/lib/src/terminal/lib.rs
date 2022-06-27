@@ -416,13 +416,7 @@ impl Terminal {
         }
 
         let pipe_fd_for_write = if let Some(pipe_dest_index) = find_pipe_dest(&argv) {
-            let sub_command = argv[pipe_dest_index..]
-                .iter()
-                .fold("".to_string(), |mut acc, &s| {
-                    acc.push_str(s);
-                    acc.push(' ');
-                    acc
-                });
+            let sub_command = join_to_string(' ', &argv[pipe_dest_index..]);
             argv = argv[..pipe_dest_index - 1].to_vec();
 
             let sub_task = task_manager().new_task();
@@ -435,8 +429,8 @@ impl Terminal {
                 show_window: false,
                 files: [
                     Rc::new(RefCell::new(FileDescriptor::Pipe(pipe_fd))),
-                    self.files[1].clone(),
-                    self.files[2].clone(),
+                    self.files[STD_OUT].clone(),
+                    self.files[STD_ERR].clone(),
                 ],
             };
             let b = Box::new(term_desc);
@@ -971,6 +965,14 @@ fn find_pipe_dest(argv: &[&str]) -> Option<usize> {
         None => None,
         Some(i) => argv.get(i + 1).map(|_| i + 1),
     }
+}
+
+fn join_to_string(separator: char, strs: &[&str]) -> String {
+    strs.iter().fold("".to_string(), |mut acc, &s| {
+        acc.push_str(s);
+        acc.push(separator);
+        acc
+    })
 }
 
 fn new_c_chars_vec(strs: &[&str]) -> Vec<*const c_char> {
