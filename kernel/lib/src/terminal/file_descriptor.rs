@@ -175,7 +175,6 @@ impl PipeDescriptor {
         buf[..copy_bytes].copy_from_slice(&pipe_message.data[..copy_bytes]);
         self.len = pipe_message.len - copy_bytes;
         if self.len != 0 {
-            let src = &pipe_message.data[copy_bytes..self.len];
             self.data[..self.len].copy_from_slice(&pipe_message.data[copy_bytes..self.len]);
         }
         copy_bytes

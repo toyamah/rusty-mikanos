@@ -420,7 +420,7 @@ impl Terminal {
                 .iter()
                 .fold("".to_string(), |mut acc, &s| {
                     acc.push_str(s);
-                    acc.push_str(" ");
+                    acc.push(' ');
                     acc
                 });
             argv = argv[..pipe_dest_index - 1].to_vec();
@@ -968,7 +968,7 @@ fn extract_redirect<'a>(
 
 fn find_pipe_dest(argv: &[&str]) -> Option<usize> {
     match argv.iter().position(|&s| s == "|") {
-        None => return None,
+        None => None,
         Some(i) => argv.get(i + 1).map(|_| i + 1),
     }
 }

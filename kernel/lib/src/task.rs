@@ -429,19 +429,15 @@ impl TaskManager {
     }
 
     pub fn wait_finish(&mut self, task_id: TaskID) -> i32 {
-        let mut exit_code = 0;
         let current_task_id = self.current_task().id;
         loop {
             if let Some(ec) = self.finish_tasks.remove(&task_id) {
-                exit_code = ec;
-                break;
+                break ec;
             }
 
             self.finish_waiter.insert(task_id, current_task_id);
             self.sleep(current_task_id).expect("failed to sleep a task");
         }
-
-        exit_code
     }
 
     fn current_running_task_ids(&self) -> &VecDeque<TaskID> {
