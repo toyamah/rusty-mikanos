@@ -23,7 +23,9 @@ use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::task::global::task_manager;
 use crate::task::{Task, TaskID};
-use crate::terminal::file_descriptor::{TerminalDescriptor, TerminalFileDescriptor};
+use crate::terminal::file_descriptor::{
+    PipeDescriptor, TerminalDescriptor, TerminalFileDescriptor,
+};
 use crate::terminal::history::{CommandHistory, Direction};
 use crate::timer::global::timer_manager;
 use crate::timer::{Timer, TIMER_FREQ};
@@ -110,6 +112,14 @@ pub fn task_terminal(task_id: u64, data: usize) {
             terminal().input_key(0, 0, c);
         }
         terminal().input_key(0, 0, '\n');
+    }
+
+    if let Some(fd) = term_desc {
+        if fd.exit_after_command {
+            unsafe { asm!("cli") };
+            task_manager().finish(terminal().last_exit_code);
+            unsafe { asm!("sti") };
+        }
     }
 
     let add_blink_timer =
@@ -405,6 +415,42 @@ impl Terminal {
             argv = argv[..redirect_dest_index - 1].to_vec();
         }
 
+        let pipe_fd_for_write = if let Some(pipe_dest_index) = find_pipe_dest(&argv) {
+            let sub_command = argv[pipe_dest_index..]
+                .iter()
+                .fold("".to_string(), |mut acc, &s| {
+                    acc.push_str(s);
+                    acc.push_str(" ");
+                    acc
+                });
+            argv = argv[..pipe_dest_index - 1].to_vec();
+
+            let sub_task = task_manager().new_task();
+            let pipe_fd = PipeDescriptor::new(sub_task.id());
+            let pipe_fd_for_write = pipe_fd.copy_for_write();
+
+            let term_desc = TerminalDescriptor {
+                command_line: sub_command,
+                exit_after_command: true,
+                show_window: false,
+                files: [
+                    Rc::new(RefCell::new(FileDescriptor::Pipe(pipe_fd))),
+                    self.files[1].clone(),
+                    self.files[2].clone(),
+                ],
+            };
+            let b = Box::new(term_desc);
+            sub_task.init_context(task_terminal, Box::into_raw(b) as u64, get_cr3);
+            task_manager().wake_up(sub_task.id()).unwrap();
+
+            self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Pipe(
+                pipe_fd_for_write.copy_for_write(),
+            )));
+            Some(pipe_fd_for_write)
+        } else {
+            None
+        };
+
         let command = match argv.first() {
             None => return, // if enters a line that starts with '>' such as '> foo'
             Some(&c) => c,
@@ -468,7 +514,16 @@ impl Terminal {
             }
         };
 
-        self.last_exit_code = exit_code;
+        if let Some(mut fd) = pipe_fd_for_write {
+            fd.finish_write();
+            unsafe { asm!("cli") };
+            let ec = task_manager().wait_finish(fd.task_id);
+            unsafe { asm!("sti") };
+            self.last_exit_code = ec;
+        } else {
+            self.last_exit_code = exit_code;
+        }
+
         self.files[STD_OUT] = original_stdout;
     }
 
@@ -908,6 +963,13 @@ fn extract_redirect<'a>(
         }
     } else {
         create_file(redirect_dest).map_err(|e| format!("failed to create a redirect file: {}", e))
+    }
+}
+
+fn find_pipe_dest(argv: &[&str]) -> Option<usize> {
+    match argv.iter().position(|&s| s == "|") {
+        None => return None,
+        Some(i) => argv.get(i + 1).map(|_| i + 1),
     }
 }
 

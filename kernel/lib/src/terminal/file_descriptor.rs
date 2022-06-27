@@ -94,10 +94,11 @@ impl TerminalFileDescriptor {
 }
 
 pub(crate) struct PipeDescriptor {
-    task_id: TaskID,
+    pub(super) task_id: TaskID,
     data: [u8; 16],
     len: usize,
     closed: bool,
+    write_only: bool,
 }
 
 impl PipeDescriptor {
@@ -107,10 +108,25 @@ impl PipeDescriptor {
             data: [0; 16],
             len: 0,
             closed: false,
+            write_only: false,
+        }
+    }
+
+    pub fn copy_for_write(&self) -> Self {
+        Self {
+            task_id: self.task_id,
+            data: [0; 16],
+            len: 0,
+            closed: self.closed,
+            write_only: true,
         }
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> usize {
+        if self.write_only {
+            panic!("this descriptor is not allowed to read");
+        }
+
         if self.len > 0 {
             let copy_bytes = cmp::min(self.len, buf.len());
             buf[..copy_bytes].copy_from_slice(&self.data[..copy_bytes]);
@@ -150,10 +166,18 @@ impl PipeDescriptor {
             break pipe_message;
         };
 
-        let copy_bytes = cmp::min(pipe_message.len, self.len);
+        if pipe_message.len == 0 {
+            return 0;
+        }
+
+        let copy_bytes = cmp::min(pipe_message.len, buf.len());
+
         buf[..copy_bytes].copy_from_slice(&pipe_message.data[..copy_bytes]);
         self.len = pipe_message.len - copy_bytes;
-        self.data[..self.len].copy_from_slice(&pipe_message.data[copy_bytes..]);
+        if self.len != 0 {
+            let src = &pipe_message.data[copy_bytes..self.len];
+            self.data[..self.len].copy_from_slice(&pipe_message.data[copy_bytes..self.len]);
+        }
         copy_bytes
     }
 
@@ -167,7 +191,7 @@ impl PipeDescriptor {
 
             let message = Message::new(MessageType::Pipe(PipeMessage { data, len }));
             unsafe { asm!("cli") };
-            task_manager().send_message(self.task_id, message).unwrap();
+            let _ = task_manager().send_message(self.task_id, message);
             unsafe { asm!("sti") };
         }
         buf.len()
@@ -179,5 +203,15 @@ impl PipeDescriptor {
 
     pub fn size(&self) -> usize {
         0
+    }
+
+    pub fn finish_write(&mut self) {
+        let message = Message::new(MessageType::Pipe(PipeMessage {
+            data: [0; 16],
+            len: 0,
+        }));
+        unsafe { asm!("cli") };
+        let _ = task_manager().send_message(self.task_id, message);
+        unsafe { asm!("sti") };
     }
 }
