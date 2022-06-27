@@ -3,7 +3,7 @@ use crate::io::FileDescriptor;
 use crate::make_error;
 use crate::message::Message;
 use crate::segment::{KERNEL_CS, KERNEL_SS};
-use alloc::collections::VecDeque;
+use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -63,10 +63,6 @@ pub struct TaskID(u64);
 impl TaskID {
     pub fn new(v: u64) -> Self {
         Self(v)
-    }
-
-    fn as_usize(&self) -> usize {
-        self.0 as usize
     }
 }
 
@@ -222,12 +218,14 @@ impl Task {
 }
 
 pub struct TaskManager {
-    tasks: Vec<Task>,
+    tasks: BTreeMap<TaskID, Task>,
     next_id: TaskID,
     main_task_id: TaskID,
     running_task_ids: [VecDeque<TaskID>; PriorityLevel::MAX.as_usize() + 1],
     current_level: PriorityLevel,
     level_changed: bool,
+    finish_tasks: BTreeMap<TaskID, i32>,
+    finish_waiter: BTreeMap<TaskID, TaskID>,
     switch_context: unsafe fn(next_ctx: &TaskContext, current_ctx: &TaskContext),
     restore_context: unsafe fn(task_ctx: &TaskContext),
 }
@@ -239,12 +237,14 @@ impl TaskManager {
         restore_context: unsafe fn(task_ctx: &TaskContext),
     ) -> TaskManager {
         Self {
-            tasks: vec![],
+            tasks: BTreeMap::new(),
             next_id: TaskID(0),
             main_task_id: TaskID(0),
             running_task_ids: Default::default(),
             current_level: PriorityLevel::MAX,
             level_changed: false,
+            finish_tasks: BTreeMap::new(),
+            finish_waiter: BTreeMap::new(),
             switch_context,
             restore_context,
         }
@@ -268,18 +268,20 @@ impl TaskManager {
     }
 
     pub fn new_task(&mut self) -> &mut Task {
-        self.tasks
-            .push(Task::new(self.next_id, PriorityLevel::default()));
+        self.tasks.insert(
+            self.next_id,
+            Task::new(self.next_id, PriorityLevel::default()),
+        );
         self.next_id += TaskID(1);
-        self.tasks.iter_mut().last().unwrap()
+        self.tasks.iter_mut().last().unwrap().1
     }
 
     pub fn get_task(&self, task_id: TaskID) -> Option<&Task> {
-        self.tasks.get(task_id.as_usize())
+        self.tasks.get(&task_id)
     }
 
     pub fn get_task_mut(&mut self, task_id: TaskID) -> Option<&mut Task> {
-        self.tasks.get_mut(task_id.as_usize())
+        self.tasks.get_mut(&task_id)
     }
 
     pub fn current_task(&self) -> &Task {
@@ -287,30 +289,26 @@ impl TaskManager {
             .current_running_task_ids()
             .front()
             .expect("no such task id");
-        let task_id = *task_id;
-        self.tasks.get(task_id.as_usize()).expect("no such task")
+        self.tasks.get(task_id).expect("no such task")
     }
 
     pub fn current_task_mut(&mut self) -> &mut Task {
-        let task_id = self
+        let task_id = *self
             .current_running_task_ids_mut()
             .front()
             .expect("no such task id");
-        let task_id = *task_id;
-        self.tasks
-            .get_mut(task_id.as_usize())
-            .expect("no such task")
+        self.tasks.get_mut(&task_id).expect("no such task")
     }
 
     pub fn main_task(&self) -> &Task {
         self.tasks
-            .get(self.main_task_id.as_usize())
+            .get(&self.main_task_id)
             .expect("tasks do not contain main task")
     }
 
     pub fn main_task_mut(&mut self) -> &mut Task {
         self.tasks
-            .get_mut(self.main_task_id.as_usize())
+            .get_mut(&self.main_task_id)
             .expect("tasks do not contain main task")
     }
 
@@ -325,7 +323,7 @@ impl TaskManager {
     }
 
     pub fn sleep(&mut self, task_id: TaskID) -> Result<(), Error> {
-        let task = self.tasks.get_mut(task_id.as_usize());
+        let task = self.tasks.get_mut(&task_id);
         if task.is_none() {
             return Err(make_error!(Code::NoSuchTask));
         }
@@ -339,7 +337,7 @@ impl TaskManager {
         let is_target_task_running = self
             .current_running_task_ids_mut()
             .front()
-            .map(|&index| index == task_id)
+            .map(|&id| id == task_id)
             .unwrap_or(false);
         if is_target_task_running {
             let current_task_id = self.rotate_current_run_queue(true);
@@ -356,19 +354,21 @@ impl TaskManager {
     }
 
     pub fn wake_up(&mut self, task_id: TaskID) -> Result<(), Error> {
-        let index = task_id.as_usize();
-        if self.tasks.get(index).is_none() {
+        if self.tasks.get(&task_id).is_none() {
             return Err(make_error!(Code::NoSuchTask));
         }
 
-        let level = self.tasks[index].level;
+        let level = self.tasks[&task_id].level;
 
-        if self.tasks[index].is_running {
+        if self.tasks[&task_id].is_running {
             self.change_level_running(task_id, level);
             return Ok(());
         }
 
-        self.tasks[index].set_level(level).set_is_running(true);
+        self.get_task_mut(task_id)
+            .unwrap()
+            .set_level(level)
+            .set_is_running(true);
         self.running_task_ids_mut(level).push_back(task_id);
         if level > self.current_level {
             self.level_changed = true;
@@ -377,12 +377,11 @@ impl TaskManager {
     }
 
     pub fn send_message(&mut self, task_id: TaskID, message: Message) -> Result<(), Error> {
-        let index = task_id.as_usize();
-        if self.tasks.get(index).is_none() {
+        if self.tasks.get(&task_id).is_none() {
             return Err(make_error!(Code::NoSuchTask));
         }
 
-        self.tasks[index].send_message(message);
+        self.get_task_mut(task_id).unwrap().send_message(message);
         self.wake_up(task_id).unwrap();
         Ok(())
     }
@@ -415,6 +414,32 @@ impl TaskManager {
         current_task_id
     }
 
+    pub fn finish(&mut self, exit_code: i32) {
+        let current_task_id = self.rotate_current_run_queue(true);
+
+        self.tasks.remove(&current_task_id);
+        self.finish_tasks.insert(current_task_id, exit_code);
+
+        if let Some(waiter_task_id) = self.finish_waiter.remove(&current_task_id) {
+            self.wake_up(waiter_task_id)
+                .expect("failed to wake up a task");
+        }
+
+        unsafe { (self.restore_context)(&self.current_task().context) }
+    }
+
+    pub fn wait_finish(&mut self, task_id: TaskID) -> i32 {
+        let current_task_id = self.current_task().id;
+        loop {
+            if let Some(ec) = self.finish_tasks.remove(&task_id) {
+                break ec;
+            }
+
+            self.finish_waiter.insert(task_id, current_task_id);
+            self.sleep(current_task_id).expect("failed to sleep a task");
+        }
+    }
+
     fn current_running_task_ids(&self) -> &VecDeque<TaskID> {
         self.running_task_ids(self.current_level)
     }
@@ -432,7 +457,7 @@ impl TaskManager {
     }
 
     fn change_level_running(&mut self, task_id: TaskID, level: PriorityLevel) {
-        let task_level = self.tasks.get(task_id.as_usize()).unwrap().level;
+        let task_level = self.tasks.get(&task_id).unwrap().level;
         if level == task_level {
             return;
         }
@@ -445,7 +470,7 @@ impl TaskManager {
             // change level of other task
             erase_task_id(self.running_task_ids_mut(task_level), task_id);
             self.running_task_ids_mut(level).push_back(task_id);
-            self.tasks[task_id.as_usize()].level = level;
+            self.get_task_mut(task_id).unwrap().level = level;
 
             if level > self.current_level {
                 self.level_changed = true;
@@ -456,7 +481,7 @@ impl TaskManager {
         // change level myself
         self.current_running_task_ids_mut().pop_front().unwrap();
         self.running_task_ids_mut(level).push_front(task_id);
-        self.tasks[task_id.as_usize()].level = level;
+        self.get_task_mut(task_id).unwrap().level = level;
         self.current_level = level;
         if level < self.current_level {
             self.level_changed = true;
@@ -601,7 +626,7 @@ mod tests {
         );
 
         // the task should be changed to sleep
-        assert_eq!(tm.tasks[tm.main_task_id.as_usize()].is_running, false);
+        assert_eq!(tm.tasks[&tm.main_task_id].is_running, false);
     }
 
     #[test]
@@ -632,7 +657,7 @@ mod tests {
         );
 
         // the task should be changed to sleep
-        assert_eq!(tm.tasks[tm.main_task_id.as_usize()].is_running, false);
+        assert_eq!(tm.tasks[&tm.main_task_id].is_running, false);
     }
 
     #[test]
@@ -664,10 +689,10 @@ mod tests {
         );
 
         // the running task should still be running
-        assert_eq!(tm.tasks[tm.main_task_id.as_usize()].is_running, true);
+        assert_eq!(tm.tasks[&tm.main_task_id].is_running, true);
 
         // the specified task should be sleep
-        assert_eq!(tm.tasks[t1_id.as_usize()].is_running, false);
+        assert_eq!(tm.tasks[&t1_id].is_running, false);
     }
 
     #[test]
@@ -700,9 +725,9 @@ mod tests {
         );
 
         // the running task should still be running
-        assert_eq!(tm.tasks[tm.main_task_id.as_usize()].is_running, true);
+        assert_eq!(tm.tasks[&tm.main_task_id].is_running, true);
 
         // the task specified by the arg should be sleep
-        assert_eq!(tm.tasks[t1_id.as_usize()].is_running, false);
+        assert_eq!(tm.tasks[&t1_id].is_running, false);
     }
 }

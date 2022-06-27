@@ -216,9 +216,8 @@ pub extern "C" fn KernelMainNewStack(
             MessageType::Layer(l_msg) => {
                 layer_manager().process_message(&l_msg, screen_frame_buffer());
                 unsafe { asm!("cli") };
-                task_manager()
-                    .send_message(l_msg.src_task_id, Message::new(MessageType::LayerFinish))
-                    .unwrap();
+                let _ = task_manager()
+                    .send_message(l_msg.src_task_id, Message::new(MessageType::LayerFinish));
                 unsafe { asm!("sti") };
             }
             _ => {}

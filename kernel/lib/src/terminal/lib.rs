@@ -23,12 +23,15 @@ use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::task::global::task_manager;
 use crate::task::{Task, TaskID};
-use crate::terminal::file_descriptor::TerminalFileDescriptor;
+use crate::terminal::file_descriptor::{
+    PipeDescriptor, TerminalDescriptor, TerminalFileDescriptor,
+};
 use crate::terminal::history::{CommandHistory, Direction};
 use crate::timer::global::timer_manager;
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{make_error, str_trimming_nul_unchecked, Window};
+use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
@@ -58,25 +61,26 @@ pub(super) fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {
     unsafe { APP_LOADS.insert(e as *const _ as usize, app_load) };
 }
 
-pub fn task_terminal(task_id: u64, command: usize) {
-    let command = {
-        let ptr = command as *const usize as *const c_char;
+pub fn task_terminal(task_id: u64, data: usize) {
+    let td = {
+        let ptr = data as *mut usize as *mut TerminalDescriptor;
         if ptr.is_null() {
-            "".to_string()
+            None
         } else {
-            // use CString to free memory
-            let c_string = unsafe { CString::from_raw(ptr as *mut c_char) };
-            String::from_utf8(c_string.into_bytes()).unwrap()
+            let b = unsafe { Box::from_raw(data as *mut TerminalDescriptor) };
+            Some(*b)
         }
     };
-    let show_window = command.is_empty();
+    let term_desc = td.as_ref();
+    let command = term_desc.map(|td| td.command_line.as_str()).unwrap_or("");
+    let show_window = term_desc.is_none();
 
     unsafe { asm!("cli") };
     let task_id = TaskID::new(task_id);
     let current_task_id = task_manager().current_task().id();
     {
         // Initialize Terminal
-        let mut terminal = Terminal::new(task_id);
+        let mut terminal = Terminal::new(task_id, term_desc);
         terminal.initialize(
             show_window,
             layer_manager(),
@@ -108,6 +112,14 @@ pub fn task_terminal(task_id: u64, command: usize) {
             terminal().input_key(0, 0, c);
         }
         terminal().input_key(0, 0, '\n');
+    }
+
+    if let Some(fd) = term_desc {
+        if fd.exit_after_command {
+            unsafe { asm!("cli") };
+            task_manager().finish(terminal().last_exit_code);
+            unsafe { asm!("sti") };
+        }
     }
 
     let add_blink_timer =
@@ -210,20 +222,23 @@ pub(crate) struct Terminal {
     last_exit_code: i32,
 }
 
-/// Some functions depend on global functions although Terminal is not in a global module.
 impl Terminal {
-    fn new(task_id: TaskID) -> Terminal {
-        let files = [
-            Rc::new(RefCell::new(FileDescriptor::Terminal(
-                TerminalFileDescriptor::new(task_id),
-            ))),
-            Rc::new(RefCell::new(FileDescriptor::Terminal(
-                TerminalFileDescriptor::new(task_id),
-            ))),
-            Rc::new(RefCell::new(FileDescriptor::Terminal(
-                TerminalFileDescriptor::new(task_id),
-            ))),
-        ];
+    fn new(task_id: TaskID, terminal_desc: Option<&TerminalDescriptor>) -> Terminal {
+        let files = if let Some(td) = terminal_desc {
+            td.files.clone()
+        } else {
+            [
+                Rc::new(RefCell::new(FileDescriptor::Terminal(
+                    TerminalFileDescriptor::new(task_id),
+                ))),
+                Rc::new(RefCell::new(FileDescriptor::Terminal(
+                    TerminalFileDescriptor::new(task_id),
+                ))),
+                Rc::new(RefCell::new(FileDescriptor::Terminal(
+                    TerminalFileDescriptor::new(task_id),
+                ))),
+            ]
+        };
 
         Self {
             task_id,
@@ -400,6 +415,36 @@ impl Terminal {
             argv = argv[..redirect_dest_index - 1].to_vec();
         }
 
+        let pipe_fd_for_write = if let Some(pipe_dest_index) = find_pipe_dest(&argv) {
+            let sub_command = join_to_string(' ', &argv[pipe_dest_index..]);
+            argv = argv[..pipe_dest_index - 1].to_vec();
+
+            let sub_task = task_manager().new_task();
+            let pipe_fd = PipeDescriptor::new(sub_task.id());
+            let pipe_fd_for_write = pipe_fd.copy_for_write();
+
+            let term_desc = TerminalDescriptor {
+                command_line: sub_command,
+                exit_after_command: true,
+                show_window: false,
+                files: [
+                    Rc::new(RefCell::new(FileDescriptor::Pipe(pipe_fd))),
+                    self.files[STD_OUT].clone(),
+                    self.files[STD_ERR].clone(),
+                ],
+            };
+            let b = Box::new(term_desc);
+            sub_task.init_context(task_terminal, Box::into_raw(b) as u64, get_cr3);
+            task_manager().wake_up(sub_task.id()).unwrap();
+
+            self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Pipe(
+                pipe_fd_for_write.copy_for_write(),
+            )));
+            Some(pipe_fd_for_write)
+        } else {
+            None
+        };
+
         let command = match argv.first() {
             None => return, // if enters a line that starts with '>' such as '> foo'
             Some(&c) => c,
@@ -437,17 +482,7 @@ impl Terminal {
             }
             "ls" => self.execute_ls(&argv),
             "cat" => self.execute_cat(&argv),
-            "noterm" => {
-                if let Some(&first_arg) = argv.get(1) {
-                    let c = CString::_new(first_arg.as_bytes().to_vec()).unwrap();
-                    let task_id = task_manager()
-                        .new_task()
-                        .init_context(task_terminal, c.into_raw() as u64, get_cr3)
-                        .id();
-                    task_manager().wake_up(task_id).unwrap();
-                }
-                0
-            }
+            "noterm" => self.exec_noterm(&argv),
             "memstat" => self.execute_memstat(),
             _ => {
                 let root_cluster = boot_volume_image().get_root_cluster();
@@ -473,7 +508,16 @@ impl Terminal {
             }
         };
 
-        self.last_exit_code = exit_code;
+        if let Some(mut fd) = pipe_fd_for_write {
+            fd.finish_write();
+            unsafe { asm!("cli") };
+            let ec = task_manager().wait_finish(fd.task_id);
+            unsafe { asm!("sti") };
+            self.last_exit_code = ec;
+        } else {
+            self.last_exit_code = exit_code;
+        }
+
         self.files[STD_OUT] = original_stdout;
     }
 
@@ -784,6 +828,27 @@ impl Terminal {
         1
     }
 
+    fn exec_noterm(&mut self, first_arg: &[&str]) -> i32 {
+        let first_arg = match first_arg.get(1) {
+            None => return 0,
+            Some(&f) => f,
+        };
+
+        let term_dec = TerminalDescriptor {
+            command_line: first_arg.to_string(),
+            exit_after_command: true,
+            show_window: false,
+            files: self.files.clone(),
+        };
+        let b = Box::new(term_dec);
+        let task_id = task_manager()
+            .new_task()
+            .init_context(task_terminal, Box::into_raw(b) as u64, get_cr3)
+            .id();
+        task_manager().wake_up(task_id).unwrap();
+        0
+    }
+
     fn stdout(&mut self) -> RefMut<'_, FileDescriptor> {
         self.files[STD_OUT].borrow_mut()
     }
@@ -893,6 +958,21 @@ fn extract_redirect<'a>(
     } else {
         create_file(redirect_dest).map_err(|e| format!("failed to create a redirect file: {}", e))
     }
+}
+
+fn find_pipe_dest(argv: &[&str]) -> Option<usize> {
+    match argv.iter().position(|&s| s == "|") {
+        None => None,
+        Some(i) => argv.get(i + 1).map(|_| i + 1),
+    }
+}
+
+fn join_to_string(separator: char, strs: &[&str]) -> String {
+    strs.iter().fold("".to_string(), |mut acc, &s| {
+        acc.push_str(s);
+        acc.push(separator);
+        acc
+    })
 }
 
 fn new_c_chars_vec(strs: &[&str]) -> Vec<*const c_char> {

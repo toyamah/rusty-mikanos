@@ -24,6 +24,9 @@ pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
     match args.get(1) {
         "3FE.D000" => grep(path, regex!(br".*3FE.D000.*")),
         "i.t" => grep(path, regex!(br".*i.t.*")),
+        "Conv" => grep(path, regex!(br".*Conv.*")),
+        "3E" => grep(path, regex!(br".*3E.*")),
+        "N" => grep(path, regex!(br".*N.*")),
         p => {
             println!("Unsupported pattern: {}", p);
             exit(1);
