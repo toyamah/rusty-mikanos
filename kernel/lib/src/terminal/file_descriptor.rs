@@ -1,6 +1,6 @@
 use crate::io::FileDescriptor;
 use crate::keyboard::{is_control_key_inputted, KEY_D};
-use crate::libc::memmove;
+use crate::libc::{memcpy, memmove};
 use crate::message::{Message, MessageType, PipeMessage};
 use crate::str_trimming_nul;
 use crate::task::global::task_manager;
@@ -185,7 +185,13 @@ impl PipeDescriptor {
         while sent_bytes < buf.len() {
             let mut data = [0_u8; 16];
             let len = cmp::min(buf.len() - sent_bytes, mem::size_of_val(&data));
-            data[..len].copy_from_slice(&buf[sent_bytes..len]);
+            unsafe {
+                memcpy(
+                    data.as_mut_ptr() as *mut c_void,
+                    buf.as_ptr().add(sent_bytes) as *const c_void,
+                    len,
+                );
+            }
             sent_bytes += len;
 
             let message = Message::new(MessageType::Pipe(PipeMessage { data, len }));
