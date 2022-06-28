@@ -15,6 +15,8 @@ extern "C" {
     pub(crate) fn fread(ptr: *mut c_void, size: usize, nobj: usize, stream: *mut FILE) -> usize;
     pub(crate) fn fwrite(ptr: *const c_void, size: usize, nobj: usize, stream: *mut FILE) -> usize;
     pub(crate) fn fileno(stream: *mut FILE) -> i32;
+    pub(crate) fn malloc(size: usize) -> *mut c_void;
+    pub(crate) fn free(p: *mut c_void);
 }
 
 #[no_mangle]

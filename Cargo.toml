@@ -20,5 +20,6 @@ members = [
     "apps/cp",
     "apps/dpage",
     "apps/mmap",
-    "apps/winjpn"
+    "apps/winjpn",
+    "apps/sort"
 ]

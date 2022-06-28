@@ -464,6 +464,13 @@ name = "shared_lib"
 version = "0.1.0"
 
 [[package]]
+name = "sort"
+version = "0.1.0"
+dependencies = [
+ "shared_lib",
+]
+
+[[package]]
 name = "stars"
 version = "0.1.0"
 dependencies = [
