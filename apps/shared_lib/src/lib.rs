@@ -1,4 +1,5 @@
 #![feature(format_args_nl)]
+#![feature(alloc_error_handler)]
 #![no_std]
 
 use crate::app_event::AppEvent;
@@ -12,6 +13,7 @@ use crate::syscall::{
 use core::ffi::c_void;
 use core::fmt;
 
+mod allocator;
 pub mod app_event;
 pub mod args;
 mod byte_buffer;
