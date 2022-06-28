@@ -1,3 +1,4 @@
+use crate::libc::{free, malloc};
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::c_void;
 
@@ -7,11 +8,6 @@ static ALLOCATOR: MemoryAllocator = MemoryAllocator;
 #[alloc_error_handler]
 fn alloc_error_handle(layout: Layout) -> ! {
     panic!("allocation error: {:?}", layout)
-}
-
-extern "C" {
-    pub fn malloc(size: usize) -> *mut c_void;
-    pub fn free<'a>(p: *mut c_void);
 }
 
 pub struct MemoryAllocator;
