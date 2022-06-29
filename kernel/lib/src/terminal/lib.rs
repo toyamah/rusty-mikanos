@@ -14,6 +14,7 @@ use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_f
 use crate::layer::{LayerID, LayerManager};
 use crate::libc::{memcpy, strcpy};
 use crate::memory_manager::global::memory_manager;
+use crate::message::MessageType::Layer;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
 use crate::paging::global::{copy_page_maps, free_page_map, reset_cr3};
 use crate::paging::{LinearAddress4Level, PageMapEntry};
@@ -703,6 +704,24 @@ impl Terminal {
         } else {
             self.scroll1()
         }
+    }
+
+    pub(super) fn redraw(&mut self) {
+        let size = match self.window_mut() {
+            None => return,
+            Some(w) => w.inner_size(),
+        };
+        let draw_area = Rectangle::new(TITLED_WINDOW_TOP_LEFT_MARGIN, size);
+
+        let msg = Message::new(Layer(LayerMessage {
+            layer_id: self.layer_id,
+            op: LayerOperation::DrawArea(draw_area),
+            src_task_id: self.task_id,
+        }));
+
+        unsafe { asm!("cli") };
+        let _ = task_manager().send_message(task_manager().main_task().id(), msg);
+        unsafe { asm!("sti") };
     }
 
     fn history_up_down(&mut self, direction: Direction) -> Rectangle<i32> {

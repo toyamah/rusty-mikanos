@@ -45,6 +45,21 @@ impl FileDescriptor {
             FileDescriptor::Pipe(fd) => fd.size(),
         }
     }
+
+    pub(crate) fn read_delim(&mut self, delim: u8, buf: &mut [u8]) -> usize {
+        let mut i = 0;
+        while i < buf.len() {
+            if self.read(&mut buf[i..i + 1]) == 0 {
+                break;
+            }
+            if buf[i] == delim {
+                i += 1;
+                break;
+            }
+        }
+        buf[i] = b'\0';
+        i
+    }
 }
 
 impl Write for FileDescriptor {
