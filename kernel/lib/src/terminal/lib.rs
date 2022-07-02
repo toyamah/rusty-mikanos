@@ -487,19 +487,12 @@ impl Terminal {
             "memstat" => self.execute_memstat(),
             _ => {
                 let root_cluster = boot_volume_image().get_root_cluster();
-                if let (Some(file_entry), post_slash) = find_file(command, root_cluster as u64) {
-                    if !file_entry.is_directory() && post_slash {
-                        let name_bytes = file_entry.formatted_name();
-                        let name = str_trimming_nul_unchecked(&name_bytes);
-                        writeln!(self.stderr(), "{} is not a directory", name).unwrap();
-                        1
-                    } else {
-                        match self.execute_file(file_entry, argv.as_slice()) {
-                            Ok(ec) => ec,
-                            Err((ec, err)) => {
-                                let _ = writeln!(self.stderr(), "failed to exec file: {}", err);
-                                -ec
-                            }
+                if let Some(file_entry) = find_command(command, root_cluster as u64) {
+                    match self.execute_file(file_entry, argv.as_slice()) {
+                        Ok(ec) => ec,
+                        Err((ec, err)) => {
+                            let _ = writeln!(self.stderr(), "failed to exec file: {}", err);
+                            -ec
                         }
                     }
                 } else {
@@ -1019,6 +1012,32 @@ pub fn free_pml4(current_task: &mut Task) -> Result<(), Error> {
     current_task.set_cr3(0);
     reset_cr3();
     free_page_map(cr3 as *mut u64 as *mut PageMapEntry)
+}
+
+fn find_command(command: &str, dir_cluster: u64) -> Option<&DirectoryEntry> {
+    if let (Some(file_entry), post_slash) = find_file(command, dir_cluster) {
+        if file_entry.is_directory() && post_slash {
+            return None;
+        }
+        return Some(file_entry);
+    }
+
+    let root_cluster = boot_volume_image().get_root_cluster() as u64;
+    if dir_cluster != root_cluster || command.contains('/') {
+        return None;
+    }
+
+    let apps_entry = match find_file("apps", root_cluster).0 {
+        None => return None,
+        Some(apps_entry) => {
+            if !apps_entry.is_directory() {
+                return None;
+            }
+            apps_entry
+        }
+    };
+
+    find_command(command, apps_entry.first_cluster() as u64)
 }
 
 #[cfg(test)]
