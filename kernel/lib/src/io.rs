@@ -56,6 +56,7 @@ impl FileDescriptor {
                 i += 1;
                 break;
             }
+            i += 1;
         }
         buf[i] = b'\0';
         i

@@ -3,7 +3,7 @@ use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
 use crate::fat::global::{boot_volume_image, create_file, find_file};
 use crate::fat::{Attribute, DirectoryEntry, FatFileDescriptor, END_OF_CLUSTER_CHAIN};
-use crate::font::{convert_utf8_to_u32, count_utf8_size, write_ascii, write_string, write_unicode};
+use crate::font::{write_ascii, write_string, write_unicode};
 use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
@@ -814,20 +814,15 @@ impl Terminal {
             return 1;
         }
 
-        let mut fd = FatFileDescriptor::new(file_entry);
-        let mut u8buf = [0; 4];
+        let mut fd = FileDescriptor::Fat(FatFileDescriptor::new(file_entry));
+        let mut u8buf = [0; 1024];
         self.draw_cursor(false);
         loop {
-            if fd.read(&mut u8buf[0..1], bpb) != 1 {
+            if fd.read_delim(b'\n', &mut u8buf) == 0 {
                 break;
             }
-
-            let u8_remain = count_utf8_size(u8buf[0]) - 1;
-            if u8_remain > 0 && fd.read(&mut u8buf[1..1 + u8_remain], bpb) != u8_remain {
-                break;
-            }
-            let char = char::from_u32(convert_utf8_to_u32(&u8buf)).unwrap_or('□');
-            write!(self.stdout(), "{}", char).unwrap();
+            let str = str_trimming_nul_unchecked(&u8buf);
+            write!(self.stdout(), "{}", str).unwrap();
         }
         self.draw_cursor(true);
         0
