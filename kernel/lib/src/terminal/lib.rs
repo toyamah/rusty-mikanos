@@ -3,7 +3,7 @@ use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
 use crate::fat::global::{boot_volume_image, create_file, find_file};
 use crate::fat::{Attribute, DirectoryEntry, FatFileDescriptor, END_OF_CLUSTER_CHAIN};
-use crate::font::{convert_utf8_to_u32, count_utf8_size, write_ascii, write_string, write_unicode};
+use crate::font::{write_ascii, write_string, write_unicode};
 use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
@@ -14,6 +14,7 @@ use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_f
 use crate::layer::{LayerID, LayerManager};
 use crate::libc::{memcpy, strcpy};
 use crate::memory_manager::global::memory_manager;
+use crate::message::MessageType::Layer;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
 use crate::paging::global::{copy_page_maps, free_page_map, reset_cr3};
 use crate::paging::{LinearAddress4Level, PageMapEntry};
@@ -705,6 +706,24 @@ impl Terminal {
         }
     }
 
+    pub(super) fn redraw(&mut self) {
+        let size = match self.window_mut() {
+            None => return,
+            Some(w) => w.inner_size(),
+        };
+        let draw_area = Rectangle::new(TITLED_WINDOW_TOP_LEFT_MARGIN, size);
+
+        let msg = Message::new(Layer(LayerMessage {
+            layer_id: self.layer_id,
+            op: LayerOperation::DrawArea(draw_area),
+            src_task_id: self.task_id,
+        }));
+
+        unsafe { asm!("cli") };
+        let _ = task_manager().send_message(task_manager().main_task().id(), msg);
+        unsafe { asm!("sti") };
+    }
+
     fn history_up_down(&mut self, direction: Direction) -> Rectangle<i32> {
         self.cursor.x = 1;
         let first_pos = self.calc_cursor_pos();
@@ -795,20 +814,15 @@ impl Terminal {
             return 1;
         }
 
-        let mut fd = FatFileDescriptor::new(file_entry);
-        let mut u8buf = [0; 4];
+        let mut fd = FileDescriptor::Fat(FatFileDescriptor::new(file_entry));
+        let mut u8buf = [0; 1024];
         self.draw_cursor(false);
         loop {
-            if fd.read(&mut u8buf[0..1], bpb) != 1 {
+            if fd.read_delim(b'\n', &mut u8buf) == 0 {
                 break;
             }
-
-            let u8_remain = count_utf8_size(u8buf[0]) - 1;
-            if u8_remain > 0 && fd.read(&mut u8buf[1..1 + u8_remain], bpb) != u8_remain {
-                break;
-            }
-            let char = char::from_u32(convert_utf8_to_u32(&u8buf)).unwrap_or('□');
-            write!(self.stdout(), "{}", char).unwrap();
+            let str = str_trimming_nul_unchecked(&u8buf);
+            write!(self.stdout(), "{}", str).unwrap();
         }
         self.draw_cursor(true);
         0

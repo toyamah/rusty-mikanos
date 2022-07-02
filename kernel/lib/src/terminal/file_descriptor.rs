@@ -68,6 +68,7 @@ impl TerminalFileDescriptor {
             let mut bytes = [0_u8; 4];
             let str = arg.ascii.encode_utf8(&mut bytes);
             terminal.print(str);
+            terminal.redraw();
             buf[..4].copy_from_slice(&bytes);
             return bytes.iter().filter(|&&x| x != 0).count();
         }
@@ -78,6 +79,7 @@ impl TerminalFileDescriptor {
             Ok(str) => {
                 let terminal = get_terminal_mut_by(self.terminal_id).unwrap();
                 terminal.print(str);
+                terminal.redraw();
                 str.as_bytes().len()
             }
             Err(_) => 0,
