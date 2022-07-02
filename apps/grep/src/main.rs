@@ -14,11 +14,15 @@ use shared_lib::{print, println};
 #[no_mangle]
 pub extern "C" fn main(argc: i32, argv: *const *const c_char) {
     let args = Args::new(argc, argv);
-    if args.len() < 3 {
+    if args.len() < 2 {
         println!("Usage: {} <pattern> <file>\n", args.get(0));
         exit(1);
     }
-    let path = args.get(2);
+    let path = if args.len() < 3 {
+        "@stdin"
+    } else {
+        args.get(2)
+    };
 
     // Because implementing regexp is not the essence of OS, supported patterns are:
     match args.get(1) {
