@@ -3,7 +3,7 @@ use crate::graphics::{Rectangle, Vector2D};
 use crate::layer::LayerID;
 use crate::task::TaskID;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Message {
     pub m_type: MessageType,
 }
@@ -14,7 +14,7 @@ impl Message {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MessageType {
     InterruptXhci,
     TimerTimeout { timeout: u64, value: i32 },
@@ -27,7 +27,7 @@ pub enum MessageType {
     Pipe(PipeMessage),
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct KeyPushMessage {
     pub modifier: u8,
     pub keycode: u8,
@@ -35,14 +35,14 @@ pub struct KeyPushMessage {
     pub press: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct LayerMessage {
     pub layer_id: LayerID,
     pub op: LayerOperation,
     pub src_task_id: TaskID,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum LayerOperation {
     Move { pos: Vector2D<i32> },
     MoveRelative { pos: Vector2D<i32> },
@@ -50,7 +50,7 @@ pub enum LayerOperation {
     DrawArea(Rectangle<i32>),
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct MouseMoveMessage {
     pub x: i32,
@@ -60,7 +60,7 @@ pub struct MouseMoveMessage {
     pub buttons: u8,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct MouseButtonMessage {
     pub x: i32,
@@ -69,13 +69,13 @@ pub struct MouseButtonMessage {
     pub button: i32,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum WindowActiveMode {
     Activate,
     Deactivate,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct PipeMessage {
     pub data: [u8; 16],

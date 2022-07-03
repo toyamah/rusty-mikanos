@@ -915,7 +915,7 @@ fn draw_terminal<W: PixelWriter>(w: &mut W, pos: Vector2D<i32>, size: Vector2D<i
 }
 
 fn parse_command(s: &str) -> Option<Vec<&str>> {
-    let parsed = s.trim().split_whitespace().collect::<VecDeque<_>>();
+    let parsed = s.split_whitespace().collect::<VecDeque<_>>();
     if parsed.is_empty() {
         return None;
     }

@@ -63,7 +63,7 @@ impl From<u32> for PixelColor {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Vector2D<T> {
     pub x: T,
     pub y: T,
@@ -143,7 +143,7 @@ where
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Rectangle<T> {
     pub pos: Vector2D<T>,
     pub size: Vector2D<T>,
