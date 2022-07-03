@@ -9,7 +9,7 @@ use crate::graphics::{
     draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
     COLOR_BLACK, COLOR_WHITE,
 };
-use crate::io::{FileDescriptor, STD_ERR, STD_OUT};
+use crate::io::{FileDescriptor, STD_ERR, STD_IN, STD_OUT};
 use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
 use crate::layer::{LayerID, LayerManager};
 use crate::libc::{memcpy, strcpy};
@@ -42,7 +42,7 @@ use core::arch::asm;
 use core::cell::{RefCell, RefMut};
 use core::ffi::c_void;
 use core::fmt::Write;
-use core::ops::{Deref, DerefMut};
+use core::ops::DerefMut;
 use core::{fmt, mem};
 use shared::PixelFormat;
 
@@ -797,27 +797,32 @@ impl Terminal {
 
     fn execute_cat(&mut self, argv: &[&str]) -> i32 {
         let bpb = boot_volume_image();
-        let first_arg = argv.get(1).unwrap_or(&"").deref();
+        let fd = if let Some(first_arg) = argv.get(1) {
+            let (file_entry, post_slash) = find_file(first_arg, bpb.get_root_cluster() as u64);
+            if file_entry.is_none() {
+                writeln!(self.stderr(), "no such file: {}", first_arg).unwrap();
+                return 1;
+            }
 
-        let (file_entry, post_slash) = find_file(first_arg, bpb.get_root_cluster() as u64);
-        if file_entry.is_none() {
-            writeln!(self.stderr(), "no such file: {}", first_arg).unwrap();
-            return 1;
-        }
+            let file_entry = file_entry.unwrap();
+            if !file_entry.is_directory() && post_slash {
+                let name_bytes = file_entry.formatted_name();
+                let name = str_trimming_nul_unchecked(&name_bytes);
+                writeln!(self.stderr(), "{} is not a directory", name).unwrap();
+                return 1;
+            }
 
-        let file_entry = file_entry.unwrap();
-        if !file_entry.is_directory() && post_slash {
-            let name_bytes = file_entry.formatted_name();
-            let name = str_trimming_nul_unchecked(&name_bytes);
-            writeln!(self.stderr(), "{} is not a directory", name).unwrap();
-            return 1;
-        }
+            Rc::new(RefCell::new(FileDescriptor::Fat(FatFileDescriptor::new(
+                file_entry,
+            ))))
+        } else {
+            Rc::clone(&self.files[STD_IN])
+        };
 
-        let mut fd = FileDescriptor::Fat(FatFileDescriptor::new(file_entry));
         let mut u8buf = [0; 1024];
         self.draw_cursor(false);
         loop {
-            if fd.read_delim(b'\n', &mut u8buf) == 0 {
+            if fd.borrow_mut().read_delim(b'\n', &mut u8buf) == 0 {
                 break;
             }
             let str = str_trimming_nul_unchecked(&u8buf);

@@ -69,7 +69,8 @@ impl TerminalFileDescriptor {
             let str = arg.ascii.encode_utf8(&mut bytes);
             terminal.print(str);
             terminal.redraw();
-            buf[..4].copy_from_slice(&bytes);
+            let size = cmp::min(buf.len(), bytes.len());
+            buf[..size].copy_from_slice(&bytes[..size]);
             return bytes.iter().filter(|&&x| x != 0).count();
         }
     }
