@@ -23,6 +23,7 @@ build_and_run() {
     cargo build --release # build in release mode to optimize code
   fi
 
+  cd "$script_dir"
   if [ $apps == "all" ]; then
     for cargo_manifest in $(ls apps/*/Cargo.toml); do
       app_dir=$(dirname $cargo_manifest)
