@@ -437,6 +437,9 @@ impl Terminal {
             let b = Box::new(term_desc);
             sub_task.init_context(task_terminal, Box::into_raw(b) as u64, get_cr3);
             task_manager().wake_up(sub_task.id()).unwrap();
+            layer_task_map()
+                .insert(self.layer_id, sub_task.id())
+                .unwrap();
 
             self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Pipe(
                 pipe_fd_for_write.copy_for_write(),
@@ -506,6 +509,9 @@ impl Terminal {
             fd.finish_write();
             unsafe { asm!("cli") };
             let ec = task_manager().wait_finish(fd.task_id);
+            layer_task_map()
+                .insert(self.layer_id, self.task_id)
+                .unwrap();
             unsafe { asm!("sti") };
             self.last_exit_code = ec;
         } else {
