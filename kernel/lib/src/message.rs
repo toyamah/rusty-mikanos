@@ -24,6 +24,7 @@ pub enum MessageType {
     MouseMove(MouseMoveMessage),
     MouseButton(MouseButtonMessage),
     WindowActive(WindowActiveMode),
+    WindowClose(WindowCloseMessage),
     Pipe(PipeMessage),
 }
 
@@ -80,6 +81,12 @@ pub enum WindowActiveMode {
 pub struct PipeMessage {
     pub data: [u8; 16],
     pub len: usize,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct WindowCloseMessage {
+    pub layer_id: LayerID,
 }
 
 // This trait is defined here because the app crate also uses app_event::MouseMove.

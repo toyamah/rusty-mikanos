@@ -8,6 +8,7 @@ use crate::window::Window;
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::arch::asm;
 use core::cmp;
 use core::fmt::{Display, Formatter};
 use core::ops::AddAssign;
@@ -337,6 +338,32 @@ impl LayerManager {
             .expect("failed to remove from layers");
     }
 
+    pub fn close_layer(
+        &mut self,
+        layer_id: LayerID,
+        active_layer: &mut ActiveLayer,
+        screen: &mut FrameBuffer,
+        task_manager: &mut TaskManager,
+        layer_task_map: &mut BTreeMap<LayerID, TaskID>,
+    ) -> Result<(), Error> {
+        let layer = match self.get_layer(layer_id) {
+            None => return Err(make_error!(Code::NoSuchEntry)),
+            Some(l) => l,
+        };
+
+        let pos = layer.position;
+        let size = layer.get_window_ref().size();
+
+        unsafe { asm!("cli") };
+        active_layer.activate(None, self, screen, task_manager, layer_task_map);
+        self.remove_layer(layer_id);
+        self.draw_on(Rectangle::new(pos, size.to_i32_vec2d()), screen);
+        layer_task_map.remove(&layer_id);
+        unsafe { asm!("sti") };
+
+        Ok(())
+    }
+
     fn hide(&mut self, id: LayerID) {
         if self.layers.is_empty() {
             return;
@@ -355,6 +382,10 @@ impl LayerManager {
 
     pub fn get_layer_mut(&mut self, layer_id: LayerID) -> Option<&mut Layer> {
         self.layers.get_mut(&layer_id)
+    }
+
+    pub fn get_layer(&self, layer_id: LayerID) -> Option<&Layer> {
+        self.layers.get(&layer_id)
     }
 
     fn get_height(&self, layer_id: LayerID) -> Option<i32> {

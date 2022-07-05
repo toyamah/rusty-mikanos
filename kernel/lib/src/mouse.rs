@@ -1,9 +1,11 @@
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use crate::layer::{ActiveLayer, LayerID, LayerManager};
-use crate::message::{Message, MessageType, MouseButtonMessage, MouseMoveMessage};
+use crate::message::{
+    Message, MessageType, MouseButtonMessage, MouseMoveMessage, WindowCloseMessage,
+};
 use crate::task::{TaskID, TaskManager};
-use crate::window::TITLED_WINDOW_TOP_LEFT_MARGIN;
+use crate::window::WindowRegion;
 use crate::Window;
 use alloc::collections::BTreeMap;
 use shared::PixelFormat;
@@ -127,6 +129,8 @@ impl Mouse {
         let pos_diff = self.position - old_pos;
         layout_manager.move_(self.layer_id, self.position, frame_buffer);
 
+        let mut close_layer_id = None;
+
         let previous_left_pressed = (self.previous_buttons & 0x01) != 0;
         let left_pressed = (buttons & 0x01) != 0;
         if !previous_left_pressed && left_pressed {
@@ -134,9 +138,14 @@ impl Mouse {
                 .find_layer_by_position(new_pos, self.layer_id)
                 .filter(|l| l.is_draggable());
             if let Some(layer) = draggable_layer {
-                let y_layer = self.position.y - layer.position().y;
-                if y_layer < TITLED_WINDOW_TOP_LEFT_MARGIN.y {
-                    self.drag_layer_id = Some(layer.id());
+                match layer
+                    .get_window_ref()
+                    .get_window_region(self.position - layer.position())
+                {
+                    WindowRegion::TitleBar => self.drag_layer_id = Some(layer.id()),
+                    WindowRegion::CloseButton => close_layer_id = Some(layer.id()),
+                    WindowRegion::Border => {}
+                    WindowRegion::Other => {}
                 }
             }
             let draggable_id = draggable_layer.map(|l| l.id());
@@ -156,16 +165,20 @@ impl Mouse {
         }
 
         if self.drag_layer_id == None {
-            send_mouse_message(
-                new_pos,
-                pos_diff,
-                buttons,
-                self.previous_buttons,
-                layout_manager,
-                active_layer,
-                layer_task_map,
-                task_manager,
-            );
+            if close_layer_id.is_some() {
+                send_close_message(active_layer, layer_task_map, task_manager);
+            } else {
+                send_mouse_message(
+                    new_pos,
+                    pos_diff,
+                    buttons,
+                    self.previous_buttons,
+                    layout_manager,
+                    active_layer,
+                    layer_task_map,
+                    task_manager,
+                );
+            }
         }
 
         self.previous_buttons = buttons;
@@ -185,29 +198,39 @@ pub fn draw_mouse_cursor<W: PixelWriter>(writer: &mut W, position: &Vector2D<i32
     }
 }
 
+fn find_active_layer_task(
+    active_layer: &ActiveLayer,
+    layer_task_map: &BTreeMap<LayerID, TaskID>,
+) -> Option<(LayerID, TaskID)> {
+    let layer_id = match active_layer.get_active_layer_id() {
+        None => return None,
+        Some(id) => id,
+    };
+    let task_id = match layer_task_map.get(&layer_id) {
+        None => return None,
+        Some(&id) => id,
+    };
+    Some((layer_id, task_id))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn send_mouse_message(
     newpos: Vector2D<i32>,
     posdiff: Vector2D<i32>,
     buttons: u8,
     previous_buttons: u8,
-    layer_manager: &mut LayerManager,
+    layer_manager: &LayerManager,
     active_layer: &mut ActiveLayer,
     layer_task_map: &mut BTreeMap<LayerID, TaskID>,
     task_manager: &mut TaskManager,
 ) {
-    let active_layer_id = match active_layer.get_active_layer_id() {
+    let (layer_id, task_id) = match find_active_layer_task(active_layer, layer_task_map) {
         None => return,
-        Some(id) => id,
+        Some(pair) => pair,
     };
-
-    let layer = layer_manager
-        .get_layer_mut(active_layer_id)
-        .expect("failed to get layer");
-
-    let task_it = match layer_task_map.get(&active_layer_id) {
+    let layer = match layer_manager.get_layer(layer_id) {
         None => return,
-        Some(id) => id,
+        Some(l) => l,
     };
 
     let relpos = newpos - layer.position();
@@ -222,7 +245,7 @@ pub fn send_mouse_message(
         }));
 
         task_manager
-            .send_message(*task_it, msg)
+            .send_message(task_id, msg)
             .expect("failed to send message");
     }
 
@@ -238,11 +261,25 @@ pub fn send_mouse_message(
                     button: i,
                 }));
                 task_manager
-                    .send_message(*task_it, msg)
+                    .send_message(task_id, msg)
                     .expect("failed to send message");
             }
         }
     }
+}
+
+fn send_close_message(
+    active_layer: &mut ActiveLayer,
+    layer_task_map: &mut BTreeMap<LayerID, TaskID>,
+    task_manager: &mut TaskManager,
+) {
+    let (layer_id, task_id) = match find_active_layer_task(active_layer, layer_task_map) {
+        None => return,
+        Some(pair) => pair,
+    };
+
+    let message = Message::new(MessageType::WindowClose(WindowCloseMessage { layer_id }));
+    let _ = task_manager.send_message(task_id, message);
 }
 
 pub fn new_mouse_cursor_window(pixel_format: PixelFormat) -> Window {
