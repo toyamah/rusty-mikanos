@@ -355,7 +355,7 @@ impl LayerManager {
         let size = layer.get_window_ref().size();
 
         unsafe { asm!("cli") };
-        active_layer.activate(Some(layer_id), self, screen, task_manager, layer_task_map);
+        active_layer.activate(None, self, screen, task_manager, layer_task_map);
         self.remove_layer(layer_id);
         self.draw_on(Rectangle::new(pos, size.to_i32_vec2d()), screen);
         layer_task_map.remove(&layer_id);

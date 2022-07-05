@@ -179,7 +179,7 @@ impl TimerManager {
                     timeout: t.timeout,
                     value: t.value,
                 });
-                task_manager.send_message(task_id, m).unwrap();
+                let _ = task_manager.send_message(task_id, m);
             }
             self.timers.pop();
         }

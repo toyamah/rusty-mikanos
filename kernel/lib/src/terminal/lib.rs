@@ -179,6 +179,17 @@ pub fn task_terminal(task_id: u64, data: usize) {
                 }
             }
             MessageType::WindowActive(mode) => active_mode = mode,
+            MessageType::WindowClose(message) => {
+                let _ = layer_manager().close_layer(
+                    message.layer_id,
+                    active_layer(),
+                    screen_frame_buffer(),
+                    task_manager(),
+                    layer_task_map(),
+                );
+                unsafe { asm!("cli") };
+                task_manager().finish(terminal().last_exit_code);
+            }
             _ => {}
         }
     }
