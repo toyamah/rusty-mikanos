@@ -31,6 +31,9 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) {
         };
         match events[0].type_ {
             AppEventType::Quit => break,
+            AppEventType::MouseMove | AppEventType::MouseButton | AppEventType::KeyPush => {
+                // ignore
+            }
             _ => println!("unknown event: type = {:?}", events[0].type_),
         }
     }
