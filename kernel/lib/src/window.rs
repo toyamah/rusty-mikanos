@@ -12,6 +12,13 @@ use shared::{FrameBufferConfig, PixelFormat};
 pub const TITLED_WINDOW_TOP_LEFT_MARGIN: Vector2D<i32> = Vector2D::new(4, 24);
 pub const TITLED_WINDOW_BOTTOM_RIGHT_MARGIN: Vector2D<i32> = Vector2D::new(4, 4);
 
+pub(crate) enum WindowRegion {
+    TitleBar,
+    CloseButton,
+    Border,
+    Other,
+}
+
 enum Type {
     Normal,
     TopLevel { title: String },
@@ -147,6 +154,34 @@ impl Window {
             &PixelColor::from(0xc6c6c6),
             &PixelColor::from(0x848484),
         );
+    }
+
+    pub(crate) fn get_window_region(&self, pos: Vector2D<i32>) -> WindowRegion {
+        match self.type_ {
+            Type::Normal => return WindowRegion::Other,
+            Type::TopLevel { .. } => {}
+        }
+
+        let width = self.width as i32;
+        let height = self.height as i32;
+        let close_button_height = CLOSE_BUTTON.len() as i32;
+        let close_button_width = CLOSE_BUTTON[0].len() as i32;
+
+        if pos.x < 2 || width - 2 <= pos.x || pos.y < 2 || height - 2 <= pos.y {
+            WindowRegion::Border
+        } else if pos.y < TITLED_WINDOW_TOP_LEFT_MARGIN.y {
+            if width - 5 - close_button_width <= pos.x
+                && pos.x < width - 5
+                && 5 <= pos.y
+                && pos.y < 5 + close_button_height
+            {
+                WindowRegion::CloseButton
+            } else {
+                WindowRegion::TitleBar
+            }
+        } else {
+            WindowRegion::Other
+        }
     }
 
     fn draw_with_transparent_to(
