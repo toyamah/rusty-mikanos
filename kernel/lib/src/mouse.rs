@@ -165,7 +165,7 @@ impl Mouse {
         }
 
         if self.drag_layer_id == None {
-            if let Some(_) = close_layer_id {
+            if close_layer_id.is_some() {
                 send_close_message(active_layer, layer_task_map, task_manager);
             } else {
                 send_mouse_message(

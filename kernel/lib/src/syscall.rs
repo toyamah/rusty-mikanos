@@ -273,7 +273,7 @@ fn close_window(
         layer_task_map(),
     ) {
         Ok(_) => SyscallResult::ok(0),
-        Err(e) => SyscallResult::err(0, EBADF),
+        Err(_e) => SyscallResult::err(0, EBADF),
     }
 }
 
@@ -354,7 +354,7 @@ fn read_event(app_events: u64, len: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64)
                     i += 1;
                 }
             }
-            MessageType::WindowClose(message) => {
+            MessageType::WindowClose(_) => {
                 let event = unsafe { app_events.add(i).as_mut() }
                     .expect("failed to convert to AppEvent Ref");
                 event.type_ = AppEventType::Quit;
