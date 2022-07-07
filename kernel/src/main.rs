@@ -10,6 +10,7 @@ use crate::usb::global::xhci_controller;
 use alloc::format;
 use core::arch::asm;
 use core::panic::PanicInfo;
+use core::sync::atomic::{AtomicI32, Ordering};
 use lib::acpi::Rsdp;
 use lib::asm::global::get_cr3;
 use lib::font::{write_ascii, write_string};
@@ -36,6 +37,7 @@ use lib::{
 };
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
+use spin::Once;
 
 mod logger;
 mod memory_allocator;
@@ -54,20 +56,17 @@ fn main_window_layer_id() -> LayerID {
 }
 
 fn text_window() -> &'static mut Window {
-    get_layer_window_mut(text_window_layer_id()).expect("could not find text layer")
+    get_layer_window_mut(*TEXT_WINDOW_LAYER_ID.wait()).expect("could not find text layer")
 }
 fn text_window_ref() -> &'static Window {
-    get_layer_window_ref(text_window_layer_id()).expect("could not find text layer")
+    get_layer_window_ref(*TEXT_WINDOW_LAYER_ID.wait()).expect("could not find text layer")
 }
 
-static mut TEXT_WINDOW_LAYER_ID: Option<LayerID> = None;
-fn text_window_layer_id() -> LayerID {
-    unsafe { TEXT_WINDOW_LAYER_ID.unwrap() }
-}
+static TEXT_WINDOW_LAYER_ID: Once<LayerID> = Once::new();
 
-static mut TEXT_WINDOW_INDEX: i32 = 0;
+static TEXT_WINDOW_INDEX: AtomicI32 = AtomicI32::new(0);
 fn text_window_index() -> i32 {
-    unsafe { TEXT_WINDOW_INDEX }
+    TEXT_WINDOW_INDEX.load(Ordering::SeqCst)
 }
 
 #[repr(align(16))]
@@ -178,7 +177,8 @@ pub extern "C" fn KernelMainNewStack(
                     unsafe { asm!("sti") };
                     text_box_cursor_visible = !text_box_cursor_visible;
                     draw_text_cursor(text_box_cursor_visible);
-                    layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
+                    layer_manager()
+                        .draw_layer_of(*TEXT_WINDOW_LAYER_ID.wait(), screen_frame_buffer());
                 }
             }
             MessageType::KeyPush(arg) => {
@@ -188,7 +188,7 @@ pub extern "C" fn KernelMainNewStack(
                 }
                 let act = act.unwrap();
 
-                if act == text_window_layer_id() && arg.press {
+                if act == *TEXT_WINDOW_LAYER_ID.wait() && arg.press {
                     input_text_window(arg.ascii);
                 } else if arg.press && arg.keycode == KEY_F2 {
                     let id = task_manager()
@@ -284,14 +284,15 @@ fn initialize_text_window() {
     );
     text_window.draw_text_box(Vector2D::new(0, 0), text_window.inner_size());
 
-    let id = layer_manager()
-        .new_layer(text_window)
-        .set_draggable(true)
-        .move_(Vector2D::new(500, 100))
-        .id();
-    unsafe { TEXT_WINDOW_LAYER_ID = Some(id) };
+    let id = TEXT_WINDOW_LAYER_ID.call_once(|| {
+        layer_manager()
+            .new_layer(text_window)
+            .set_draggable(true)
+            .move_(Vector2D::new(500, 100))
+            .id()
+    });
 
-    layer_manager().up_down(id, i32::MAX);
+    layer_manager().up_down(*id, i32::MAX);
 }
 
 fn input_text_window(c: char) {
@@ -306,7 +307,7 @@ fn input_text_window(c: char) {
     let max_chars = (text_window_ref().inner_size().x - 8) / 8 - 1;
     if c == '\x08' && text_window_index() > 0 {
         draw_text_cursor(false);
-        unsafe { TEXT_WINDOW_INDEX -= 1 };
+        TEXT_WINDOW_INDEX.fetch_sub(1, Ordering::SeqCst);
         fill_rectangle(
             text_window().writer(),
             &pos(),
@@ -318,11 +319,11 @@ fn input_text_window(c: char) {
         draw_text_cursor(false);
         let pos = pos();
         write_ascii(text_window().writer(), pos.x, pos.y, c, &COLOR_BLACK);
-        unsafe { TEXT_WINDOW_INDEX += 1 };
+        TEXT_WINDOW_INDEX.fetch_add(1, Ordering::SeqCst);
         draw_text_cursor(true);
     }
 
-    layer_manager().draw_layer_of(text_window_layer_id(), screen_frame_buffer());
+    layer_manager().draw_layer_of(*TEXT_WINDOW_LAYER_ID.wait(), screen_frame_buffer());
 }
 
 fn draw_text_cursor(visible: bool) {
