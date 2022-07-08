@@ -28,7 +28,10 @@ pub mod global {
         task_manager().initialize(get_cr3);
 
         unsafe { asm!("cli") };
-        timer_manager().add_timer_for_switching_task(task_manager().main_task_id);
+        timer_manager()
+            .as_mut()
+            .unwrap()
+            .add_timer_for_switching_task(task_manager().main_task_id);
         unsafe { asm!("sti") };
     }
 

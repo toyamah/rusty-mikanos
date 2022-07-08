@@ -16,7 +16,7 @@ use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
 use crate::task::global::task_manager;
 use crate::task::FileMapping;
-use crate::timer::global::timer_manager;
+use crate::timer::global::{current_tick, timer_manager};
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::Window;
 use core::arch::asm;
@@ -185,7 +185,7 @@ fn win_fill_rectangle(
 }
 
 fn get_current_tick(_a1: u64, _a2: u64, _a3: u64, _a4: u64, _a5: u64, _a6: u64) -> SyscallResult {
-    SyscallResult::new(timer_manager().current_tick(), TIMER_FREQ as i32)
+    SyscallResult::new(current_tick(), TIMER_FREQ as i32)
 }
 
 fn win_redraw(
@@ -387,13 +387,16 @@ fn create_timer(
 
     let is_relative = mode & 1 == 1;
     let timeout = if is_relative {
-        timeout_ms * TIMER_FREQ / 1000 + timer_manager().current_tick()
+        timeout_ms * TIMER_FREQ / 1000 + current_tick()
     } else {
         timeout_ms * TIMER_FREQ / 1000
     };
 
     unsafe { asm!("cli") };
-    timer_manager().add_timer(Timer::new(timeout, -timer_value, task_id));
+    timer_manager()
+        .as_mut()
+        .unwrap()
+        .add_timer(Timer::new(timeout, -timer_value, task_id));
     unsafe { asm!("sti") };
     SyscallResult::new(timeout * 1000 / TIMER_FREQ, 0)
 }

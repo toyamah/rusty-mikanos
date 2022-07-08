@@ -28,7 +28,7 @@ use lib::mouse::global::MOUSE;
 use lib::task::global::task_manager;
 use lib::task::TaskID;
 use lib::terminal::lib::task_terminal;
-use lib::timer::global::timer_manager;
+use lib::timer::global::{current_tick_with_lock, timer_manager};
 use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
 use lib::{
@@ -115,7 +115,7 @@ pub extern "C" fn KernelMainNewStack(
     let timer_05_sec = TIMER_FREQ / 2;
     let expected_main_task_id = TaskID::new(0); // prepare because the main task id is created after it
     unsafe { asm!("cli") };
-    timer_manager().add_timer(Timer::new(
+    timer_manager().as_mut().unwrap().add_timer(Timer::new(
         timer_05_sec,
         text_box_cursor_timer,
         expected_main_task_id,
@@ -149,7 +149,7 @@ pub extern "C" fn KernelMainNewStack(
             &Vector2D::new(8 * 10, 16),
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
-        let tick = unsafe { timer_manager().current_tick_with_lock() };
+        let tick = unsafe { current_tick_with_lock() };
         write_string(main_window(), 20, 4, &format!("{:010}", tick), &COLOR_BLACK);
         layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
@@ -169,7 +169,7 @@ pub extern "C" fn KernelMainNewStack(
             MessageType::TimerTimeout { timeout, value } => {
                 if value == text_box_cursor_timer {
                     unsafe { asm!("cli") };
-                    timer_manager().add_timer(Timer::new(
+                    timer_manager().as_mut().unwrap().add_timer(Timer::new(
                         timeout + timer_05_sec,
                         text_box_cursor_timer,
                         main_task_id,

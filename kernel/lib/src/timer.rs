@@ -19,24 +19,38 @@ pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
     use crate::acpi;
     use crate::interrupt::InterruptVectorNumber;
+    use spin::{Mutex, MutexGuard, Once};
 
-    static mut TIMER_MANAGER: Option<TimerManager> = None;
-    pub fn timer_manager() -> &'static mut TimerManager {
-        unsafe { TIMER_MANAGER.as_mut().unwrap() }
+    static TIMER_MANAGER: Mutex<Option<TimerManager>> = Mutex::new(None);
+    pub fn timer_manager() -> MutexGuard<'static, Option<TimerManager>> {
+        TIMER_MANAGER.lock()
+    }
+    pub fn current_tick() -> u64 {
+        TIMER_MANAGER.lock().as_ref().unwrap().current_tick()
+    }
+    pub fn current_tick_with_lock() -> u64 {
+        unsafe {
+            TIMER_MANAGER
+                .lock()
+                .as_ref()
+                .unwrap()
+                .current_tick_with_lock()
+        }
     }
 
-    static mut LAPIC_TIMER_FREQ: Option<u64> = None;
+    static LAPIC_TIMER_FREQ: Once<u64> = Once::new();
 
     pub fn initialize_lapic_timer() {
+        *TIMER_MANAGER.lock() = Some(TimerManager::new());
         unsafe {
-            TIMER_MANAGER = Some(TimerManager::new());
             divide_config().write_volatile(0b1011); // divide 1:1
             lvt_timer().write_volatile(0b001 << 16); // masked, one-shot
         };
 
-        let elapsed = measure_time(|| acpi::global::wait_milliseconds(100));
-        let lapic_timer_freq = (elapsed as u64) * 10;
-        unsafe { LAPIC_TIMER_FREQ = Some(lapic_timer_freq) };
+        let lapic_timer_freq = LAPIC_TIMER_FREQ.call_once(|| {
+            let elapsed = measure_time(|| acpi::global::wait_milliseconds(100));
+            (elapsed as u64) * 10
+        });
 
         unsafe {
             divide_config().write_volatile(0b1011);
@@ -50,7 +64,7 @@ pub mod global {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn LAPICTimerOnInterrupt(context_stack: *const TaskContext) {
     let context_ref = unsafe { context_stack.as_ref() }.unwrap();
-    let task_timer_timeout = timer_manager().tick(task_manager());
+    let task_timer_timeout = timer_manager().as_mut().unwrap().tick(task_manager());
     notify_end_of_interrupt();
     if task_timer_timeout {
         task_manager().switch_task(context_ref);

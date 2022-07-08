@@ -28,7 +28,7 @@ use crate::terminal::file_descriptor::{
     PipeDescriptor, TerminalDescriptor, TerminalFileDescriptor,
 };
 use crate::terminal::history::{CommandHistory, Direction};
-use crate::timer::global::timer_manager;
+use crate::timer::global::{current_tick, timer_manager};
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{make_error, str_trimming_nul_unchecked, Window};
@@ -123,9 +123,13 @@ pub fn task_terminal(task_id: u64, data: usize) {
         }
     }
 
-    let add_blink_timer =
-        |t: u64| timer_manager().add_timer(Timer::new(t + TIMER_FREQ / 2, 1, task_id));
-    add_blink_timer(timer_manager().current_tick());
+    let add_blink_timer = |t: u64| {
+        timer_manager()
+            .as_mut()
+            .unwrap()
+            .add_timer(Timer::new(t + TIMER_FREQ / 2, 1, task_id))
+    };
+    add_blink_timer(current_tick());
     let mut active_mode = WindowActiveMode::Deactivate;
 
     loop {
