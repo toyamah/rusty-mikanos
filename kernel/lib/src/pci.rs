@@ -7,6 +7,7 @@ use bit_field::BitField;
 use core::fmt;
 use core::fmt::{Display, Formatter};
 use log::debug;
+use spin::Once;
 
 const CONFIG_ADDRESS: u16 = 0x0cf8;
 
@@ -15,25 +16,16 @@ const CONFIG_DATA: u16 = 0x0cfc;
 /// ref: https://wiki.osdev.org/PCI#Configuration_Space_Access_Mechanism_.231
 const NON_EXISTENT_DEVICE: u16 = 0xffff;
 
-static mut DEVICES: [Device; 32] = [Device {
-    bus: 0,
-    device: 0,
-    function: 0,
-    header_type: 0,
-    class_code: ClassCode {
-        base: 0,
-        sub: 0,
-        interface: 0,
-    },
-}; 32];
+static DEVICES: Once<([Device; 32], usize)> = Once::new();
 
 /// it isn't put in a global module because this module itself works globally and to fix makes a lot of diffs.
 pub fn initialize() {
-    scan_all_bus().unwrap();
+    DEVICES.call_once(scan_all_bus);
 }
 
 pub fn devices() -> &'static [Device] {
-    unsafe { &DEVICES[..NUM_DEVICE] }
+    let (devices, num) = DEVICES.wait();
+    &devices[..*num]
 }
 
 pub fn find_xhc_device<'a>() -> Option<&'a Device> {
@@ -43,9 +35,7 @@ pub fn find_xhc_device<'a>() -> Option<&'a Device> {
         .or_else(|| devices().iter().find(|d| d.is_xhc()))
 }
 
-static mut NUM_DEVICE: usize = 0;
-
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct Device {
     bus: u8,
     device: u8,
@@ -115,7 +105,7 @@ impl Display for Device {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 struct ClassCode {
     base: u8,
     sub: u8,
@@ -225,45 +215,50 @@ fn write_conf_reg(device: &Device, reg_addr: u8, value: u32) {
 }
 
 /// ref: https://wiki.osdev.org/PCI#Recursive_Scan
-pub fn scan_all_bus() -> Result<(), Error> {
-    unsafe {
-        NUM_DEVICE = 0;
-    }
+pub fn scan_all_bus() -> ([Device; 32], usize) {
+    let mut devices = [Device::default(); 32];
+    let mut num_device = 0;
+
     let header_type = read_header_type(0, 0, 0);
     if is_single_function_device(header_type) {
         // Single PCI host controller
-        return scan_bus(0);
-    }
-
-    // Multiple PCI host controllers
-    for function in 1..8_u8 {
-        if read_vendor_id(0, 0, function) == NON_EXISTENT_DEVICE {
-            continue;
+        scan_bus(0, &mut devices, &mut num_device).unwrap();
+    } else {
+        // Multiple PCI host controllers
+        for function in 1..8_u8 {
+            if read_vendor_id(0, 0, function) == NON_EXISTENT_DEVICE {
+                continue;
+            }
+            // If it is a multifunction device,
+            // then function 0 will be the PCI host controller responsible for bus 0
+            let bus = function;
+            scan_bus(bus, &mut devices, &mut num_device).unwrap();
         }
-        // If it is a multifunction device,
-        // then function 0 will be the PCI host controller responsible for bus 0
-        let bus = function;
-        scan_bus(bus)?;
     }
 
-    Ok(())
+    (devices, num_device)
 }
 
 /// ref: https://wiki.osdev.org/PCI#Recursive_Scan
-fn scan_bus(bus: u8) -> Result<(), Error> {
+fn scan_bus(bus: u8, devices: &mut [Device; 32], num_device: &mut usize) -> Result<(), Error> {
     for device in 0..32_u8 {
         if read_vendor_id(bus, device, 0) == NON_EXISTENT_DEVICE {
             continue;
         }
-        scan_device(bus, device)?;
+        scan_device(bus, device, devices, num_device)?;
     }
 
     Ok(())
 }
 
 /// ref: https://wiki.osdev.org/PCI#Recursive_Scan
-fn scan_device(bus: u8, device: u8) -> Result<(), Error> {
-    scan_function(bus, device, 0)?;
+fn scan_device(
+    bus: u8,
+    device: u8,
+    devices: &mut [Device; 32],
+    num_device: &mut usize,
+) -> Result<(), Error> {
+    scan_function(bus, device, 0, devices, num_device)?;
 
     if is_single_function_device(read_header_type(bus, device, 0)) {
         return Ok(());
@@ -274,24 +269,38 @@ fn scan_device(bus: u8, device: u8) -> Result<(), Error> {
         if read_vendor_id(bus, device, function) == NON_EXISTENT_DEVICE {
             continue;
         }
-        scan_function(bus, device, function)?;
+        scan_function(bus, device, function, devices, num_device)?;
     }
 
     Ok(())
 }
 
 /// ref: https://wiki.osdev.org/PCI#Recursive_Scan
-fn scan_function(bus: u8, device: u8, function: u8) -> Result<(), Error> {
+fn scan_function(
+    bus: u8,
+    device: u8,
+    function: u8,
+    devices: &mut [Device; 32],
+    num_device: &mut usize,
+) -> Result<(), Error> {
     let class_code = read_class_code(bus, device, function);
     let header_type = read_header_type(bus, device, function);
-    add_device(bus, device, function, header_type, class_code)?;
+    add_device(
+        bus,
+        device,
+        function,
+        header_type,
+        class_code,
+        devices,
+        num_device,
+    )?;
 
     // if the device is a PCI to PCI bridge
     if class_code.is_match_base_sub(0x06, 0x04) {
         // scan pci devices which are connected with the secondary_bus
         let bus_numbers = read_bus_number(bus, device, function);
         let secondary_bus = (bus_numbers >> 8) & 0xff;
-        return scan_bus(secondary_bus as u8);
+        return scan_bus(secondary_bus as u8, devices, num_device);
     }
 
     Ok(())
@@ -303,14 +312,14 @@ fn add_device(
     function: u8,
     header_type: u8,
     class_code: ClassCode,
+    devices: &mut [Device; 32],
+    num_device: &mut usize,
 ) -> Result<(), Error> {
-    unsafe {
-        if NUM_DEVICE == DEVICES.len() {
-            return Err(make_error!(Code::Full));
-        }
-        DEVICES[NUM_DEVICE] = Device::new(bus, device, function, header_type, class_code);
-        NUM_DEVICE += 1;
+    if *num_device == devices.len() {
+        return Err(make_error!(Code::Full));
     }
+    devices[*num_device] = Device::new(bus, device, function, header_type, class_code);
+    *num_device += 1;
     Ok(())
 }
 

@@ -239,6 +239,7 @@ dependencies = [
  "libm",
  "log",
  "shared",
+ "spin",
 ]
 
 [[package]]
