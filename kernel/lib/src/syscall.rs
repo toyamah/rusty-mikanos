@@ -490,7 +490,7 @@ fn create_file(path: &str) -> Result<&DirectoryEntry, i32> {
 }
 
 #[no_mangle]
-static mut syscall_table: [SyscallFuncType; 16] = [
+static syscall_table: [SyscallFuncType; 16] = [
     log_string,
     put_string,
     exit,
