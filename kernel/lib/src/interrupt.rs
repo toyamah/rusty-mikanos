@@ -18,26 +18,16 @@ pub mod global {
     use crate::x86_descriptor::SystemDescriptorType;
     use core::arch::asm;
     use log::error;
+    use spin::Once;
 
     const SIGSEGV: i32 = 11;
 
     pub(crate) const IST_FOR_TIMER: u8 = 0; // index of the interrupt stack table
 
-    // IDT can have 256(0-255) descriptors
-    static mut IDT: [InterruptDescriptor; 256] = [InterruptDescriptor {
-        offset_low: 0,
-        segment_selector: 0,
-        attr: InterruptDescriptorAttribute(0),
-        offset_middle: 0,
-        offset_high: 0,
-        reserved: 0,
-    }; 256];
-
     /// idt stands for Interrupt Descriptor Table which maps interruption vector numbers to interrupt handlers.
     /// https://en.wikipedia.org/wiki/Interrupt_descriptor_table
-    pub fn idt() -> &'static mut [InterruptDescriptor; 256] {
-        unsafe { &mut IDT }
-    }
+    // IDT can have 256(0-255) descriptors
+    static IDT: Once<[InterruptDescriptor; 256]> = Once::new();
 
     pub fn notify_end_of_interrupt() {
         //  Writing to this register means the CPU can know an interrupt routine has been completed.
@@ -49,36 +39,39 @@ pub mod global {
     }
 
     pub fn initialize_interrupt() {
-        let idt = idt();
-        idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(int_handler_xhci as usize);
-        idt[InterruptVectorNumber::LAPICTimer as usize]._set_idt_entry(
-            InterruptDescriptorAttribute::new(
-                SystemDescriptorType::InterruptGate,
-                0,
-                true,
-                IST_FOR_TIMER,
-            ),
-            IntHandlerLAPICTimer as usize as u64,
-            KERNEL_CS,
-        );
-        idt[0].set_idt_entry(int_handler_de as usize);
-        idt[1].set_idt_entry(int_handler_db as usize);
-        idt[3].set_idt_entry(int_handler_bp as usize);
-        idt[4].set_idt_entry(int_handler_of as usize);
-        idt[5].set_idt_entry(int_handler_br as usize);
-        idt[6].set_idt_entry(int_handler_ud as usize);
-        idt[7].set_idt_entry(int_handler_nm as usize);
-        idt[8].set_idt_entry(int_handler_df as usize);
-        idt[10].set_idt_entry(int_handler_ts as usize);
-        idt[11].set_idt_entry(int_handler_np as usize);
-        idt[12].set_idt_entry(int_handler_ss as usize);
-        idt[13].set_idt_entry(int_handler_gp as usize);
-        idt[14].set_idt_entry(int_handler_pf as usize);
-        idt[16].set_idt_entry(int_handler_mf as usize);
-        idt[17].set_idt_entry(int_handler_ac as usize);
-        idt[18].set_idt_entry(int_handler_mc as usize);
-        idt[19].set_idt_entry(int_handler_xm as usize);
-        idt[20].set_idt_entry(int_handler_ve as usize);
+        let idt = IDT.call_once(|| {
+            let mut idt = [InterruptDescriptor::default(); 256];
+            idt[InterruptVectorNumber::XHCI as usize].set_idt_entry(int_handler_xhci as usize);
+            idt[InterruptVectorNumber::LAPICTimer as usize]._set_idt_entry(
+                InterruptDescriptorAttribute::new(
+                    SystemDescriptorType::InterruptGate,
+                    0,
+                    true,
+                    IST_FOR_TIMER,
+                ),
+                IntHandlerLAPICTimer as usize as u64,
+                KERNEL_CS,
+            );
+            idt[0].set_idt_entry(int_handler_de as usize);
+            idt[1].set_idt_entry(int_handler_db as usize);
+            idt[3].set_idt_entry(int_handler_bp as usize);
+            idt[4].set_idt_entry(int_handler_of as usize);
+            idt[5].set_idt_entry(int_handler_br as usize);
+            idt[6].set_idt_entry(int_handler_ud as usize);
+            idt[7].set_idt_entry(int_handler_nm as usize);
+            idt[8].set_idt_entry(int_handler_df as usize);
+            idt[10].set_idt_entry(int_handler_ts as usize);
+            idt[11].set_idt_entry(int_handler_np as usize);
+            idt[12].set_idt_entry(int_handler_ss as usize);
+            idt[13].set_idt_entry(int_handler_gp as usize);
+            idt[14].set_idt_entry(int_handler_pf as usize);
+            idt[16].set_idt_entry(int_handler_mf as usize);
+            idt[17].set_idt_entry(int_handler_ac as usize);
+            idt[18].set_idt_entry(int_handler_mc as usize);
+            idt[19].set_idt_entry(int_handler_xm as usize);
+            idt[20].set_idt_entry(int_handler_ve as usize);
+            idt
+        });
 
         load_interrupt_descriptor_table(
             core::mem::size_of_val(idt) as u16 - 1,
@@ -239,7 +232,7 @@ pub struct InterruptFrame {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct InterruptDescriptor {
     offset_low: u16,
     segment_selector: u16,
@@ -273,7 +266,7 @@ impl InterruptDescriptor {
 }
 
 #[repr(transparent)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct InterruptDescriptorAttribute(u16);
 
 impl InterruptDescriptorAttribute {
