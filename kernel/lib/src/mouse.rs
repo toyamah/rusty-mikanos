@@ -19,19 +19,19 @@ pub mod global {
         screen_frame_buffer,
     };
     use crate::Window;
+    use spin::Mutex;
 
     fn mouse_cursor_window() -> &'static mut Window {
-        get_layer_window_mut(mouse().layer_id).expect("could not find mouse layer")
+        let layer_id = MOUSE.lock().as_ref().unwrap().layer_id;
+        get_layer_window_mut(layer_id).expect("could not find mouse layer")
     }
 
     fn mouse_cursor_window_ref() -> &'static Window {
-        get_layer_window_ref(mouse().layer_id).expect("could not find mouse layer")
+        let layer_id = MOUSE.lock().as_ref().unwrap().layer_id;
+        get_layer_window_ref(layer_id).expect("could not find mouse layer")
     }
 
-    static mut MOUSE: Option<Mouse> = None;
-    pub fn mouse() -> &'static mut Mouse {
-        unsafe { MOUSE.as_mut().unwrap() }
-    }
+    pub static MOUSE: Mutex<Option<Mouse>> = Mutex::new(None);
 
     pub fn initialize() {
         let mut window = new_mouse_cursor_window(frame_buffer_config().pixel_format);
@@ -39,14 +39,15 @@ pub mod global {
 
         let mouse_layer_id = layer_manager().new_layer(window).id();
 
-        unsafe { MOUSE = Some(Mouse::new(mouse_layer_id)) };
-        mouse().set_position(
+        let mut mouse = Mouse::new(mouse_layer_id);
+        mouse.set_position(
             Vector2D::new(200, 200),
             layer_manager(),
             screen_frame_buffer(),
         );
-        layer_manager().up_down(mouse_layer_id, i32::MAX);
+        *MOUSE.lock() = Some(mouse);
 
+        layer_manager().up_down(mouse_layer_id, i32::MAX);
         active_layer().mouser_layer_id = mouse_layer_id;
     }
 }

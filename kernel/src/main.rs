@@ -24,7 +24,7 @@ use lib::layer::global::{
 };
 use lib::layer::LayerID;
 use lib::message::{Message, MessageType};
-use lib::mouse::global::mouse;
+use lib::mouse::global::MOUSE;
 use lib::task::global::task_manager;
 use lib::task::TaskID;
 use lib::terminal::lib::task_terminal;
@@ -241,7 +241,7 @@ fn alloc_error_handle(layout: alloc::alloc::Layout) -> ! {
 }
 
 extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8) {
-    mouse().on_interrupt(
+    MOUSE.lock().as_mut().unwrap().on_interrupt(
         buttons,
         displacement_x,
         displacement_y,
