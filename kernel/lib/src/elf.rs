@@ -72,11 +72,7 @@ impl Elf64Ehdr {
         0
     }
 
-    pub fn load_elf(
-        &mut self,
-        cr_3: u64,
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<u64, Error> {
+    pub fn load_elf(&mut self, cr_3: u64) -> Result<u64, Error> {
         if self.e_type != ET_EXEC {
             return Err(make_error!(Code::InvalidFormat));
         }
@@ -86,14 +82,10 @@ impl Elf64Ehdr {
             return Err(make_error!(Code::InvalidFormat));
         }
 
-        self.copy_load_segment(cr_3, memory_manager)
+        self.copy_load_segment(cr_3)
     }
 
-    fn copy_load_segment(
-        &mut self,
-        cr_3: u64,
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<u64, Error> {
+    fn copy_load_segment(&mut self, cr_3: u64) -> Result<u64, Error> {
         let phdr = unsafe { self.get_program_header() };
         let mut last_addr = 0;
         for i in 0..self.e_phnum {
@@ -105,7 +97,7 @@ impl Elf64Ehdr {
             let dest_addr = LinearAddress4Level::new(p.p_vaddr as u64);
             last_addr = cmp::max(last_addr, p.p_vaddr as u64 + p.p_memsz);
             let num_4kpages: usize = ((p.p_memsz + 4095) / 4096) as usize;
-            PageMapEntry::setup_page_maps(dest_addr, num_4kpages, false, cr_3, memory_manager)?;
+            PageMapEntry::setup_page_maps(dest_addr, num_4kpages, false, cr_3)?;
 
             let src = unsafe { (self as *mut _ as *mut u8).offset(p.p_offset as isize) };
             let dst = p.p_vaddr as *mut Elf64Addr as *mut u8;

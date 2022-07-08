@@ -1,5 +1,6 @@
 use crate::asm::global::invalidate_tlb;
 use crate::error::Error;
+use crate::memory_manager::global::MEMORY_MANAGER;
 use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
 use bit_field::BitField;
 use core::mem;
@@ -126,11 +127,9 @@ impl PageMapEntry {
         num4_kpages: usize,
         writable: bool,
         cr_3: u64,
-        memory_manager: &mut BitmapMemoryManager,
     ) -> Result<(), Error> {
         let pml4_table = cr_3 as *mut u64 as *mut PageMapEntry;
-        let (_, error) =
-            Self::setup_page_map(pml4_table, 4, writable, addr, num4_kpages, memory_manager);
+        let (_, error) = Self::setup_page_map(pml4_table, 4, writable, addr, num4_kpages);
         match error {
             None => Ok(()),
             Some(e) => Err(e),
@@ -143,14 +142,13 @@ impl PageMapEntry {
         writable: bool,
         mut addr: LinearAddress4Level,
         mut num_4kpages: usize,
-        memory_manager: &mut BitmapMemoryManager,
     ) -> (usize, Option<Error>) {
         while num_4kpages > 0 {
             let entry_index = addr.part(page_map_level);
 
             let p = unsafe { page_map.add(entry_index as usize) };
             let page_map_ref = unsafe { p.as_mut() }.expect("failed to as mut MapEntry");
-            let child_map_result = page_map_ref.set_new_page_map_if_not_present(memory_manager);
+            let child_map_result = page_map_ref.set_new_page_map_if_not_present();
             if let Err(e) = child_map_result {
                 return (num_4kpages, Some(e));
             }
@@ -169,7 +167,6 @@ impl PageMapEntry {
                     writable,
                     addr,
                     num_4kpages,
-                    memory_manager,
                 );
                 if error.is_some() {
                     return (num_4kpages, error);
@@ -190,15 +187,12 @@ impl PageMapEntry {
         (num_4kpages, None)
     }
 
-    fn set_new_page_map_if_not_present(
-        &mut self,
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<*mut PageMapEntry, Error> {
+    fn set_new_page_map_if_not_present(&mut self) -> Result<*mut PageMapEntry, Error> {
         if self.present() != 0 {
             return Ok(self.pointer());
         }
 
-        let child_map_result = Self::new_page_map(memory_manager);
+        let child_map_result = Self::new_page_map();
         if let Ok(child) = child_map_result {
             self.set_pointer(child);
             self.set_present(1);
@@ -206,10 +200,8 @@ impl PageMapEntry {
         child_map_result
     }
 
-    pub fn new_page_map(
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<*mut PageMapEntry, Error> {
-        let frame = memory_manager.allocate(1);
+    pub fn new_page_map() -> Result<*mut PageMapEntry, Error> {
+        let frame = MEMORY_MANAGER.lock().allocate(1);
         if let Err(e) = frame {
             return Err(e);
         }
@@ -227,20 +219,15 @@ impl PageMapEntry {
         Ok(e)
     }
 
-    pub fn clean_page_maps(
-        addr: LinearAddress4Level,
-        cr3: u64,
-        memory_manager: &mut BitmapMemoryManager,
-    ) -> Result<(), Error> {
+    pub fn clean_page_maps(addr: LinearAddress4Level, cr3: u64) -> Result<(), Error> {
         let pm4_table = cr3 as *mut u64 as *mut PageMapEntry;
-        Self::clean_page_map(pm4_table, 4, addr, memory_manager)
+        Self::clean_page_map(pm4_table, 4, addr)
     }
 
     fn clean_page_map(
         page_map: *mut PageMapEntry,
         page_map_level: i32,
         addr: LinearAddress4Level,
-        memory_manager: &mut BitmapMemoryManager,
     ) -> Result<(), Error> {
         for i in addr.part(page_map_level) as usize..512 {
             let entry = unsafe { page_map.add(i).as_mut() }.unwrap();
@@ -249,13 +236,13 @@ impl PageMapEntry {
             }
 
             if page_map_level > 1 {
-                Self::clean_page_map(entry.pointer(), page_map_level - 1, addr, memory_manager)?;
+                Self::clean_page_map(entry.pointer(), page_map_level - 1, addr)?;
             }
 
             if entry.writable() {
                 let entry_addr = entry.pointer() as usize;
                 let map_frame = FrameID::new(entry_addr / BYTES_PER_FRAME);
-                memory_manager.free(map_frame, 1)?;
+                MEMORY_MANAGER.lock().free(map_frame, 1)?;
             }
             entry.reset();
         }
@@ -372,7 +359,7 @@ pub mod global {
     use crate::io::FileDescriptor;
     use crate::libc::memcpy;
     use crate::make_error;
-    use crate::memory_manager::global::memory_manager;
+    use crate::memory_manager::global::MEMORY_MANAGER;
     use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
     use crate::paging::{set_page_content, LinearAddress4Level, PageMapEntry};
     use crate::task::global::task_manager;
@@ -425,13 +412,7 @@ pub mod global {
         }
 
         if task.dpaging_begin <= causal_addr && causal_addr < task.dpaging_end {
-            PageMapEntry::setup_page_maps(
-                LinearAddress4Level::new(causal_addr),
-                1,
-                true,
-                get_cr3(),
-                memory_manager(),
-            )
+            PageMapEntry::setup_page_maps(LinearAddress4Level::new(causal_addr), 1, true, get_cr3())
         } else if let Some(fm) = task.find_file_mapping(causal_addr) {
             let fm = fm.clone();
             prepare_page_cache(
@@ -447,7 +428,7 @@ pub mod global {
     pub fn free_page_map(table: *mut PageMapEntry) -> Result<(), Error> {
         let addr = table as *const _ as usize;
         let frame_id = FrameID::new(addr as usize / BYTES_PER_FRAME);
-        memory_manager().free(frame_id, 1)
+        MEMORY_MANAGER.lock().free(frame_id, 1)
     }
 
     pub(crate) fn prepare_page_cache(
@@ -457,7 +438,7 @@ pub mod global {
     ) -> Result<(), Error> {
         let mut page_vaddr = LinearAddress4Level::new(causal_vaddr);
         page_vaddr.set_offset(0);
-        PageMapEntry::setup_page_maps(page_vaddr, 1, true, get_cr3(), memory_manager())?;
+        PageMapEntry::setup_page_maps(page_vaddr, 1, true, get_cr3())?;
 
         let file_offset = page_vaddr.value() - fm.vaddr_begin;
         let page_cache =
@@ -467,7 +448,7 @@ pub mod global {
     }
 
     fn copy_on_page(causal_addr: u64) -> Result<(), Error> {
-        let p = PageMapEntry::new_page_map(memory_manager())?;
+        let p = PageMapEntry::new_page_map()?;
         let aligned_addr = causal_addr & 0xffff_ffff_ffff_f000;
         unsafe { memcpy(p as *mut c_void, aligned_addr as *const c_void, 4096) };
         set_page_content(
@@ -507,7 +488,7 @@ pub mod global {
                 continue;
             }
 
-            let table = PageMapEntry::new_page_map(memory_manager())?;
+            let table = PageMapEntry::new_page_map()?;
             let d = dest_at(i);
             d.0 = s.0;
             d.set_pointer(table);

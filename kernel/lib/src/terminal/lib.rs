@@ -13,7 +13,7 @@ use crate::io::{FileDescriptor, STD_ERR, STD_IN, STD_OUT};
 use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
 use crate::layer::{LayerID, LayerManager};
 use crate::libc::{memcpy, strcpy};
-use crate::memory_manager::global::memory_manager;
+use crate::memory_manager::global::MEMORY_MANAGER;
 use crate::message::MessageType::Layer;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
 use crate::paging::global::{copy_page_maps, free_page_map, reset_cr3};
@@ -548,8 +548,7 @@ impl Terminal {
         let app_load = self.load_app(file_entry, task).map_err(|e| (0, e))?;
 
         let args_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000);
-        PageMapEntry::setup_page_maps(args_frame_addr, 1, true, get_cr3(), memory_manager())
-            .map_err(|e| (0, e))?;
+        PageMapEntry::setup_page_maps(args_frame_addr, 1, true, get_cr3()).map_err(|e| (0, e))?;
         let argv = args_frame_addr.value() as *mut u64 as *mut *mut c_char;
         let argv_len = 32; // argv = 8x32 = 256 bytes
         let p_p_cchar_size = mem::size_of::<*const *const c_char>();
@@ -563,14 +562,8 @@ impl Terminal {
 
         let stack_size = Task::DEFAULT_STACK_BYTES;
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000 - stack_size as u64);
-        PageMapEntry::setup_page_maps(
-            stack_frame_addr,
-            stack_size / 4096,
-            true,
-            get_cr3(),
-            memory_manager(),
-        )
-        .map_err(|e| (0, e))?;
+        PageMapEntry::setup_page_maps(stack_frame_addr, stack_size / 4096, true, get_cr3())
+            .map_err(|e| (0, e))?;
 
         // register standard in/out and error file descriptors
         for file_rc in &self.files {
@@ -598,12 +591,8 @@ impl Terminal {
             let _ = unsafe { CString::from_raw(c_arg as *mut c_char) };
         }
 
-        PageMapEntry::clean_page_maps(
-            LinearAddress4Level::new(0xffff_8000_0000_0000),
-            get_cr3(),
-            memory_manager(),
-        )
-        .map_err(|e| (ret, e))?;
+        PageMapEntry::clean_page_maps(LinearAddress4Level::new(0xffff_8000_0000_0000), get_cr3())
+            .map_err(|e| (ret, e))?;
 
         free_pml4(task).map(|_| ret).map_err(|e| (ret, e))
     }
@@ -628,7 +617,7 @@ impl Terminal {
             return Err(make_error!(Code::InvalidFile));
         }
 
-        let elf_last_addr = elf_header.load_elf(get_cr3(), memory_manager())?;
+        let elf_last_addr = elf_header.load_elf(get_cr3())?;
         let mut app_load = AppLoadInfo::new(elf_last_addr, elf_header.e_entry as u64, temp_pml4);
         insert_app_load(file_entry, app_load.clone());
 
@@ -848,7 +837,7 @@ impl Terminal {
     }
 
     fn execute_memstat(&mut self) -> i32 {
-        let p_stat = memory_manager().stat();
+        let p_stat = MEMORY_MANAGER.lock().stat();
         writeln!(
             self.stdout(),
             "Phys used : {} frames ({} MiB)\nPhys total: {} frames ({} MiB)",
@@ -1016,7 +1005,7 @@ fn new_c_chars_vec(strs: &[&str]) -> Vec<*const c_char> {
 }
 
 pub fn setup_pml4(current_task: &mut Task) -> Result<*mut PageMapEntry, Error> {
-    let pml4 = PageMapEntry::new_page_map(memory_manager())?;
+    let pml4 = PageMapEntry::new_page_map()?;
 
     let current_pml4 = get_cr3() as *const u64 as *const PageMapEntry;
     unsafe {

@@ -10,7 +10,7 @@ pub mod global {
     use super::{SegmentDescriptor, KERNEL_CS, KERNEL_DS, KERNEL_SS};
     use crate::asm::global::{load_gdt, load_tr, set_csss, set_ds_all};
     use crate::interrupt::global::IST_FOR_TIMER;
-    use crate::memory_manager::global::memory_manager;
+    use crate::memory_manager::global::MEMORY_MANAGER;
     use crate::memory_manager::BYTES_PER_FRAME;
     use crate::segment::K_TSS;
     use crate::x86_descriptor::SegmentDescriptorType;
@@ -64,7 +64,7 @@ pub mod global {
     }
 
     fn allocate_stack_area(num_4kframes: usize) -> u64 {
-        if let Ok(frame_id) = memory_manager().allocate(num_4kframes) {
+        if let Ok(frame_id) = MEMORY_MANAGER.lock().allocate(num_4kframes) {
             (frame_id.id() * BYTES_PER_FRAME + num_4kframes * 4096) as u64
         } else {
             panic!("failed to allocate stack area. num = {}", num_4kframes);
