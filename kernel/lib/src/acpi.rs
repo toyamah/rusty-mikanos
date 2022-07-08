@@ -6,35 +6,35 @@ pub mod global {
     use crate::acpi::{DescriptionHeader, Fadt, Rsdp, Xsdt};
     use crate::asm::global::io_in_32;
     use log::info;
+    use spin::Once;
 
     const PM_TIMER_FREQ: u32 = 3579545;
 
-    static mut FADT: Option<&'static Fadt> = None;
+    static FADT: Once<&'static Fadt> = Once::new();
 
     pub fn initialize(rsdp: &'static Rsdp) {
-        rsdp.validate().expect("RDSP is not valid.");
+        FADT.call_once(|| {
+            rsdp.validate().expect("RDSP is not valid.");
 
-        let xsdt = unsafe { (rsdp.xsdt_address as *const Xsdt).as_ref().unwrap() };
-        xsdt.header.validate(b"XSDT").expect("XSDT is not valid.");
+            let xsdt = unsafe { (rsdp.xsdt_address as *const Xsdt).as_ref().unwrap() };
+            xsdt.header.validate(b"XSDT").expect("XSDT is not valid.");
 
-        let fadt = xsdt
-            .entries()
-            .find(|&header| {
-                header.validate(b"FACP").map(|_| true).unwrap_or_else(|m| {
-                    info!("{}", m);
-                    false
+            xsdt.entries()
+                .find(|&header| {
+                    header.validate(b"FACP").map(|_| true).unwrap_or_else(|m| {
+                        info!("{}", m);
+                        false
+                    })
                 })
-            })
-            .and_then(|entry| unsafe {
-                (entry as *const DescriptionHeader as *const Fadt).as_ref()
-            })
-            .expect("FADT is not found");
-
-        unsafe { FADT = Some(fadt) };
+                .and_then(|entry| unsafe {
+                    (entry as *const DescriptionHeader as *const Fadt).as_ref()
+                })
+                .expect("FADT is not found")
+        });
     }
 
     pub fn wait_milliseconds(msec: u32) {
-        let fadt = unsafe { FADT.unwrap() };
+        let fadt = *FADT.get().unwrap();
         let pm_timer_32 = ((fadt.flags >> 8) & 1) != 0;
 
         let start = io_in_32(fadt.pm_tmr_blk as u16);
