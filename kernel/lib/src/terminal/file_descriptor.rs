@@ -5,7 +5,7 @@ use crate::message::{Message, MessageType, PipeMessage};
 use crate::str_trimming_nul;
 use crate::task::global::task_manager;
 use crate::task::TaskID;
-use crate::terminal::lib::get_terminal_mut_by;
+use crate::terminal::terminal_writer::{TerminalWriter, TERMINAL_WRITERS};
 use alloc::rc::Rc;
 use alloc::string::String;
 use core::arch::asm;
@@ -13,6 +13,7 @@ use core::cell::RefCell;
 use core::ffi::c_void;
 use core::fmt::Write;
 use core::{cmp, mem};
+use spin::MutexGuard;
 
 pub(super) struct TerminalDescriptor {
     pub(super) command_line: String,
@@ -33,8 +34,7 @@ impl TerminalFileDescriptor {
     pub fn read(&mut self, buf: &mut [u8]) -> usize {
         loop {
             unsafe { asm!("cli") };
-            let task = task_manager()
-                .get_task_mut(get_terminal_mut_by(self.terminal_id).unwrap().task_id());
+            let task = task_manager().get_task_mut(self.terminal_id);
             if task.is_none() {
                 return 0;
             }
@@ -56,9 +56,13 @@ impl TerminalFileDescriptor {
                 continue;
             }
 
-            let terminal = get_terminal_mut_by(self.terminal_id).unwrap();
             if is_control_key_inputted(arg.modifier) && arg.ascii.is_ascii() {
-                write!(terminal, "^{}", arg.ascii.to_ascii_uppercase()).unwrap();
+                write!(
+                    self.terminal_writer(),
+                    "^{}",
+                    arg.ascii.to_ascii_uppercase()
+                )
+                .unwrap();
                 if arg.keycode == KEY_D {
                     return 0; // EOT
                 }
@@ -67,8 +71,11 @@ impl TerminalFileDescriptor {
 
             let mut bytes = [0_u8; 4];
             let str = arg.ascii.encode_utf8(&mut bytes);
-            terminal.print(str);
-            terminal.redraw();
+            {
+                let mut w = self.terminal_writer();
+                w.print(str);
+                w.redraw();
+            }
             let size = cmp::min(buf.len(), bytes.len());
             buf[..size].copy_from_slice(&bytes[..size]);
             return bytes.iter().filter(|&&x| x != 0).count();
@@ -78,9 +85,9 @@ impl TerminalFileDescriptor {
     pub fn write(&mut self, buf: &[u8]) -> usize {
         match str_trimming_nul(buf) {
             Ok(str) => {
-                let terminal = get_terminal_mut_by(self.terminal_id).unwrap();
-                terminal.print(str);
-                terminal.redraw();
+                let mut writer = self.terminal_writer();
+                writer.print(str);
+                writer.redraw();
                 str.as_bytes().len()
             }
             Err(_) => 0,
@@ -93,6 +100,10 @@ impl TerminalFileDescriptor {
 
     pub fn size(&self) -> usize {
         0
+    }
+
+    fn terminal_writer(&self) -> MutexGuard<TerminalWriter> {
+        unsafe { TERMINAL_WRITERS.get(self.terminal_id) }.lock()
     }
 }
 

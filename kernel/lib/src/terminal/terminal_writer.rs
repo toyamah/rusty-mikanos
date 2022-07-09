@@ -10,6 +10,7 @@ use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MA
 use crate::Window;
 use alloc::collections::BTreeMap;
 use core::arch::asm;
+use core::fmt::Write;
 use spin::Mutex;
 
 // pub(super) static TERMINAL_WRITERS: RwLock<TerminalWriters> = RwLock::new(TerminalWriters::new());
@@ -276,5 +277,12 @@ impl TerminalWriter {
         self.cursor.x = line.len() as i32 + 1;
 
         draw_area
+    }
+}
+
+impl Write for TerminalWriter {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.print(s);
+        Ok(())
     }
 }
