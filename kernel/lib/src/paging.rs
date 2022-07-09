@@ -1,7 +1,7 @@
 use crate::asm::global::invalidate_tlb;
 use crate::error::Error;
 use crate::memory_manager::global::MEMORY_MANAGER;
-use crate::memory_manager::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
+use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
 use bit_field::BitField;
 use core::mem;
 use core::ptr::write_bytes;

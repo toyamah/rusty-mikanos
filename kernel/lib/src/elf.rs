@@ -1,6 +1,5 @@
 use crate::error::{Code, Error};
 use crate::make_error;
-use crate::memory_manager::BitmapMemoryManager;
 use crate::paging::{LinearAddress4Level, PageMapEntry};
 use core::{cmp, mem};
 

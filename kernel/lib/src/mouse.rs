@@ -14,22 +14,8 @@ pub mod global {
     use super::{draw_mouse_cursor, new_mouse_cursor_window, Mouse};
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
-    use crate::layer::global::{
-        active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager,
-        screen_frame_buffer,
-    };
-    use crate::Window;
+    use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
     use spin::Mutex;
-
-    fn mouse_cursor_window() -> &'static mut Window {
-        let layer_id = MOUSE.lock().as_ref().unwrap().layer_id;
-        get_layer_window_mut(layer_id).expect("could not find mouse layer")
-    }
-
-    fn mouse_cursor_window_ref() -> &'static Window {
-        let layer_id = MOUSE.lock().as_ref().unwrap().layer_id;
-        get_layer_window_ref(layer_id).expect("could not find mouse layer")
-    }
 
     pub static MOUSE: Mutex<Option<Mouse>> = Mutex::new(None);
 

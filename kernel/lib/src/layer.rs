@@ -52,17 +52,8 @@ pub mod global {
         unsafe { &mut LAYER_TASK_MAP }
     }
 
-    pub fn bg_window() -> &'static mut Window {
-        unsafe { get_layer_window_mut(BG_LAYER_ID).expect("could not find bg layer") }
-    }
-    pub fn bg_window_ref() -> &'static Window {
-        unsafe { get_layer_window_ref(BG_LAYER_ID).expect("could not find bg layer") }
-    }
     pub fn console_window() -> &'static mut Window {
         get_layer_window_mut(console().layer_id().unwrap()).expect("could not find console layer")
-    }
-    pub fn console_window_ref() -> &'static Window {
-        get_layer_window_ref(console().layer_id().unwrap()).expect("could not find console layer")
     }
 
     pub fn initialize() {

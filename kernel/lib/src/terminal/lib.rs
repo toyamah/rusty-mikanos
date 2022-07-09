@@ -152,7 +152,7 @@ pub fn task_terminal(task_id: u64, data: usize) {
                 if show_window && active_mode == WindowActiveMode::Activate {
                     let area = terminal().blink_cursor();
 
-                    let msg = Message::new(MessageType::Layer(LayerMessage {
+                    let msg = Message::new(Layer(LayerMessage {
                         layer_id: terminal().layer_id,
                         op: LayerOperation::DrawArea(area),
                         src_task_id: task_id,
@@ -170,7 +170,7 @@ pub fn task_terminal(task_id: u64, data: usize) {
                 }
                 let area = terminal().input_key(arg.modifier, arg.keycode, arg.ascii);
                 if show_window {
-                    let msg = Message::new(MessageType::Layer(LayerMessage {
+                    let msg = Message::new(Layer(LayerMessage {
                         layer_id: terminal().layer_id,
                         op: LayerOperation::DrawArea(area),
                         src_task_id: task_id,
@@ -644,7 +644,7 @@ impl Terminal {
                 .unwrap_or(-TITLED_WINDOW_TOP_LEFT_MARGIN.x - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.x),
             current_cursor.y - prev_cursor.y + 16,
         );
-        let msg = Message::new(MessageType::Layer(LayerMessage {
+        let msg = Message::new(Layer(LayerMessage {
             layer_id: self.layer_id,
             op: LayerOperation::DrawArea(Rectangle::new(draw_pos, draw_size)),
             src_task_id: self.task_id,
