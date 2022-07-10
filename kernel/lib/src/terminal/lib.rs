@@ -3,11 +3,9 @@ use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
 use crate::fat::global::{boot_volume_image, create_file, find_file};
 use crate::fat::{Attribute, DirectoryEntry, FatFileDescriptor, END_OF_CLUSTER_CHAIN};
-use crate::font::{write_ascii, write_string, write_unicode};
 use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{
-    draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
-    COLOR_BLACK, COLOR_WHITE,
+    draw_text_box_with_colors, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK,
 };
 use crate::io::{FileDescriptor, STD_ERR, STD_IN, STD_OUT};
 use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
@@ -28,6 +26,7 @@ use crate::terminal::file_descriptor::{
     PipeDescriptor, TerminalDescriptor, TerminalFileDescriptor,
 };
 use crate::terminal::history::{CommandHistory, Direction};
+use crate::terminal::terminal_writer::{TerminalWriter, TERMINAL_WRITERS};
 use crate::timer::global::{current_tick, timer_manager};
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
@@ -45,6 +44,7 @@ use core::fmt::Write;
 use core::ops::DerefMut;
 use core::{fmt, mem};
 use shared::PixelFormat;
+use spin::MutexGuard;
 
 static mut TERMINALS: BTreeMap<TaskID, Terminal> = BTreeMap::new();
 pub(crate) fn get_terminal_mut_by(task_id: TaskID) -> Option<&'static mut Terminal> {
@@ -223,15 +223,13 @@ impl AppLoadInfo {
     }
 }
 
-const ROWS: usize = 15;
-const COLUMNS: usize = 60;
-const LINE_MAX: usize = 128;
+pub(super) const ROWS: usize = 15;
+pub(super) const COLUMNS: usize = 60;
+pub(super) const LINE_MAX: usize = 128;
 
 pub(crate) struct Terminal {
     task_id: TaskID,
     layer_id: LayerID,
-    cursor: Vector2D<i32>,
-    is_cursor_visible: bool,
     line_buf: String,
     command_history: CommandHistory,
     files: [Rc<RefCell<FileDescriptor>>; STD_ERR + 1],
@@ -259,8 +257,6 @@ impl Terminal {
         Self {
             task_id,
             layer_id: LayerID::MAX,
-            cursor: Vector2D::new(0, 0),
-            is_cursor_visible: false,
             line_buf: String::with_capacity(LINE_MAX),
             command_history: CommandHistory::new(),
             files,
@@ -293,26 +289,26 @@ impl Terminal {
             let inner_size = window.inner_size();
             draw_terminal(&mut window, Vector2D::new(0, 0), inner_size);
             self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
-            self.print(">");
+        }
+
+        unsafe {
+            TERMINAL_WRITERS.register(
+                self.task_id,
+                TerminalWriter::new(self.layer_id, self.task_id),
+            );
+        }
+
+        if show_window {
+            self.print(">")
         }
     }
 
     fn blink_cursor(&mut self) -> Rectangle<i32> {
-        self.is_cursor_visible = !self.is_cursor_visible;
-        self.draw_cursor(self.is_cursor_visible);
-        Rectangle::new(self.calc_cursor_pos(), Vector2D::new(7, 15))
+        self.writer().blink_cursor()
     }
 
     fn draw_cursor(&mut self, visible: bool) {
-        if let Some(window) = self.window_mut() {
-            let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
-            fill_rectangle(
-                &mut window.normal_window_writer(),
-                &self.calc_cursor_pos(),
-                &Vector2D::new(7, 15),
-                color,
-            );
-        }
+        self.writer().draw_cursor(visible)
     }
 
     fn input_key(&mut self, _modifier: u8, keycode: u8, ascii: char) -> Rectangle<i32> {
@@ -324,13 +320,7 @@ impl Terminal {
             '\n' => {
                 self.command_history.push(self.line_buf.to_string());
 
-                self.cursor.x = 0;
-                if self.cursor.y < ROWS as i32 - 1 {
-                    self.cursor.y += 1;
-                } else {
-                    self.scroll1();
-                }
-
+                self.writer().new_line();
                 self.execute_line();
                 self.print(">");
                 draw_area.pos = TITLED_WINDOW_TOP_LEFT_MARGIN;
@@ -342,15 +332,7 @@ impl Terminal {
             }
             '\x08' => {
                 if self.line_buf.pop().is_some() {
-                    self.cursor.x -= 1;
-                    if let Some(window) = self.window_mut() {
-                        fill_rectangle(
-                            &mut window.normal_window_writer(),
-                            &self.calc_cursor_pos(),
-                            &Vector2D::new(8, 16),
-                            &COLOR_BLACK,
-                        );
-                    }
+                    self.writer().back_space();
                     draw_area.pos = self.calc_cursor_pos();
                 }
             }
@@ -362,19 +344,9 @@ impl Terminal {
                 }
             }
             _ => {
-                if self.cursor.x < COLUMNS as i32 - 1 && self.line_buf.len() < LINE_MAX {
+                if self.writer().can_write_on_this_line() && self.line_buf.len() < LINE_MAX {
                     self.line_buf.push(ascii);
-                    let pos = self.calc_cursor_pos();
-                    if let Some(window) = self.window_mut() {
-                        write_ascii(
-                            &mut window.normal_window_writer(),
-                            pos.x,
-                            pos.y,
-                            ascii,
-                            &COLOR_WHITE,
-                        );
-                    }
-                    self.cursor.x += 1;
+                    self.writer().input_ascii(ascii);
                 }
             }
         }
@@ -384,26 +356,11 @@ impl Terminal {
     }
 
     fn calc_cursor_pos(&self) -> Vector2D<i32> {
-        TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4 + 8 * self.cursor.x, 4 + 16 * self.cursor.y)
+        self.writer().calc_cursor_pos()
     }
 
-    fn scroll1(&mut self) {
-        if let Some(window) = self.window_mut() {
-            let move_src = Rectangle::new(
-                TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4 + 16),
-                Vector2D::new(8 * COLUMNS as i32, 16 * (ROWS as i32 - 1)),
-            );
-            window.move_(
-                TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4),
-                &move_src,
-            );
-            fill_rectangle(
-                window,
-                &Vector2D::new(4, 4 + 16 * self.cursor.y),
-                &Vector2D::new(8 * COLUMNS as i32, 16),
-                &COLOR_BLACK,
-            );
-        }
+    fn scroll1(&self) {
+        self.writer().scroll1()
     }
 
     fn execute_line(&mut self) {
@@ -482,15 +439,7 @@ impl Terminal {
                 0
             }
             "clear" => {
-                if let Some(window) = self.window_mut() {
-                    fill_rectangle(
-                        window,
-                        &Vector2D::new(4, 4),
-                        &Vector2D::new(8 * COLUMNS as i32, 16 * ROWS as i32),
-                        &COLOR_BLACK,
-                    );
-                }
-                self.cursor = Vector2D::new(0, 0);
+                self.writer().clear();
                 0
             }
             "lspci" => {
@@ -627,136 +576,28 @@ impl Terminal {
     }
 
     pub(crate) fn print(&mut self, s: &str) {
-        let prev_cursor = self.calc_cursor_pos();
-        self.draw_cursor(false);
-
-        for char in s.chars() {
-            self.print_char(char);
-        }
-
-        self.draw_cursor(true);
-        let current_cursor = self.calc_cursor_pos();
-
-        let draw_pos = Vector2D::new(TITLED_WINDOW_TOP_LEFT_MARGIN.x, prev_cursor.y);
-        let draw_size = Vector2D::new(
-            self.window_mut()
-                .map(|w| w.inner_size().x)
-                .unwrap_or(-TITLED_WINDOW_TOP_LEFT_MARGIN.x - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.x),
-            current_cursor.y - prev_cursor.y + 16,
-        );
-        let msg = Message::new(Layer(LayerMessage {
-            layer_id: self.layer_id,
-            op: LayerOperation::DrawArea(Rectangle::new(draw_pos, draw_size)),
-            src_task_id: self.task_id,
-        }));
-
-        unsafe { asm!("cli") };
-        task_manager()
-            .send_message(task_manager().main_task().id(), msg)
-            .unwrap();
-        unsafe { asm!("sti") };
+        self.writer().print(s)
     }
 
     fn print_char(&mut self, c: char) {
-        let window = match self.window_mut() {
-            None => return,
-            Some(w) => w,
-        };
-
-        if c == '\n' {
-            self.new_line();
-            return;
-        }
-
-        let columns = COLUMNS as i32;
-        if c.is_ascii() {
-            if self.cursor.x == columns {
-                self.new_line();
-            }
-            let pos = self.calc_cursor_pos();
-            write_unicode(
-                &mut window.normal_window_writer(),
-                pos.x,
-                pos.y,
-                c,
-                &COLOR_WHITE,
-            )
-            .unwrap_or_default();
-            self.cursor.x += 1;
-        } else {
-            if self.cursor.x == columns - 1 {
-                self.new_line();
-            }
-            let pos = self.calc_cursor_pos();
-            write_unicode(
-                &mut window.normal_window_writer(),
-                pos.x,
-                pos.y,
-                c,
-                &COLOR_WHITE,
-            )
-            .unwrap_or_default();
-            self.cursor.x += 2;
-        }
+        self.writer().print_char(c)
     }
 
     fn new_line(&mut self) {
-        self.cursor.x = 0;
-        if self.cursor.y < ROWS as i32 - 1 {
-            self.cursor.y += 1;
-        } else {
-            self.scroll1()
-        }
+        self.writer().new_line()
     }
 
     pub(super) fn redraw(&mut self) {
-        let size = match self.window_mut() {
-            None => return,
-            Some(w) => w.inner_size(),
-        };
-        let draw_area = Rectangle::new(TITLED_WINDOW_TOP_LEFT_MARGIN, size);
-
-        let msg = Message::new(Layer(LayerMessage {
-            layer_id: self.layer_id,
-            op: LayerOperation::DrawArea(draw_area),
-            src_task_id: self.task_id,
-        }));
-
-        unsafe { asm!("cli") };
-        let _ = task_manager().send_message(task_manager().main_task().id(), msg);
-        unsafe { asm!("sti") };
+        self.writer().redraw()
     }
 
     fn history_up_down(&mut self, direction: Direction) -> Rectangle<i32> {
-        self.cursor.x = 1;
-        let first_pos = self.calc_cursor_pos();
-        let draw_area = Rectangle::new(first_pos, Vector2D::new(8 * (COLUMNS as i32 - 1), 16));
-        if let Some(window) = self.window_mut() {
-            fill_rectangle(
-                &mut window.normal_window_writer(),
-                &draw_area.pos,
-                &draw_area.size,
-                &COLOR_BLACK,
-            );
-        }
-
         self.line_buf = match direction {
             Direction::Up => self.command_history.up().to_string(),
             Direction::Down => self.command_history.down().to_string(),
         };
 
-        if let Some(window) = self.window_mut() {
-            write_string(
-                &mut window.normal_window_writer(),
-                first_pos.x,
-                first_pos.y,
-                self.line_buf.as_str(),
-                &COLOR_WHITE,
-            );
-        }
-        self.cursor.x = self.line_buf.len() as i32 + 1;
-
-        draw_area
+        self.writer().history_up_down(self.line_buf.as_str())
     }
 
     fn window_mut(&self) -> Option<&'static mut Window> {
@@ -878,6 +719,10 @@ impl Terminal {
     fn stderr(&mut self) -> RefMut<'_, FileDescriptor> {
         self.files[STD_ERR].borrow_mut()
     }
+
+    fn writer(&self) -> MutexGuard<TerminalWriter> {
+        unsafe { TERMINAL_WRITERS.get(self.task_id).lock() }
+    }
 }
 
 fn list_all_entries<T: DerefMut<Target = FileDescriptor>>(mut fd: T, dir_cluster: u32) {
@@ -904,6 +749,12 @@ impl Write for Terminal {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.print(s);
         Ok(())
+    }
+}
+
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        unsafe { TERMINAL_WRITERS.remove(self.task_id) };
     }
 }
 
