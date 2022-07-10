@@ -43,18 +43,14 @@ use core::ffi::c_void;
 use core::fmt::Write;
 use core::mem;
 use core::ops::DerefMut;
+use core::sync::atomic::{AtomicPtr, Ordering};
 use shared::PixelFormat;
+use spin::mutex::Mutex;
 use spin::MutexGuard;
 
-static mut APP_LOADS: BTreeMap<usize, AppLoadInfo> = BTreeMap::new();
-pub(super) fn get_app_load_ref(e: &DirectoryEntry) -> Option<&'static AppLoadInfo> {
-    unsafe { APP_LOADS.get(&(e as *const _ as usize)) }
-}
-pub(super) fn get_app_load_mut(e: &DirectoryEntry) -> Option<&'static mut AppLoadInfo> {
-    unsafe { APP_LOADS.get_mut(&(e as *const _ as usize)) }
-}
-pub(super) fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {
-    unsafe { APP_LOADS.insert(e as *const _ as usize, app_load) };
+static APP_LOADS: Mutex<BTreeMap<usize, AppLoadInfo>> = Mutex::new(BTreeMap::new());
+fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {
+    APP_LOADS.lock().insert(e as *const _ as usize, app_load);
 }
 
 pub fn task_terminal(task_id: u64, data: usize) {
@@ -192,19 +188,27 @@ pub fn task_terminal(task_id: u64, data: usize) {
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct AppLoadInfo {
     vaddr_end: u64,
     entry: u64,
-    pml4: *const PageMapEntry,
+    pml4: AtomicPtr<PageMapEntry>,
 }
 
 impl AppLoadInfo {
-    fn new(vaddr_end: u64, entry: u64, pml4: *const PageMapEntry) -> Self {
+    fn new(vaddr_end: u64, entry: u64, pml4: *mut PageMapEntry) -> Self {
         Self {
             vaddr_end,
             entry,
-            pml4,
+            pml4: AtomicPtr::new(pml4),
+        }
+    }
+
+    fn clone(&mut self) -> Self {
+        let ptr = self.pml4.load(Ordering::SeqCst);
+        Self {
+            vaddr_end: self.vaddr_end,
+            entry: self.entry,
+            pml4: AtomicPtr::new(ptr),
         }
     }
 }
@@ -537,12 +541,14 @@ impl Terminal {
         file_entry: &DirectoryEntry,
         task: &mut Task,
     ) -> Result<AppLoadInfo, Error> {
-        let temp_pml4 = setup_pml4(task)?;
-        if let Some(mut app_load) = get_app_load_mut(file_entry).cloned() {
-            copy_page_maps(temp_pml4, app_load.pml4, 4, 256)?;
-            app_load.pml4 = temp_pml4;
-            return Ok(app_load);
+        if let Some(original) = APP_LOADS.lock().get_mut(&(file_entry as *const _ as usize)) {
+            let temp_pml4 = setup_pml4(task)?;
+            copy_page_maps(temp_pml4, original.pml4.load(Ordering::SeqCst), 4, 256)?;
+            let cloned = AppLoadInfo::new(original.vaddr_end, original.entry, temp_pml4);
+            return Ok(cloned);
         }
+
+        let temp_pml4 = setup_pml4(task)?;
 
         let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
         file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image());
@@ -556,8 +562,8 @@ impl Terminal {
         let mut app_load = AppLoadInfo::new(elf_last_addr, elf_header.e_entry as u64, temp_pml4);
         insert_app_load(file_entry, app_load.clone());
 
-        app_load.pml4 = setup_pml4(task)?;
-        copy_page_maps(app_load.pml4 as *mut _, temp_pml4, 4, 256)?;
+        app_load.pml4 = AtomicPtr::new(setup_pml4(task)?);
+        copy_page_maps(app_load.pml4.load(Ordering::SeqCst), temp_pml4, 4, 256)?;
         Ok(app_load)
     }
 
