@@ -41,8 +41,8 @@ use core::arch::asm;
 use core::cell::{RefCell, RefMut};
 use core::ffi::c_void;
 use core::fmt::Write;
+use core::mem;
 use core::ops::DerefMut;
-use core::{fmt, mem};
 use shared::PixelFormat;
 use spin::MutexGuard;
 
@@ -742,13 +742,6 @@ fn list_all_entries<T: DerefMut<Target = FileDescriptor>>(mut fd: T, dir_cluster
             writeln!(fd, "{}", str_trimming_nul_unchecked(&name)).unwrap();
         }
         dir_cluster = boot_volume_image().next_cluster(dir_cluster);
-    }
-}
-
-impl Write for Terminal {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.print(s);
-        Ok(())
     }
 }
 
