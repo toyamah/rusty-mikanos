@@ -202,7 +202,7 @@ pub extern "C" fn KernelMainNewStack(
                     unsafe { asm!("sti") };
                     if let Some(&task_id) = task_id {
                         unsafe { asm!("cli") };
-                        task_manager().send_message(task_id, message).unwrap();
+                        let _ = task_manager().send_message(task_id, message);
                         unsafe { asm!("sti") };
                     } else {
                         printk!(

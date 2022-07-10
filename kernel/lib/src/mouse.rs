@@ -231,9 +231,7 @@ pub fn send_mouse_message(
             buttons,
         }));
 
-        task_manager
-            .send_message(task_id, msg)
-            .expect("failed to send message");
+        let _ = task_manager.send_message(task_id, msg);
     }
 
     if previous_buttons != buttons {
@@ -247,9 +245,7 @@ pub fn send_mouse_message(
                     press: ((buttons >> i) & 1) as i32,
                     button: i,
                 }));
-                task_manager
-                    .send_message(task_id, msg)
-                    .expect("failed to send message");
+                let _ = task_manager.send_message(task_id, msg);
             }
         }
     }
