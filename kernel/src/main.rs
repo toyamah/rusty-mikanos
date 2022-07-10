@@ -149,7 +149,7 @@ pub extern "C" fn KernelMainNewStack(
             &Vector2D::new(8 * 10, 16),
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
-        let tick = unsafe { current_tick_with_lock() };
+        let tick = current_tick_with_lock();
         write_string(main_window(), 20, 4, &format!("{:010}", tick), &COLOR_BLACK);
         layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
