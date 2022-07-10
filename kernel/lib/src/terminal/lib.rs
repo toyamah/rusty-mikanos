@@ -46,11 +46,6 @@ use core::ops::DerefMut;
 use shared::PixelFormat;
 use spin::MutexGuard;
 
-static mut TERMINALS: BTreeMap<TaskID, Terminal> = BTreeMap::new();
-pub(crate) fn get_terminal_mut_by(task_id: TaskID) -> Option<&'static mut Terminal> {
-    unsafe { TERMINALS.get_mut(&task_id) }
-}
-
 static mut APP_LOADS: BTreeMap<usize, AppLoadInfo> = BTreeMap::new();
 pub(super) fn get_app_load_ref(e: &DirectoryEntry) -> Option<&'static AppLoadInfo> {
     unsafe { APP_LOADS.get(&(e as *const _ as usize)) }
@@ -79,7 +74,7 @@ pub fn task_terminal(task_id: u64, data: usize) {
     unsafe { asm!("cli") };
     let task_id = TaskID::new(task_id);
     let current_task_id = task_manager().current_task().id();
-    {
+    let mut terminal = {
         // Initialize Terminal
         let mut terminal = Terminal::new(task_id, term_desc);
         terminal.initialize(
@@ -102,23 +97,21 @@ pub fn task_terminal(task_id: u64, data: usize) {
                 layer_task_map(),
             );
         }
-        unsafe { TERMINALS.insert(task_id, terminal) };
-    }
+        terminal
+    };
     unsafe { asm!("sti") };
-
-    let terminal = || unsafe { TERMINALS.get_mut(&task_id).expect("no such terminal") };
 
     if !show_window {
         for c in command.chars() {
-            terminal().input_key(0, 0, c);
+            terminal.input_key(0, 0, c);
         }
-        terminal().input_key(0, 0, '\n');
+        terminal.input_key(0, 0, '\n');
     }
 
     if let Some(fd) = term_desc {
         if fd.exit_after_command {
             unsafe { asm!("cli") };
-            task_manager().finish(terminal().last_exit_code);
+            task_manager().finish(terminal.last_exit_code);
             unsafe { asm!("sti") };
         }
     }
@@ -150,10 +143,10 @@ pub fn task_terminal(task_id: u64, data: usize) {
             MessageType::TimerTimeout { timeout, value: _ } => {
                 add_blink_timer(timeout);
                 if show_window && active_mode == WindowActiveMode::Activate {
-                    let area = terminal().blink_cursor();
+                    let area = terminal.blink_cursor();
 
                     let msg = Message::new(Layer(LayerMessage {
-                        layer_id: terminal().layer_id,
+                        layer_id: terminal.layer_id,
                         op: LayerOperation::DrawArea(area),
                         src_task_id: task_id,
                     }));
@@ -168,10 +161,10 @@ pub fn task_terminal(task_id: u64, data: usize) {
                 if !arg.press {
                     continue;
                 }
-                let area = terminal().input_key(arg.modifier, arg.keycode, arg.ascii);
+                let area = terminal.input_key(arg.modifier, arg.keycode, arg.ascii);
                 if show_window {
                     let msg = Message::new(Layer(LayerMessage {
-                        layer_id: terminal().layer_id,
+                        layer_id: terminal.layer_id,
                         op: LayerOperation::DrawArea(area),
                         src_task_id: task_id,
                     }));
@@ -192,18 +185,11 @@ pub fn task_terminal(task_id: u64, data: usize) {
                     layer_task_map(),
                 );
                 unsafe { asm!("cli") };
-                task_manager().finish(terminal().last_exit_code);
+                task_manager().finish(terminal.last_exit_code);
             }
             _ => {}
         }
     }
-}
-
-pub(crate) fn terminal_window(terminal_layer_id: LayerID) -> &'static mut Window {
-    layer_manager()
-        .get_layer_mut(terminal_layer_id)
-        .expect("couldn't find terminal window")
-        .get_window_mut()
 }
 
 #[derive(Clone)]
