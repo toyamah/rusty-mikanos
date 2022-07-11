@@ -6,6 +6,7 @@ use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowA
 use crate::task::{TaskID, TaskManager};
 use crate::window::Window;
 use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::arch::asm;
@@ -13,6 +14,7 @@ use core::cmp;
 use core::fmt::{Display, Formatter};
 use core::ops::AddAssign;
 use shared::FrameBufferConfig;
+use spin::{Mutex, MutexGuard};
 
 pub mod global {
     use super::LayerManager;
@@ -26,6 +28,8 @@ pub mod global {
     use crate::task::TaskID;
     use crate::Window;
     use alloc::collections::BTreeMap;
+    use alloc::sync::Arc;
+    use spin::Mutex;
 
     static mut BG_LAYER_ID: LayerID = LayerID::MAX;
 
@@ -52,10 +56,6 @@ pub mod global {
         unsafe { &mut LAYER_TASK_MAP }
     }
 
-    pub fn console_window() -> &'static mut Window {
-        get_layer_window_mut(console().layer_id().unwrap()).expect("could not find console layer")
-    }
-
     pub fn initialize() {
         let screen_size = screen_size();
         let mut bg_window = Window::new(
@@ -69,11 +69,14 @@ pub mod global {
             SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config()));
             LAYER_MANAGER = Some(LayerManager::new(frame_buffer_config()));
         };
-        let mut console_window = new_console_window(frame_buffer_config().pixel_format);
-        console().reset_mode(ConsoleWindow, &mut console_window);
+
+        let console_window = Arc::new(Mutex::new(new_console_window(
+            frame_buffer_config().pixel_format,
+        )));
+        console().reset_mode(ConsoleWindow(Arc::clone(&console_window)));
 
         let bg_layer_id = layer_manager()
-            .new_layer(bg_window)
+            .new_layer(Arc::new(Mutex::new(bg_window)))
             .move_(Vector2D::new(0, 0))
             .id();
         unsafe { BG_LAYER_ID = bg_layer_id };
@@ -87,27 +90,17 @@ pub mod global {
         layer_manager().up_down(bg_layer_id, 0);
         layer_manager().up_down(console().layer_id().unwrap(), 1);
     }
-
-    pub fn get_layer_window_ref(layer_id: LayerID) -> Option<&'static Window> {
-        layer_manager().get_layer_mut(layer_id).map(|l| &l.window)
-    }
-
-    pub fn get_layer_window_mut(layer_id: LayerID) -> Option<&'static mut Window> {
-        layer_manager()
-            .get_layer_mut(layer_id)
-            .map(|l| &mut l.window)
-    }
 }
 
 pub struct Layer {
     id: LayerID,
     position: Vector2D<i32>,
-    window: Window,
+    window: Arc<Mutex<Window>>,
     draggable: bool,
 }
 
 impl Layer {
-    pub fn new(id: LayerID, window: Window) -> Self {
+    pub fn new(id: LayerID, window: Arc<Mutex<Window>>) -> Self {
         Self {
             id,
             position: Vector2D::new(0, 0),
@@ -124,12 +117,12 @@ impl Layer {
         self.position
     }
 
-    pub fn get_window_ref(&self) -> &Window {
-        &self.window
+    pub fn get_window_ref(&self) -> MutexGuard<Window> {
+        self.window.lock()
     }
 
-    pub fn get_window_mut(&mut self) -> &mut Window {
-        &mut self.window
+    pub fn get_window_mut(&mut self) -> MutexGuard<Window> {
+        self.window.lock()
     }
 
     pub fn set_draggable(&mut self, draggable: bool) -> &mut Layer {
@@ -153,7 +146,7 @@ impl Layer {
     }
 
     fn draw_to(&mut self, screen: &mut FrameBuffer, area: Rectangle<i32>) {
-        self.window.draw_to(screen, self.position, area)
+        self.window.lock().draw_to(screen, self.position, area)
     }
 }
 
@@ -181,7 +174,7 @@ impl LayerManager {
         }
     }
 
-    pub fn new_layer(&mut self, window: Window) -> &mut Layer {
+    pub fn new_layer(&mut self, window: Arc<Mutex<Window>>) -> &mut Layer {
         let id = self.latest_id;
         self.layers.insert(id, Layer::new(id, window));
         self.latest_id += LayerID(1); // increment after layer.push to make layer_id and index of layers equal
@@ -213,7 +206,7 @@ impl LayerManager {
             let layer = self.layers.get_mut(&layer_id).unwrap();
 
             if layer_id == id {
-                window_area.size = layer.window.size().to_i32_vec2d();
+                window_area.size = layer.window.lock().size().to_i32_vec2d();
                 window_area.pos = layer.position;
                 if area.size.x >= 0 || area.size.y >= 0 {
                     area.pos += window_area.pos;
@@ -231,7 +224,7 @@ impl LayerManager {
 
     pub fn move_(&mut self, id: LayerID, new_position: Vector2D<i32>, screen: &mut FrameBuffer) {
         if let Some(layer) = self.layers.get_mut(&id) {
-            let window_size = layer.window.size();
+            let window_size = layer.window.lock().size();
             let old_pos = layer.position;
             layer.move_(new_position);
             self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()), screen);
@@ -246,7 +239,7 @@ impl LayerManager {
         screen: &mut FrameBuffer,
     ) {
         if let Some(layer) = self.layers.get_mut(&id) {
-            let window_size = layer.window.size();
+            let window_size = layer.window.lock().size();
             let old_pos = layer.position;
             layer.move_relative(pos_diff);
             self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()), screen);
@@ -301,7 +294,7 @@ impl LayerManager {
             .map(|id| &self.layers[id])
             .find(|&layer| {
                 let win_pos = layer.position;
-                let win_end_pos = win_pos + layer.window.size().to_i32_vec2d();
+                let win_end_pos = win_pos + layer.window.lock().size().to_i32_vec2d();
                 win_pos.x <= pos.x
                     && pos.x < win_end_pos.x
                     && win_pos.y <= pos.y

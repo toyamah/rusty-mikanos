@@ -35,6 +35,7 @@ use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::arch::asm;
@@ -268,23 +269,30 @@ impl Terminal {
         layout_manager: &mut LayerManager,
         pixel_format: PixelFormat,
     ) {
-        if show_window {
+        let window = if show_window {
             let mut window = Window::new_with_title(
                 COLUMNS * 8 + 8 + Window::TITLED_WINDOW_MARGIN.x as usize,
                 ROWS * 16 + 8 + Window::TITLED_WINDOW_MARGIN.y as usize,
                 pixel_format,
                 "MikanTerm",
             );
-
             let inner_size = window.inner_size();
             draw_terminal(&mut window, Vector2D::new(0, 0), inner_size);
-            self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
-        }
+
+            let window = Arc::new(Mutex::new(window));
+            self.layer_id = layout_manager
+                .new_layer(Arc::clone(&window))
+                .set_draggable(true)
+                .id();
+            Some(window)
+        } else {
+            None
+        };
 
         unsafe {
             TERMINAL_WRITERS.register(
                 self.task_id,
-                TerminalWriter::new(self.layer_id, self.task_id),
+                TerminalWriter::new(self.layer_id, self.task_id, window),
             );
         }
 
@@ -592,7 +600,7 @@ impl Terminal {
         self.writer().history_up_down(self.line_buf.as_str())
     }
 
-    fn window_mut(&self) -> Option<&'static mut Window> {
+    fn window_mut(&self) -> Option<MutexGuard<Window>> {
         layer_manager()
             .get_layer_mut(self.layer_id)
             .map(|l| l.get_window_mut())

@@ -15,6 +15,7 @@ pub mod global {
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
     use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
+    use alloc::sync::Arc;
     use spin::Mutex;
 
     pub static MOUSE: Mutex<Option<Mouse>> = Mutex::new(None);
@@ -23,7 +24,7 @@ pub mod global {
         let mut window = new_mouse_cursor_window(frame_buffer_config().pixel_format);
         draw_mouse_cursor(window.writer(), &Vector2D::new(0, 0));
 
-        let mouse_layer_id = layer_manager().new_layer(window).id();
+        let mouse_layer_id = layer_manager().new_layer(Arc::new(Mutex::new(window))).id();
 
         let mut mouse = Mouse::new(mouse_layer_id);
         mouse.set_position(

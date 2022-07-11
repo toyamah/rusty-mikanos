@@ -8,6 +8,7 @@ extern crate alloc;
 
 use crate::usb::global::xhci_controller;
 use alloc::format;
+use alloc::sync::Arc;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicI32, Ordering};
@@ -18,10 +19,7 @@ use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{fill_rectangle, PixelColor, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use lib::interrupt::global::initialize_interrupt;
 use lib::keyboard::KEY_F2;
-use lib::layer::global::{
-    active_layer, get_layer_window_mut, get_layer_window_ref, layer_manager, layer_task_map,
-    screen_frame_buffer,
-};
+use lib::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
 use lib::layer::LayerID;
 use lib::message::{Message, MessageType};
 use lib::mouse::global::MOUSE;
@@ -37,30 +35,19 @@ use lib::{
 };
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
-use spin::Once;
+use spin::{Mutex, Once};
 
 mod logger;
 mod memory_allocator;
 mod usb;
-
-fn main_window() -> &'static mut Window {
-    get_layer_window_mut(main_window_layer_id()).expect("could not find main layer")
-}
-fn main_window_ref() -> &'static Window {
-    get_layer_window_ref(main_window_layer_id()).expect("could not find main layer")
-}
 
 static mut MAIN_WINDOW_LAYER_ID: Option<LayerID> = None;
 fn main_window_layer_id() -> LayerID {
     unsafe { MAIN_WINDOW_LAYER_ID.unwrap() }
 }
 
-fn text_window() -> &'static mut Window {
-    get_layer_window_mut(*TEXT_WINDOW_LAYER_ID.wait()).expect("could not find text layer")
-}
-fn text_window_ref() -> &'static Window {
-    get_layer_window_ref(*TEXT_WINDOW_LAYER_ID.wait()).expect("could not find text layer")
-}
+static MAIN_WINDOW: Once<Arc<Mutex<Window>>> = Once::new();
+static TEXT_WINDOW: Once<Arc<Mutex<Window>>> = Once::new();
 
 static TEXT_WINDOW_LAYER_ID: Once<LayerID> = Once::new();
 
@@ -144,13 +131,19 @@ pub extern "C" fn KernelMainNewStack(
 
     loop {
         fill_rectangle(
-            main_window().writer(),
+            MAIN_WINDOW.wait().lock().writer(),
             &Vector2D::new(20, 4),
             &Vector2D::new(8 * 10, 16),
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
         let tick = current_tick_with_lock();
-        write_string(main_window(), 20, 4, &format!("{:010}", tick), &COLOR_BLACK);
+        write_string(
+            MAIN_WINDOW.wait().lock().writer(),
+            20,
+            4,
+            &format!("{:010}", tick),
+            &COLOR_BLACK,
+        );
         layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
@@ -259,11 +252,13 @@ extern "C" fn keyboard_observer(modifier: u8, keycode: u8, press: bool) {
 }
 
 fn initialize_main_window() {
-    let main_window =
-        Window::new_with_title(160, 52, frame_buffer_config().pixel_format, "Hello Window");
+    let main_window = MAIN_WINDOW.call_once(|| {
+        let w = Window::new_with_title(160, 52, frame_buffer_config().pixel_format, "Hello Window");
+        Arc::new(Mutex::new(w))
+    });
 
     let main_window_layer_id = layer_manager()
-        .new_layer(main_window)
+        .new_layer(Arc::clone(main_window))
         .set_draggable(true)
         .move_(Vector2D::new(300, 100))
         .id();
@@ -273,20 +268,24 @@ fn initialize_main_window() {
 }
 
 fn initialize_text_window() {
-    let win_w = 160;
-    let win_h = 52;
+    let text_window = TEXT_WINDOW.call_once(|| {
+        let win_w = 160;
+        let win_h = 52;
+        let w = Window::new_with_title(
+            win_w,
+            win_h,
+            frame_buffer_config().pixel_format,
+            "Text Box Test",
+        );
+        Arc::new(Mutex::new(w))
+    });
 
-    let mut text_window = Window::new_with_title(
-        win_w,
-        win_h,
-        frame_buffer_config().pixel_format,
-        "Text Box Test",
-    );
-    text_window.draw_text_box(Vector2D::new(0, 0), text_window.inner_size());
+    let size = text_window.lock().inner_size();
+    text_window.lock().draw_text_box(Vector2D::new(0, 0), size);
 
     let id = TEXT_WINDOW_LAYER_ID.call_once(|| {
         layer_manager()
-            .new_layer(text_window)
+            .new_layer(Arc::clone(text_window))
             .set_draggable(true)
             .move_(Vector2D::new(500, 100))
             .id()
@@ -304,12 +303,12 @@ fn input_text_window(c: char) {
         Vector2D::new(4 + 8 * text_window_index(), 6)
     }
 
-    let max_chars = (text_window_ref().inner_size().x - 8) / 8 - 1;
+    let max_chars = (TEXT_WINDOW.wait().lock().inner_size().x - 8) / 8 - 1;
     if c == '\x08' && text_window_index() > 0 {
         draw_text_cursor(false);
         TEXT_WINDOW_INDEX.fetch_sub(1, Ordering::SeqCst);
         fill_rectangle(
-            text_window().writer(),
+            TEXT_WINDOW.wait().lock().writer(),
             &pos(),
             &Vector2D::new(8, 16),
             &PixelColor::from(0xffffff),
@@ -318,7 +317,13 @@ fn input_text_window(c: char) {
     } else if c >= ' ' && text_window_index() < max_chars {
         draw_text_cursor(false);
         let pos = pos();
-        write_ascii(text_window().writer(), pos.x, pos.y, c, &COLOR_BLACK);
+        write_ascii(
+            TEXT_WINDOW.wait().lock().writer(),
+            pos.x,
+            pos.y,
+            c,
+            &COLOR_BLACK,
+        );
         TEXT_WINDOW_INDEX.fetch_add(1, Ordering::SeqCst);
         draw_text_cursor(true);
     }
@@ -329,7 +334,12 @@ fn input_text_window(c: char) {
 fn draw_text_cursor(visible: bool) {
     let color = if visible { &COLOR_BLACK } else { &COLOR_WHITE };
     let pos = Vector2D::new(4 + 8 * text_window_index(), 5);
-    fill_rectangle(text_window().writer(), &pos, &Vector2D::new(7, 15), color);
+    fill_rectangle(
+        TEXT_WINDOW.wait().lock().writer(),
+        &pos,
+        &Vector2D::new(7, 15),
+        color,
+    );
 }
 
 fn loop_and_hlt() -> ! {
