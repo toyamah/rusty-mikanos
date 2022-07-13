@@ -1,8 +1,10 @@
 use crate::error::{Code, Error};
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{Rectangle, Vector2D};
+use crate::layer::global::{active_layer, layer_task_map, screen_frame_buffer};
 use crate::make_error;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
+use crate::task::global::task_manager;
 use crate::task::{TaskID, TaskManager};
 use crate::window::Window;
 use alloc::collections::BTreeMap;
@@ -29,7 +31,7 @@ pub mod global {
     use crate::Window;
     use alloc::collections::BTreeMap;
     use alloc::sync::Arc;
-    use spin::Mutex;
+    use spin::{Mutex, Once};
 
     static mut BG_LAYER_ID: LayerID = LayerID::MAX;
 
@@ -38,12 +40,12 @@ pub mod global {
         unsafe { SCREEN_FRAME_BUFFER.as_mut().unwrap() }
     }
 
-    static mut LAYER_MANAGER: Option<LayerManager> = None;
-    pub fn layer_manager_op() -> Option<&'static mut LayerManager> {
-        unsafe { LAYER_MANAGER.as_mut() }
+    static LAYER_MANAGER: Once<Mutex<LayerManager>> = Once::new();
+    pub fn layer_manager_op() -> Option<&'static Mutex<LayerManager>> {
+        LAYER_MANAGER.get()
     }
-    pub fn layer_manager() -> &'static mut LayerManager {
-        unsafe { LAYER_MANAGER.as_mut().unwrap() }
+    pub fn layer_manager() -> &'static Mutex<LayerManager> {
+        LAYER_MANAGER.call_once(|| Mutex::new(LayerManager::new(frame_buffer_config())))
     }
 
     static mut ACTIVE_LAYER: ActiveLayer = ActiveLayer::new();
@@ -67,7 +69,6 @@ pub mod global {
 
         unsafe {
             SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config()));
-            LAYER_MANAGER = Some(LayerManager::new(frame_buffer_config()));
         };
 
         let console_window = Arc::new(Mutex::new(new_console_window(
@@ -75,20 +76,21 @@ pub mod global {
         )));
         console().reset_mode(ConsoleWindow(Arc::clone(&console_window)));
 
-        let bg_layer_id = layer_manager()
+        let mut layout_manager = layer_manager().lock();
+        let bg_layer_id = layout_manager
             .new_layer(Arc::new(Mutex::new(bg_window)))
             .move_(Vector2D::new(0, 0))
             .id();
         unsafe { BG_LAYER_ID = bg_layer_id };
         console().set_layer_id(
-            layer_manager()
+            layout_manager
                 .new_layer(console_window)
                 .move_(Vector2D::new(0, 0))
                 .id(),
         );
 
-        layer_manager().up_down(bg_layer_id, 0);
-        layer_manager().up_down(console().layer_id().unwrap(), 1);
+        layout_manager.up_down(bg_layer_id, 0);
+        layout_manager.up_down(console().layer_id().unwrap(), 1);
     }
 }
 
@@ -282,6 +284,16 @@ impl LayerManager {
         }
     }
 
+    pub fn activate_layer(&mut self, layer_id: Option<LayerID>) {
+        active_layer()._activate(
+            layer_id,
+            self,
+            screen_frame_buffer(),
+            task_manager(),
+            layer_task_map(),
+        );
+    }
+
     pub fn find_layer_by_position(
         &self,
         pos: Vector2D<i32>,
@@ -325,9 +337,7 @@ impl LayerManager {
     pub fn close_layer(
         &mut self,
         layer_id: LayerID,
-        active_layer: &mut ActiveLayer,
         screen: &mut FrameBuffer,
-        task_manager: &mut TaskManager,
         layer_task_map: &mut BTreeMap<LayerID, TaskID>,
     ) -> Result<(), Error> {
         let layer = match self.get_layer(layer_id) {
@@ -339,7 +349,7 @@ impl LayerManager {
         let size = layer.get_window_ref().size();
 
         unsafe { asm!("cli") };
-        active_layer.activate(None, self, screen, task_manager, layer_task_map);
+        self.activate_layer(None);
         self.remove_layer(layer_id);
         self.draw_on(Rectangle::new(pos, size.to_i32_vec2d()), screen);
         layer_task_map.remove(&layer_id);
@@ -429,7 +439,7 @@ impl ActiveLayer {
         self.active_layer_id
     }
 
-    pub fn activate(
+    fn _activate(
         &mut self,
         layer_id: Option<LayerID>,
         manager: &mut LayerManager,

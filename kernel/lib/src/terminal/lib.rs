@@ -8,8 +8,8 @@ use crate::graphics::{
     draw_text_box_with_colors, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK,
 };
 use crate::io::{FileDescriptor, STD_ERR, STD_IN, STD_OUT};
-use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
-use crate::layer::{LayerID, LayerManager};
+use crate::layer::global::{layer_manager, layer_task_map, screen_frame_buffer};
+use crate::layer::LayerID;
 use crate::libc::{memcpy, strcpy};
 use crate::memory_manager::global::MEMORY_MANAGER;
 use crate::message::MessageType::Layer;
@@ -74,25 +74,17 @@ pub fn task_terminal(task_id: u64, data: usize) {
     let mut terminal = {
         // Initialize Terminal
         let mut terminal = Terminal::new(task_id, term_desc);
-        terminal.initialize(
-            show_window,
-            layer_manager(),
-            frame_buffer_config().pixel_format,
-        );
+        terminal.initialize(show_window, frame_buffer_config().pixel_format);
         if show_window {
-            layer_manager().move_(
+            layer_manager().lock().move_(
                 terminal.layer_id,
                 Vector2D::new(100, 200),
                 screen_frame_buffer(),
             );
             layer_task_map().insert(terminal.layer_id, task_id);
-            active_layer().activate(
-                Some(terminal.layer_id),
-                layer_manager(),
-                screen_frame_buffer(),
-                task_manager(),
-                layer_task_map(),
-            );
+            layer_manager()
+                .lock()
+                .activate_layer(Some(terminal.layer_id));
         }
         terminal
     };
@@ -174,11 +166,9 @@ pub fn task_terminal(task_id: u64, data: usize) {
             }
             MessageType::WindowActive(mode) => active_mode = mode,
             MessageType::WindowClose(message) => {
-                let _ = layer_manager().close_layer(
+                let _ = layer_manager().lock().close_layer(
                     message.layer_id,
-                    active_layer(),
                     screen_frame_buffer(),
-                    task_manager(),
                     layer_task_map(),
                 );
                 unsafe { asm!("cli") };
@@ -263,12 +253,7 @@ impl Terminal {
         self.task_id
     }
 
-    fn initialize(
-        &mut self,
-        show_window: bool,
-        layout_manager: &mut LayerManager,
-        pixel_format: PixelFormat,
-    ) {
+    fn initialize(&mut self, show_window: bool, pixel_format: PixelFormat) {
         let window = if show_window {
             let mut window = Window::new_with_title(
                 COLUMNS * 8 + 8 + Window::TITLED_WINDOW_MARGIN.x as usize,
@@ -280,7 +265,8 @@ impl Terminal {
             draw_terminal(&mut window, Vector2D::new(0, 0), inner_size);
 
             let window = Arc::new(Mutex::new(window));
-            self.layer_id = layout_manager
+            self.layer_id = layer_manager()
+                .lock()
                 .new_layer(Arc::clone(&window))
                 .set_draggable(true)
                 .id();
@@ -322,7 +308,7 @@ impl Terminal {
                 self.execute_line();
                 self.print(">");
                 draw_area.pos = TITLED_WINDOW_TOP_LEFT_MARGIN;
-                draw_area.size = self.window_mut().map(|w| w.inner_size()).unwrap_or(
+                draw_area.size = self.writer().window_inner_size().unwrap_or(
                     Vector2D::new(0, 0)
                         - TITLED_WINDOW_TOP_LEFT_MARGIN
                         - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN,
@@ -355,10 +341,6 @@ impl Terminal {
 
     fn calc_cursor_pos(&self) -> Vector2D<i32> {
         self.writer().calc_cursor_pos()
-    }
-
-    fn scroll1(&self) {
-        self.writer().scroll1()
     }
 
     fn execute_line(&mut self) {
@@ -583,10 +565,6 @@ impl Terminal {
         self.writer().print_char(c)
     }
 
-    fn new_line(&mut self) {
-        self.writer().new_line()
-    }
-
     pub(super) fn redraw(&mut self) {
         self.writer().redraw()
     }
@@ -598,12 +576,6 @@ impl Terminal {
         };
 
         self.writer().history_up_down(self.line_buf.as_str())
-    }
-
-    fn window_mut(&self) -> Option<MutexGuard<Window>> {
-        layer_manager()
-            .get_layer_mut(self.layer_id)
-            .map(|l| l.get_window_mut())
     }
 
     fn execute_ls(&mut self, argv: &[&str]) -> i32 {

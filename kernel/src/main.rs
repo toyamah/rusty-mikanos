@@ -90,7 +90,7 @@ pub extern "C" fn KernelMainNewStack(
     layer::global::initialize();
     initialize_main_window();
     initialize_text_window();
-    layer_manager().draw_on(
+    layer_manager().lock().draw_on(
         Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
         screen_frame_buffer(),
     );
@@ -144,7 +144,9 @@ pub extern "C" fn KernelMainNewStack(
             &format!("{:010}", tick),
             &COLOR_BLACK,
         );
-        layer_manager().draw_layer_of(main_window_layer_id(), screen_frame_buffer());
+        layer_manager()
+            .lock()
+            .draw_layer_of(main_window_layer_id(), screen_frame_buffer());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
@@ -171,6 +173,7 @@ pub extern "C" fn KernelMainNewStack(
                     text_box_cursor_visible = !text_box_cursor_visible;
                     draw_text_cursor(text_box_cursor_visible);
                     layer_manager()
+                        .lock()
                         .draw_layer_of(*TEXT_WINDOW_LAYER_ID.wait(), screen_frame_buffer());
                 }
             }
@@ -207,7 +210,9 @@ pub extern "C" fn KernelMainNewStack(
                 }
             }
             MessageType::Layer(l_msg) => {
-                layer_manager().process_message(&l_msg, screen_frame_buffer());
+                layer_manager()
+                    .lock()
+                    .process_message(&l_msg, screen_frame_buffer());
                 unsafe { asm!("cli") };
                 let _ = task_manager()
                     .send_message(l_msg.src_task_id, Message::new(MessageType::LayerFinish));
@@ -239,7 +244,6 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
         displacement_x,
         displacement_y,
         screen_size().to_i32_vec2d(),
-        layer_manager(),
         screen_frame_buffer(),
         active_layer(),
         layer_task_map(),
@@ -258,11 +262,12 @@ fn initialize_main_window() {
     });
 
     let main_window_layer_id = layer_manager()
+        .lock()
         .new_layer(Arc::clone(main_window))
         .set_draggable(true)
         .move_(Vector2D::new(300, 100))
         .id();
-    layer_manager().up_down(main_window_layer_id, 2);
+    layer_manager().lock().up_down(main_window_layer_id, 2);
 
     unsafe { MAIN_WINDOW_LAYER_ID = Some(main_window_layer_id) };
 }
@@ -285,13 +290,14 @@ fn initialize_text_window() {
 
     let id = TEXT_WINDOW_LAYER_ID.call_once(|| {
         layer_manager()
+            .lock()
             .new_layer(Arc::clone(text_window))
             .set_draggable(true)
             .move_(Vector2D::new(500, 100))
             .id()
     });
 
-    layer_manager().up_down(*id, i32::MAX);
+    layer_manager().lock().up_down(*id, i32::MAX);
 }
 
 fn input_text_window(c: char) {
@@ -328,7 +334,9 @@ fn input_text_window(c: char) {
         draw_text_cursor(true);
     }
 
-    layer_manager().draw_layer_of(*TEXT_WINDOW_LAYER_ID.wait(), screen_frame_buffer());
+    layer_manager()
+        .lock()
+        .draw_layer_of(*TEXT_WINDOW_LAYER_ID.wait(), screen_frame_buffer());
 }
 
 fn draw_text_cursor(visible: bool) {

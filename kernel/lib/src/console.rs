@@ -109,7 +109,12 @@ impl Console {
 
         if let Some(m) = layer_manager_op() {
             if let Some(id) = self.layer_id {
-                m.draw_layer_of(id, screen_frame_buffer());
+                m.lock().draw_layer_of(id, screen_frame_buffer());
+                // if let Some(mut g) = m.try_lock() {
+                //     g.draw_layer_of(id, screen_frame_buffer());
+                // } else {
+                //     // TODO
+                // }
             }
         }
     }

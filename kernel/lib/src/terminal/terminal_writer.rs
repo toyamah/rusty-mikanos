@@ -275,6 +275,10 @@ impl TerminalWriter {
 
         draw_area
     }
+
+    pub fn window_inner_size(&self) -> Option<Vector2D<i32>> {
+        self.window.as_ref().map(|w| w.lock().inner_size())
+    }
 }
 
 impl Write for TerminalWriter {
