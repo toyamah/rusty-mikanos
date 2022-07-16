@@ -1,12 +1,12 @@
 use crate::error::{Code, Error};
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{Rectangle, Vector2D};
-use crate::layer::global::{active_layer, layer_task_map, screen_frame_buffer};
+use crate::layer::global::screen_frame_buffer;
 use crate::make_error;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
 use crate::sync::{Mutex, MutexGuard};
 use crate::task::global::task_manager;
-use crate::task::{TaskID, TaskManager};
+use crate::task::TaskID;
 use crate::window::Window;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -26,11 +26,9 @@ pub mod global {
     use crate::frame_buffer::FrameBuffer;
     use crate::graphics::global::{frame_buffer_config, screen_size};
     use crate::graphics::{draw_desktop, Vector2D};
-    use crate::layer::{ActiveLayer, LayerID};
+    use crate::layer::LayerID;
     use crate::sync::Mutex;
-    use crate::task::TaskID;
     use crate::Window;
-    use alloc::collections::BTreeMap;
     use alloc::sync::Arc;
     use spin::Once;
 
@@ -47,16 +45,6 @@ pub mod global {
     }
     pub fn layer_manager() -> &'static Mutex<LayerManager> {
         LAYER_MANAGER.call_once(|| Mutex::new(LayerManager::new(frame_buffer_config())))
-    }
-
-    static mut ACTIVE_LAYER: ActiveLayer = ActiveLayer::new();
-    pub fn active_layer() -> &'static mut ActiveLayer {
-        unsafe { &mut ACTIVE_LAYER }
-    }
-
-    static mut LAYER_TASK_MAP: BTreeMap<LayerID, TaskID> = BTreeMap::new();
-    pub fn layer_task_map() -> &'static mut BTreeMap<LayerID, TaskID> {
-        unsafe { &mut LAYER_TASK_MAP }
     }
 
     pub fn initialize() {
@@ -158,6 +146,8 @@ pub struct LayerManager {
     layer_id_stack: Vec<LayerID>,
     latest_id: LayerID,
     back_buffer: FrameBuffer,
+    active_layer: ActiveLayer,
+    layer_task_map: BTreeMap<LayerID, TaskID>,
 }
 
 impl LayerManager {
@@ -174,7 +164,25 @@ impl LayerManager {
             layer_id_stack: vec![],
             latest_id: LayerID(0),
             back_buffer,
+            active_layer: ActiveLayer::new(),
+            layer_task_map: BTreeMap::new(),
         }
+    }
+
+    pub fn set_mouse_layer_id(&mut self, layer_id: LayerID) {
+        self.active_layer.mouser_layer_id = layer_id;
+    }
+
+    pub fn get_active_layer_id(&self) -> Option<LayerID> {
+        self.active_layer.active_layer_id
+    }
+
+    pub fn get_task_id_by_layer_id(&self, layer_id: LayerID) -> Option<&TaskID> {
+        self.layer_task_map.get(&layer_id)
+    }
+
+    pub fn register_layer_task_relation(&mut self, layer_id: LayerID, task_id: TaskID) {
+        self.layer_task_map.insert(layer_id, task_id);
     }
 
     pub fn new_layer(&mut self, window: Arc<Mutex<Window>>) -> &mut Layer {
@@ -286,13 +294,7 @@ impl LayerManager {
     }
 
     pub fn activate_layer(&mut self, layer_id: Option<LayerID>) {
-        active_layer()._activate(
-            layer_id,
-            self,
-            screen_frame_buffer(),
-            task_manager(),
-            layer_task_map(),
-        );
+        ActiveLayer::_activate(layer_id, self, screen_frame_buffer());
     }
 
     pub fn find_layer_by_position(
@@ -339,7 +341,6 @@ impl LayerManager {
         &mut self,
         layer_id: LayerID,
         screen: &mut FrameBuffer,
-        layer_task_map: &mut BTreeMap<LayerID, TaskID>,
     ) -> Result<(), Error> {
         let layer = match self.get_layer(layer_id) {
             None => return Err(make_error!(Code::NoSuchEntry)),
@@ -349,12 +350,10 @@ impl LayerManager {
         let pos = layer.position;
         let size = layer.get_window_ref().size();
 
-        unsafe { asm!("cli") };
         self.activate_layer(None);
         self.remove_layer(layer_id);
         self.draw_on(Rectangle::new(pos, size.to_i32_vec2d()), screen);
-        layer_task_map.remove(&layer_id);
-        unsafe { asm!("sti") };
+        self.layer_task_map.remove(&layer_id);
 
         Ok(())
     }
@@ -423,9 +422,9 @@ impl AddAssign for LayerID {
     }
 }
 
-pub struct ActiveLayer {
+struct ActiveLayer {
     active_layer_id: Option<LayerID>,
-    pub(crate) mouser_layer_id: LayerID,
+    mouser_layer_id: LayerID,
 }
 
 impl ActiveLayer {
@@ -440,19 +439,12 @@ impl ActiveLayer {
         self.active_layer_id
     }
 
-    fn _activate(
-        &mut self,
-        layer_id: Option<LayerID>,
-        manager: &mut LayerManager,
-        screen: &mut FrameBuffer,
-        task_manager: &mut TaskManager,
-        layer_task_map: &BTreeMap<LayerID, TaskID>,
-    ) {
-        if self.active_layer_id == layer_id {
+    fn _activate(layer_id: Option<LayerID>, manager: &mut LayerManager, screen: &mut FrameBuffer) {
+        if manager.active_layer.active_layer_id == layer_id {
             return;
         }
 
-        if let Some(active_layer_id) = self.active_layer_id {
+        if let Some(active_layer_id) = manager.active_layer.active_layer_id {
             let layer = manager
                 .get_layer_mut(active_layer_id)
                 .unwrap_or_else(|| panic!("no such layer {}", active_layer_id));
@@ -461,27 +453,27 @@ impl ActiveLayer {
             Self::send_window_active_message(
                 active_layer_id,
                 WindowActiveMode::Deactivate,
-                task_manager,
-                layer_task_map,
+                &manager.layer_task_map,
             )
             .unwrap_or_default(); // ignore error in the same way as the official
         }
 
-        self.active_layer_id = layer_id;
-        if let Some(active_layer_id) = self.active_layer_id {
+        manager.active_layer.active_layer_id = layer_id;
+        if let Some(active_layer_id) = manager.active_layer.active_layer_id {
             let layer = manager
                 .get_layer_mut(active_layer_id)
                 .unwrap_or_else(|| panic!("no such layer {}", active_layer_id));
             layer.get_window_mut().activate();
             manager.up_down(active_layer_id, 0);
-            let mouse_height = manager.get_height(self.mouser_layer_id).unwrap_or(-1);
+            let mouse_height = manager
+                .get_height(manager.active_layer.mouser_layer_id)
+                .unwrap_or(-1);
             manager.up_down(active_layer_id, mouse_height - 1);
             manager.draw_layer_of(active_layer_id, screen);
             Self::send_window_active_message(
                 active_layer_id,
                 WindowActiveMode::Activate,
-                task_manager,
-                layer_task_map,
+                &manager.layer_task_map,
             )
             .unwrap_or_default(); // ignore error in the same way as the official
         }
@@ -490,11 +482,14 @@ impl ActiveLayer {
     fn send_window_active_message(
         layer_id: LayerID,
         mode: WindowActiveMode,
-        task_manager: &mut TaskManager,
         layer_task_map: &BTreeMap<LayerID, TaskID>,
     ) -> Result<(), Error> {
         if let Some(&task_id) = layer_task_map.get(&layer_id) {
-            task_manager.send_message(task_id, Message::new(MessageType::WindowActive(mode)))
+            let message = Message::new(MessageType::WindowActive(mode));
+            unsafe { asm!("cli") };
+            let r = task_manager().send_message(task_id, message);
+            unsafe { asm!("sti") };
+            r
         } else {
             Err(make_error!(Code::NoSuchTask))
         }

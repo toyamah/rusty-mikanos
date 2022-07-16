@@ -19,7 +19,7 @@ use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{fill_rectangle, PixelColor, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use lib::interrupt::global::initialize_interrupt;
 use lib::keyboard::KEY_F2;
-use lib::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
+use lib::layer::global::{layer_manager, screen_frame_buffer};
 use lib::layer::LayerID;
 use lib::message::{Message, MessageType};
 use lib::mouse::global::MOUSE;
@@ -179,7 +179,7 @@ pub extern "C" fn KernelMainNewStack(
                 }
             }
             MessageType::KeyPush(arg) => {
-                let act = active_layer().get_active_layer_id();
+                let act = layer_manager().lock().get_active_layer_id();
                 if act.is_none() {
                     continue;
                 }
@@ -195,9 +195,9 @@ pub extern "C" fn KernelMainNewStack(
                     task_manager().wake_up(id).unwrap();
                 } else {
                     unsafe { asm!("cli") };
-                    let task_id = layer_task_map().get(&act);
+                    let task_id = layer_manager().lock().get_task_id_by_layer_id(act).cloned();
                     unsafe { asm!("sti") };
-                    if let Some(&task_id) = task_id {
+                    if let Some(task_id) = task_id {
                         unsafe { asm!("cli") };
                         let _ = task_manager().send_message(task_id, message);
                         unsafe { asm!("sti") };
@@ -246,8 +246,6 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
         displacement_y,
         screen_size().to_i32_vec2d(),
         screen_frame_buffer(),
-        active_layer(),
-        layer_task_map(),
         task_manager(),
     );
 }

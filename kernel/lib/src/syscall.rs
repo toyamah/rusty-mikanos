@@ -8,7 +8,7 @@ use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Vector2D};
 use crate::io::FileDescriptor;
 use crate::keyboard::{is_control_key_inputted, KEY_Q};
-use crate::layer::global::{layer_manager, layer_task_map, screen_frame_buffer};
+use crate::layer::global::{layer_manager, screen_frame_buffer};
 use crate::layer::LayerID;
 use crate::message::MessageType;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
@@ -124,19 +124,18 @@ fn open_window(w: u64, h: u64, x: u64, y: u64, title: u64, _a6: u64) -> SyscallR
         str,
     );
 
-    //TODO: reconsider
-    // unsafe { asm!("cli") };
-    let layer_id = layer_manager()
-        .lock()
+    unsafe { asm!("cli") };
+    let task_id = task_manager().current_task().id();
+    unsafe { asm!("sti") };
+
+    let mut lm = layer_manager().lock();
+    let layer_id = lm
         .new_layer(Arc::new(Mutex::new(window)))
         .set_draggable(true)
         .move_(Vector2D::new(x as i32, y as i32))
         .id();
-    layer_manager().lock().activate_layer(Some(layer_id));
-
-    let task_id = task_manager().current_task().id();
-    layer_task_map().insert(layer_id, task_id);
-    // unsafe { asm!("sti") };
+    lm.activate_layer(Some(layer_id));
+    lm.register_layer_task_relation(layer_id, task_id);
 
     SyscallResult::ok(layer_id.value() as u64)
 }
@@ -265,7 +264,7 @@ fn close_window(
     let layer_id = LayerID::new((layer_id_flags & 0xffffffff) as u32);
     match layer_manager()
         .lock()
-        .close_layer(layer_id, screen_frame_buffer(), layer_task_map())
+        .close_layer(layer_id, screen_frame_buffer())
     {
         Ok(_) => SyscallResult::ok(0),
         Err(_e) => SyscallResult::err(0, EBADF),

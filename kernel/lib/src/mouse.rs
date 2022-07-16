@@ -1,21 +1,20 @@
 use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use crate::layer::global::layer_manager;
-use crate::layer::{ActiveLayer, LayerID};
+use crate::layer::LayerID;
 use crate::message::{
     Message, MessageType, MouseButtonMessage, MouseMoveMessage, WindowCloseMessage,
 };
 use crate::task::{TaskID, TaskManager};
 use crate::window::WindowRegion;
 use crate::Window;
-use alloc::collections::BTreeMap;
 use shared::PixelFormat;
 
 pub mod global {
     use super::{draw_mouse_cursor, new_mouse_cursor_window, Mouse};
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
-    use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
+    use crate::layer::global::{layer_manager, screen_frame_buffer};
     use crate::sync::Mutex;
     use alloc::sync::Arc;
 
@@ -35,7 +34,7 @@ pub mod global {
         *MOUSE.lock() = Some(mouse);
 
         layer_manager().lock().up_down(mouse_layer_id, i32::MAX);
-        active_layer().mouser_layer_id = mouse_layer_id;
+        layer_manager().lock().set_mouse_layer_id(mouse_layer_id);
     }
 }
 
@@ -91,7 +90,6 @@ impl Mouse {
             .move_(self.layer_id, self.position, screen_buffer)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn on_interrupt(
         &mut self,
         buttons: u8,
@@ -99,8 +97,6 @@ impl Mouse {
         displacement_y: i8,
         screen_size: Vector2D<i32>,
         frame_buffer: &mut FrameBuffer,
-        active_layer: &mut ActiveLayer,
-        layer_task_map: &mut BTreeMap<LayerID, TaskID>,
         task_manager: &mut TaskManager,
     ) {
         let new_pos = self.position + Vector2D::new(displacement_x as i32, displacement_y as i32);
@@ -149,15 +145,13 @@ impl Mouse {
 
         if self.drag_layer_id == None {
             if close_layer_id.is_some() {
-                send_close_message(active_layer, layer_task_map, task_manager);
+                send_close_message(task_manager);
             } else {
                 send_mouse_message(
                     new_pos,
                     pos_diff,
                     buttons,
                     self.previous_buttons,
-                    active_layer,
-                    layer_task_map,
                     task_manager,
                 );
             }
@@ -180,32 +174,27 @@ pub fn draw_mouse_cursor<W: PixelWriter>(writer: &mut W, position: &Vector2D<i32
     }
 }
 
-fn find_active_layer_task(
-    active_layer: &ActiveLayer,
-    layer_task_map: &BTreeMap<LayerID, TaskID>,
-) -> Option<(LayerID, TaskID)> {
-    let layer_id = match active_layer.get_active_layer_id() {
+fn find_active_layer_task() -> Option<(LayerID, TaskID)> {
+    let lm = layer_manager().lock();
+    let layer_id = match lm.get_active_layer_id() {
         None => return None,
         Some(id) => id,
     };
-    let task_id = match layer_task_map.get(&layer_id) {
+    let task_id = match lm.get_task_id_by_layer_id(layer_id) {
         None => return None,
         Some(&id) => id,
     };
     Some((layer_id, task_id))
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn send_mouse_message(
     newpos: Vector2D<i32>,
     posdiff: Vector2D<i32>,
     buttons: u8,
     previous_buttons: u8,
-    active_layer: &mut ActiveLayer,
-    layer_task_map: &mut BTreeMap<LayerID, TaskID>,
     task_manager: &mut TaskManager,
 ) {
-    let (layer_id, task_id) = match find_active_layer_task(active_layer, layer_task_map) {
+    let (layer_id, task_id) = match find_active_layer_task() {
         None => return,
         Some(pair) => pair,
     };
@@ -247,12 +236,8 @@ pub fn send_mouse_message(
     }
 }
 
-fn send_close_message(
-    active_layer: &mut ActiveLayer,
-    layer_task_map: &mut BTreeMap<LayerID, TaskID>,
-    task_manager: &mut TaskManager,
-) {
-    let (layer_id, task_id) = match find_active_layer_task(active_layer, layer_task_map) {
+fn send_close_message(task_manager: &mut TaskManager) {
+    let (layer_id, task_id) = match find_active_layer_task() {
         None => return,
         Some(pair) => pair,
     };

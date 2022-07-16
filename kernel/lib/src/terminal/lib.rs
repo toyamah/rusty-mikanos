@@ -8,7 +8,7 @@ use crate::graphics::{
     draw_text_box_with_colors, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK,
 };
 use crate::io::{FileDescriptor, STD_ERR, STD_IN, STD_OUT};
-use crate::layer::global::{layer_manager, layer_task_map, screen_frame_buffer};
+use crate::layer::global::{layer_manager, screen_frame_buffer};
 use crate::layer::LayerID;
 use crate::libc::{memcpy, strcpy};
 use crate::memory_manager::global::MEMORY_MANAGER;
@@ -68,27 +68,8 @@ pub fn task_terminal(task_id: u64, data: usize) {
     let command = term_desc.map(|td| td.command_line.as_str()).unwrap_or("");
     let show_window = term_desc.is_none();
 
-    unsafe { asm!("cli") };
     let task_id = TaskID::new(task_id);
-    let current_task_id = task_manager().current_task().id();
-    let mut terminal = {
-        // Initialize Terminal
-        let mut terminal = Terminal::new(task_id, term_desc);
-        terminal.initialize(show_window, frame_buffer_config().pixel_format);
-        if show_window {
-            layer_manager().lock().move_(
-                terminal.layer_id,
-                Vector2D::new(100, 200),
-                screen_frame_buffer(),
-            );
-            layer_task_map().insert(terminal.layer_id, task_id);
-            layer_manager()
-                .lock()
-                .activate_layer(Some(terminal.layer_id));
-        }
-        terminal
-    };
-    unsafe { asm!("sti") };
+    let mut terminal = create_terminal(task_id, term_desc, show_window);
 
     if !show_window {
         for c in command.chars() {
@@ -116,6 +97,7 @@ pub fn task_terminal(task_id: u64, data: usize) {
 
     loop {
         unsafe { asm!("cli") };
+        let current_task_id = task_manager().current_task().id();
         let msg = task_manager()
             .get_task_mut(current_task_id)
             .unwrap()
@@ -166,17 +148,36 @@ pub fn task_terminal(task_id: u64, data: usize) {
             }
             MessageType::WindowActive(mode) => active_mode = mode,
             MessageType::WindowClose(message) => {
-                let _ = layer_manager().lock().close_layer(
-                    message.layer_id,
-                    screen_frame_buffer(),
-                    layer_task_map(),
-                );
+                let _ = layer_manager()
+                    .lock()
+                    .close_layer(message.layer_id, screen_frame_buffer());
                 unsafe { asm!("cli") };
                 task_manager().finish(terminal.last_exit_code);
             }
             _ => {}
         }
     }
+}
+
+fn create_terminal(
+    task_id: TaskID,
+    term_desc: Option<&TerminalDescriptor>,
+    show_window: bool,
+) -> Terminal {
+    let mut terminal = Terminal::new(task_id, term_desc);
+    terminal.initialize(show_window, frame_buffer_config().pixel_format);
+
+    if show_window {
+        let mut lm = layer_manager().lock();
+        lm.move_(
+            terminal.layer_id,
+            Vector2D::new(100, 200),
+            screen_frame_buffer(),
+        );
+        lm.register_layer_task_relation(terminal.layer_id, task_id);
+        lm.activate_layer(Some(terminal.layer_id));
+    }
+    terminal
 }
 
 pub(crate) struct AppLoadInfo {
@@ -389,9 +390,9 @@ impl Terminal {
             let b = Box::new(term_desc);
             sub_task.init_context(task_terminal, Box::into_raw(b) as u64, get_cr3);
             task_manager().wake_up(sub_task.id()).unwrap();
-            layer_task_map()
-                .insert(self.layer_id, sub_task.id())
-                .unwrap();
+            layer_manager()
+                .lock()
+                .register_layer_task_relation(self.layer_id, sub_task.id());
 
             self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Pipe(
                 pipe_fd_for_write.copy_for_write(),
@@ -453,10 +454,10 @@ impl Terminal {
             fd.finish_write();
             unsafe { asm!("cli") };
             let ec = task_manager().wait_finish(fd.task_id);
-            layer_task_map()
-                .insert(self.layer_id, self.task_id)
-                .unwrap();
             unsafe { asm!("sti") };
+            layer_manager()
+                .lock()
+                .register_layer_task_relation(self.layer_id, self.task_id);
             self.last_exit_code = ec;
         } else {
             self.last_exit_code = exit_code;
