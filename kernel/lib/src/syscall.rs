@@ -8,7 +8,7 @@ use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Vector2D};
 use crate::io::FileDescriptor;
 use crate::keyboard::{is_control_key_inputted, KEY_Q};
-use crate::layer::global::{layer_manager, screen_frame_buffer};
+use crate::layer::global::layer_manager;
 use crate::layer::LayerID;
 use crate::message::MessageType;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
@@ -262,10 +262,7 @@ fn close_window(
     _a6: u64,
 ) -> SyscallResult {
     let layer_id = LayerID::new((layer_id_flags & 0xffffffff) as u32);
-    match layer_manager()
-        .lock()
-        .close_layer(layer_id, screen_frame_buffer())
-    {
+    match layer_manager().lock().close_layer(layer_id) {
         Ok(_) => SyscallResult::ok(0),
         Err(_e) => SyscallResult::err(0, EBADF),
     }
@@ -540,7 +537,7 @@ where
     }
 
     if (layer_flags & 1) == 0 {
-        layout_manager.draw_layer_of(layer_id, screen_frame_buffer());
+        layout_manager.draw_layer_of(layer_id);
     }
 
     res

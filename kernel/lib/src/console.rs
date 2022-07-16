@@ -2,7 +2,7 @@ use crate::console::Mode::{ConsoleWindow, Frame};
 use crate::font::{write_ascii, write_chars};
 use crate::graphics::global::pixel_writer;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
-use crate::layer::global::{layer_manager_op, screen_frame_buffer};
+use crate::layer::global::layer_manager_op;
 use crate::layer::LayerID;
 use crate::sync::Mutex;
 use crate::Window;
@@ -109,7 +109,7 @@ impl Console {
 
         if let Some(m) = layer_manager_op() {
             if let Some(id) = self.layer_id {
-                m.lock().draw_layer_of(id, screen_frame_buffer());
+                m.lock().draw_layer_of(id);
                 // if let Some(mut g) = m.try_lock() {
                 //     g.draw_layer_of(id, screen_frame_buffer());
                 // } else {

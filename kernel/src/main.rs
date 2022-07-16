@@ -19,7 +19,7 @@ use lib::graphics::global::{frame_buffer_config, screen_size};
 use lib::graphics::{fill_rectangle, PixelColor, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use lib::interrupt::global::initialize_interrupt;
 use lib::keyboard::KEY_F2;
-use lib::layer::global::{layer_manager, screen_frame_buffer};
+use lib::layer::global::layer_manager;
 use lib::layer::LayerID;
 use lib::message::{Message, MessageType};
 use lib::mouse::global::MOUSE;
@@ -91,10 +91,10 @@ pub extern "C" fn KernelMainNewStack(
     layer::global::initialize();
     initialize_main_window();
     initialize_text_window();
-    layer_manager().lock().draw_on(
-        Rectangle::new(Vector2D::new(0, 0), screen_size().to_i32_vec2d()),
-        screen_frame_buffer(),
-    );
+    layer_manager().lock().draw_on(Rectangle::new(
+        Vector2D::new(0, 0),
+        screen_size().to_i32_vec2d(),
+    ));
 
     acpi::global::initialize(acpi_table);
     timer::global::initialize_lapic_timer();
@@ -145,9 +145,7 @@ pub extern "C" fn KernelMainNewStack(
             &format!("{:010}", tick),
             &COLOR_BLACK,
         );
-        layer_manager()
-            .lock()
-            .draw_layer_of(main_window_layer_id(), screen_frame_buffer());
+        layer_manager().lock().draw_layer_of(main_window_layer_id());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
@@ -175,7 +173,7 @@ pub extern "C" fn KernelMainNewStack(
                     draw_text_cursor(text_box_cursor_visible);
                     layer_manager()
                         .lock()
-                        .draw_layer_of(*TEXT_WINDOW_LAYER_ID.wait(), screen_frame_buffer());
+                        .draw_layer_of(*TEXT_WINDOW_LAYER_ID.wait());
                 }
             }
             MessageType::KeyPush(arg) => {
@@ -211,9 +209,7 @@ pub extern "C" fn KernelMainNewStack(
                 }
             }
             MessageType::Layer(l_msg) => {
-                layer_manager()
-                    .lock()
-                    .process_message(&l_msg, screen_frame_buffer());
+                layer_manager().lock().process_message(&l_msg);
                 unsafe { asm!("cli") };
                 let _ = task_manager()
                     .send_message(l_msg.src_task_id, Message::new(MessageType::LayerFinish));
@@ -245,7 +241,6 @@ extern "C" fn mouse_observer(buttons: u8, displacement_x: i8, displacement_y: i8
         displacement_x,
         displacement_y,
         screen_size().to_i32_vec2d(),
-        screen_frame_buffer(),
         task_manager(),
     );
 }
@@ -335,7 +330,7 @@ fn input_text_window(c: char) {
 
     layer_manager()
         .lock()
-        .draw_layer_of(*TEXT_WINDOW_LAYER_ID.wait(), screen_frame_buffer());
+        .draw_layer_of(*TEXT_WINDOW_LAYER_ID.wait());
 }
 
 fn draw_text_cursor(visible: bool) {

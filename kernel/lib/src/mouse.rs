@@ -1,4 +1,3 @@
-use crate::frame_buffer::FrameBuffer;
 use crate::graphics::{PixelColor, PixelWriter, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use crate::layer::global::layer_manager;
 use crate::layer::LayerID;
@@ -14,7 +13,7 @@ pub mod global {
     use super::{draw_mouse_cursor, new_mouse_cursor_window, Mouse};
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
-    use crate::layer::global::{layer_manager, screen_frame_buffer};
+    use crate::layer::global::layer_manager;
     use crate::sync::Mutex;
     use alloc::sync::Arc;
 
@@ -30,7 +29,7 @@ pub mod global {
             .id();
 
         let mut mouse = Mouse::new(mouse_layer_id);
-        mouse.set_position(Vector2D::new(200, 200), screen_frame_buffer());
+        mouse.set_position(Vector2D::new(200, 200));
         *MOUSE.lock() = Some(mouse);
 
         layer_manager().lock().up_down(mouse_layer_id, i32::MAX);
@@ -83,11 +82,9 @@ impl Mouse {
         }
     }
 
-    fn set_position(&mut self, position: Vector2D<i32>, screen_buffer: &mut FrameBuffer) {
+    fn set_position(&mut self, position: Vector2D<i32>) {
         self.position = position;
-        layer_manager()
-            .lock()
-            .move_(self.layer_id, self.position, screen_buffer)
+        layer_manager().lock().move_(self.layer_id, self.position)
     }
 
     pub fn on_interrupt(
@@ -96,7 +93,6 @@ impl Mouse {
         displacement_x: i8,
         displacement_y: i8,
         screen_size: Vector2D<i32>,
-        frame_buffer: &mut FrameBuffer,
         task_manager: &mut TaskManager,
     ) {
         let new_pos = self.position + Vector2D::new(displacement_x as i32, displacement_y as i32);
@@ -107,9 +103,7 @@ impl Mouse {
         let old_pos = self.position;
         self.position = new_pos;
         let pos_diff = self.position - old_pos;
-        layer_manager()
-            .lock()
-            .move_(self.layer_id, self.position, frame_buffer);
+        layer_manager().lock().move_(self.layer_id, self.position);
 
         let mut close_layer_id = None;
 
@@ -137,7 +131,7 @@ impl Mouse {
             if let Some(drag_layer_id) = self.drag_layer_id {
                 layer_manager()
                     .lock()
-                    .move_relative(drag_layer_id, pos_diff, frame_buffer);
+                    .move_relative(drag_layer_id, pos_diff);
             }
         } else if previous_left_pressed && !left_pressed {
             self.drag_layer_id = None;

@@ -34,9 +34,9 @@ pub mod global {
 
     static mut BG_LAYER_ID: LayerID = LayerID::MAX;
 
-    static mut SCREEN_FRAME_BUFFER: Option<FrameBuffer> = None;
-    pub fn screen_frame_buffer() -> &'static mut FrameBuffer {
-        unsafe { SCREEN_FRAME_BUFFER.as_mut().unwrap() }
+    pub(super) static SCREEN_FRAME_BUFFER: Once<Mutex<FrameBuffer>> = Once::new();
+    pub(super) fn screen_frame_buffer() -> &'static Mutex<FrameBuffer> {
+        SCREEN_FRAME_BUFFER.call_once(|| Mutex::new(FrameBuffer::new(*frame_buffer_config())))
     }
 
     static LAYER_MANAGER: Once<Mutex<LayerManager>> = Once::new();
@@ -56,9 +56,7 @@ pub mod global {
         );
         draw_desktop(bg_window.writer());
 
-        unsafe {
-            SCREEN_FRAME_BUFFER = Some(FrameBuffer::new(*frame_buffer_config()));
-        };
+        SCREEN_FRAME_BUFFER.call_once(|| Mutex::new(FrameBuffer::new(*frame_buffer_config())));
 
         let console_window = Arc::new(Mutex::new(new_console_window(
             frame_buffer_config().pixel_format,
@@ -192,25 +190,26 @@ impl LayerManager {
         self.layers.get_mut(&id).unwrap()
     }
 
-    pub fn draw_on(&mut self, area: Rectangle<i32>, screen: &mut FrameBuffer) {
+    pub fn draw_on(&mut self, area: Rectangle<i32>) {
         for layer_id in &self.layer_id_stack {
             self.layers
                 .get_mut(layer_id)
                 .expect("failed to get layer")
                 .draw_to(&mut self.back_buffer, area);
         }
-        screen.copy(area.pos, &self.back_buffer, area);
+        screen_frame_buffer()
+            .lock()
+            .copy(area.pos, &self.back_buffer, area);
     }
 
-    pub fn draw_layer_of(&mut self, id: LayerID, screen: &mut FrameBuffer) {
+    pub fn draw_layer_of(&mut self, id: LayerID) {
         self.draw(
             id,
             Rectangle::new(Vector2D::new(0, 0), Vector2D::new(-1, -1)),
-            screen,
         )
     }
 
-    fn draw(&mut self, id: LayerID, mut area: Rectangle<i32>, screen: &mut FrameBuffer) {
+    fn draw(&mut self, id: LayerID, mut area: Rectangle<i32>) {
         let mut draw = false;
         let mut window_area: Rectangle<i32> = Rectangle::default();
         for &layer_id in &self.layer_id_stack {
@@ -230,31 +229,28 @@ impl LayerManager {
                 layer.draw_to(&mut self.back_buffer, window_area);
             }
         }
-        screen.copy(window_area.pos, &self.back_buffer, window_area);
+        screen_frame_buffer()
+            .lock()
+            .copy(window_area.pos, &self.back_buffer, window_area);
     }
 
-    pub fn move_(&mut self, id: LayerID, new_position: Vector2D<i32>, screen: &mut FrameBuffer) {
+    pub fn move_(&mut self, id: LayerID, new_position: Vector2D<i32>) {
         if let Some(layer) = self.layers.get_mut(&id) {
             let window_size = layer.window.lock().size();
             let old_pos = layer.position;
             layer.move_(new_position);
-            self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()), screen);
-            self.draw_layer_of(id, screen);
+            self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()));
+            self.draw_layer_of(id);
         }
     }
 
-    pub fn move_relative(
-        &mut self,
-        id: LayerID,
-        pos_diff: Vector2D<i32>,
-        screen: &mut FrameBuffer,
-    ) {
+    pub fn move_relative(&mut self, id: LayerID, pos_diff: Vector2D<i32>) {
         if let Some(layer) = self.layers.get_mut(&id) {
             let window_size = layer.window.lock().size();
             let old_pos = layer.position;
             layer.move_relative(pos_diff);
-            self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()), screen);
-            self.draw_layer_of(id, screen);
+            self.draw_on(Rectangle::new(old_pos, window_size.to_i32_vec2d()));
+            self.draw_layer_of(id);
         }
     }
 
@@ -294,7 +290,7 @@ impl LayerManager {
     }
 
     pub fn activate_layer(&mut self, layer_id: Option<LayerID>) {
-        ActiveLayer::_activate(layer_id, self, screen_frame_buffer());
+        ActiveLayer::_activate(layer_id, self);
     }
 
     pub fn find_layer_by_position(
@@ -317,15 +313,13 @@ impl LayerManager {
             })
     }
 
-    pub fn process_message(&mut self, message: &LayerMessage, screen: &mut FrameBuffer) {
+    pub fn process_message(&mut self, message: &LayerMessage) {
         match message.op {
-            LayerOperation::Move { pos } => self.move_(message.layer_id, pos, screen),
-            LayerOperation::MoveRelative { pos } => {
-                self.move_relative(message.layer_id, pos, screen)
-            }
-            LayerOperation::Draw => self.draw_layer_of(message.layer_id, screen),
+            LayerOperation::Move { pos } => self.move_(message.layer_id, pos),
+            LayerOperation::MoveRelative { pos } => self.move_relative(message.layer_id, pos),
+            LayerOperation::Draw => self.draw_layer_of(message.layer_id),
             LayerOperation::DrawArea(area) => {
-                self.draw(message.layer_id, area, screen);
+                self.draw(message.layer_id, area);
             }
         }
     }
@@ -337,11 +331,7 @@ impl LayerManager {
             .expect("failed to remove from layers");
     }
 
-    pub fn close_layer(
-        &mut self,
-        layer_id: LayerID,
-        screen: &mut FrameBuffer,
-    ) -> Result<(), Error> {
+    pub fn close_layer(&mut self, layer_id: LayerID) -> Result<(), Error> {
         let layer = match self.get_layer(layer_id) {
             None => return Err(make_error!(Code::NoSuchEntry)),
             Some(l) => l,
@@ -352,7 +342,7 @@ impl LayerManager {
 
         self.activate_layer(None);
         self.remove_layer(layer_id);
-        self.draw_on(Rectangle::new(pos, size.to_i32_vec2d()), screen);
+        self.draw_on(Rectangle::new(pos, size.to_i32_vec2d()));
         self.layer_task_map.remove(&layer_id);
 
         Ok(())
@@ -439,7 +429,7 @@ impl ActiveLayer {
         self.active_layer_id
     }
 
-    fn _activate(layer_id: Option<LayerID>, manager: &mut LayerManager, screen: &mut FrameBuffer) {
+    fn _activate(layer_id: Option<LayerID>, manager: &mut LayerManager) {
         if manager.active_layer.active_layer_id == layer_id {
             return;
         }
@@ -449,7 +439,7 @@ impl ActiveLayer {
                 .get_layer_mut(active_layer_id)
                 .unwrap_or_else(|| panic!("no such layer {}", active_layer_id));
             layer.get_window_mut().deactivate();
-            manager.draw_layer_of(active_layer_id, screen);
+            manager.draw_layer_of(active_layer_id);
             Self::send_window_active_message(
                 active_layer_id,
                 WindowActiveMode::Deactivate,
@@ -469,7 +459,7 @@ impl ActiveLayer {
                 .get_height(manager.active_layer.mouser_layer_id)
                 .unwrap_or(-1);
             manager.up_down(active_layer_id, mouse_height - 1);
-            manager.draw_layer_of(active_layer_id, screen);
+            manager.draw_layer_of(active_layer_id);
             Self::send_window_active_message(
                 active_layer_id,
                 WindowActiveMode::Activate,
@@ -517,15 +507,12 @@ mod tests {
 
     #[test]
     fn move_() {
+        SCREEN_FRAME_BUFFER.call_once(|| init_screen_frame_buffer());
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
         let mut lm = LayerManager::new(&frame_buffer_config());
         let id1 = lm.new_layer(Arc::new(Mutex::new(window1))).id();
 
-        lm.move_(
-            id1,
-            Vector2D::new(100, 10),
-            &mut FrameBuffer::new(frame_buffer_config()),
-        );
+        lm.move_(id1, Vector2D::new(100, 10));
 
         let l1 = &lm.layers[&id1];
         assert_eq!(l1.position, Vector2D::new(100, 10));
@@ -533,6 +520,7 @@ mod tests {
 
     #[test]
     fn move_relative() {
+        SCREEN_FRAME_BUFFER.call_once(|| init_screen_frame_buffer());
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
         let mut lm = LayerManager::new(&frame_buffer_config());
         let mut buffer = FrameBuffer::new(frame_buffer_config());
@@ -541,13 +529,13 @@ mod tests {
             .move_(Vector2D::new(100, 100))
             .id();
 
-        lm.move_relative(id1, Vector2D::new(-50, -30), &mut buffer);
+        lm.move_relative(id1, Vector2D::new(-50, -30));
         {
             let l1 = &lm.layers[&id1];
             assert_eq!(l1.position, Vector2D::new(50, 70));
         }
 
-        lm.move_relative(id1, Vector2D::new(-60, -60), &mut buffer);
+        lm.move_relative(id1, Vector2D::new(-60, -60));
         let l1 = &lm.layers[&id1];
         assert_eq!(l1.position, Vector2D::new(-10, 10));
     }
@@ -592,6 +580,9 @@ mod tests {
         assert_eq!(vec![id3, id0], lm.layer_id_stack);
     }
 
+    fn init_screen_frame_buffer() -> Mutex<FrameBuffer> {
+        Mutex::new(FrameBuffer::new(frame_buffer_config()))
+    }
     fn frame_buffer_config() -> FrameBufferConfig {
         FrameBufferConfig::new(1, 1, 1, PixelFormat::KPixelBGRResv8BitPerColor)
     }

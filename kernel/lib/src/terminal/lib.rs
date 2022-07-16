@@ -8,7 +8,7 @@ use crate::graphics::{
     draw_text_box_with_colors, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK,
 };
 use crate::io::{FileDescriptor, STD_ERR, STD_IN, STD_OUT};
-use crate::layer::global::{layer_manager, screen_frame_buffer};
+use crate::layer::global::layer_manager;
 use crate::layer::LayerID;
 use crate::libc::{memcpy, strcpy};
 use crate::memory_manager::global::MEMORY_MANAGER;
@@ -148,9 +148,7 @@ pub fn task_terminal(task_id: u64, data: usize) {
             }
             MessageType::WindowActive(mode) => active_mode = mode,
             MessageType::WindowClose(message) => {
-                let _ = layer_manager()
-                    .lock()
-                    .close_layer(message.layer_id, screen_frame_buffer());
+                let _ = layer_manager().lock().close_layer(message.layer_id);
                 unsafe { asm!("cli") };
                 task_manager().finish(terminal.last_exit_code);
             }
@@ -169,11 +167,7 @@ fn create_terminal(
 
     if show_window {
         let mut lm = layer_manager().lock();
-        lm.move_(
-            terminal.layer_id,
-            Vector2D::new(100, 200),
-            screen_frame_buffer(),
-        );
+        lm.move_(terminal.layer_id, Vector2D::new(100, 200));
         lm.register_layer_task_relation(terminal.layer_id, task_id);
         lm.activate_layer(Some(terminal.layer_id));
     }
