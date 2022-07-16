@@ -510,7 +510,7 @@ mod tests {
             1,
             PixelFormat::KPixelBGRResv8BitPerColor,
         ));
-        let id1 = lm.new_layer(window1).id();
+        let id1 = lm.new_layer(Arc::new(Mutex::new(window1))).id();
         // verify layer's id equals to index of lm.layers
         assert_eq!(lm.layers[&id1].id, id1);
     }
@@ -519,7 +519,7 @@ mod tests {
     fn move_() {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
         let mut lm = LayerManager::new(&frame_buffer_config());
-        let id1 = lm.new_layer(window1).id();
+        let id1 = lm.new_layer(Arc::new(Mutex::new(window1))).id();
 
         lm.move_(
             id1,
@@ -536,7 +536,10 @@ mod tests {
         let window1 = Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor);
         let mut lm = LayerManager::new(&frame_buffer_config());
         let mut buffer = FrameBuffer::new(frame_buffer_config());
-        let id1 = lm.new_layer(window1).move_(Vector2D::new(100, 100)).id();
+        let id1 = lm
+            .new_layer(Arc::new(Mutex::new(window1)))
+            .move_(Vector2D::new(100, 100))
+            .id();
 
         lm.move_relative(id1, Vector2D::new(-50, -30), &mut buffer);
         {
@@ -557,8 +560,12 @@ mod tests {
             1,
             PixelFormat::KPixelBGRResv8BitPerColor,
         ));
-        fn window() -> Window {
-            Window::new(1, 1, PixelFormat::KPixelBGRResv8BitPerColor)
+        fn window() -> Arc<Mutex<Window>> {
+            Arc::new(Mutex::new(Window::new(
+                1,
+                1,
+                PixelFormat::KPixelBGRResv8BitPerColor,
+            )))
         }
         let id0 = lm.new_layer(window()).id;
         let id1 = lm.new_layer(window()).id;
