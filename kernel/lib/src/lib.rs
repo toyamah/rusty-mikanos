@@ -33,6 +33,7 @@ pub mod paging;
 pub mod pci;
 mod rust_official;
 pub mod segment;
+pub mod sync;
 pub mod syscall;
 pub mod task;
 pub mod terminal;
