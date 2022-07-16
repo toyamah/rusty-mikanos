@@ -19,7 +19,8 @@ pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
     use crate::acpi;
     use crate::interrupt::InterruptVectorNumber;
-    use spin::{Mutex, MutexGuard, Once};
+    use crate::sync::{Mutex, MutexGuard};
+    use spin::Once;
 
     static TIMER_MANAGER: Mutex<Option<TimerManager>> = Mutex::new(None);
     pub fn timer_manager() -> MutexGuard<'static, Option<TimerManager>> {

@@ -23,6 +23,7 @@ use lib::layer::global::{active_layer, layer_manager, layer_task_map, screen_fra
 use lib::layer::LayerID;
 use lib::message::{Message, MessageType};
 use lib::mouse::global::MOUSE;
+use lib::sync::Mutex;
 use lib::task::global::task_manager;
 use lib::task::TaskID;
 use lib::terminal::lib::task_terminal;
@@ -35,7 +36,7 @@ use lib::{
 };
 use memory_allocator::MemoryAllocator;
 use shared::{FrameBufferConfig, MemoryMap};
-use spin::{Mutex, Once};
+use spin::Once;
 
 mod logger;
 mod memory_allocator;

@@ -20,6 +20,8 @@ use crate::pci::devices;
 use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
+use crate::sync::Mutex;
+use crate::sync::MutexGuard;
 use crate::task::global::task_manager;
 use crate::task::{Task, TaskID};
 use crate::terminal::file_descriptor::{
@@ -46,8 +48,6 @@ use core::mem;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use shared::PixelFormat;
-use spin::mutex::Mutex;
-use spin::MutexGuard;
 
 static APP_LOADS: Mutex<BTreeMap<usize, AppLoadInfo>> = Mutex::new(BTreeMap::new());
 fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {

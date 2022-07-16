@@ -16,8 +16,8 @@ pub mod global {
     use crate::graphics::global::frame_buffer_config;
     use crate::graphics::Vector2D;
     use crate::layer::global::{active_layer, layer_manager, screen_frame_buffer};
+    use crate::sync::Mutex;
     use alloc::sync::Arc;
-    use spin::Mutex;
 
     pub static MOUSE: Mutex<Option<Mouse>> = Mutex::new(None);
 

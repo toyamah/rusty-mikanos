@@ -4,6 +4,7 @@ use crate::graphics::{Rectangle, Vector2D};
 use crate::layer::global::{active_layer, layer_task_map, screen_frame_buffer};
 use crate::make_error;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
+use crate::sync::{Mutex, MutexGuard};
 use crate::task::global::task_manager;
 use crate::task::{TaskID, TaskManager};
 use crate::window::Window;
@@ -16,7 +17,6 @@ use core::cmp;
 use core::fmt::{Display, Formatter};
 use core::ops::AddAssign;
 use shared::FrameBufferConfig;
-use spin::{Mutex, MutexGuard};
 
 pub mod global {
     use super::LayerManager;
@@ -27,11 +27,12 @@ pub mod global {
     use crate::graphics::global::{frame_buffer_config, screen_size};
     use crate::graphics::{draw_desktop, Vector2D};
     use crate::layer::{ActiveLayer, LayerID};
+    use crate::sync::Mutex;
     use crate::task::TaskID;
     use crate::Window;
     use alloc::collections::BTreeMap;
     use alloc::sync::Arc;
-    use spin::{Mutex, Once};
+    use spin::Once;
 
     static mut BG_LAYER_ID: LayerID = LayerID::MAX;
 

@@ -14,6 +14,7 @@ use crate::message::MessageType;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
+use crate::sync::{Mutex, MutexGuard};
 use crate::task::global::task_manager;
 use crate::task::FileMapping;
 use crate::timer::global::{current_tick, timer_manager};
@@ -23,7 +24,6 @@ use alloc::sync::Arc;
 use core::arch::asm;
 use core::{mem, slice};
 use log::{debug, log, Level};
-use spin::{Mutex, MutexGuard};
 
 type SyscallFuncType = fn(u64, u64, u64, u64, u64, u64) -> SyscallResult;
 

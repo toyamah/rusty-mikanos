@@ -2,6 +2,7 @@ use crate::font::{write_ascii, write_string, write_unicode};
 use crate::graphics::{fill_rectangle, Rectangle, Vector2D, COLOR_BLACK, COLOR_WHITE};
 use crate::layer::LayerID;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
+use crate::sync::Mutex;
 use crate::task::global::task_manager;
 use crate::task::TaskID;
 use crate::terminal::lib::{COLUMNS, ROWS};
@@ -11,7 +12,6 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::arch::asm;
 use core::fmt::Write;
-use spin::Mutex;
 
 // pub(super) static TERMINAL_WRITERS: RwLock<TerminalWriters> = RwLock::new(TerminalWriters::new());
 pub(super) static mut TERMINAL_WRITERS: TerminalWriters = TerminalWriters::new();

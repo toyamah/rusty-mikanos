@@ -4,11 +4,11 @@ use crate::graphics::global::pixel_writer;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
 use crate::layer::global::{layer_manager_op, screen_frame_buffer};
 use crate::layer::LayerID;
+use crate::sync::Mutex;
 use crate::Window;
 use alloc::sync::Arc;
 use core::fmt;
 use shared::PixelFormat;
-use spin::Mutex;
 
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;
