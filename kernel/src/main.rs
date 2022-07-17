@@ -159,7 +159,7 @@ pub extern "C" fn KernelMainNewStack(
 
         unsafe { asm!("sti") }; // set CPU Interrupt Flag 1
         match message.m_type {
-            MessageType::InterruptXhci => xhci_controller().process_events(),
+            MessageType::InterruptXhci => xhci_controller().lock().process_events(),
             MessageType::TimerTimeout { timeout, value } => {
                 if value == text_box_cursor_timer {
                     unsafe { asm!("cli") };
