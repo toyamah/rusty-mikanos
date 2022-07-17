@@ -22,7 +22,7 @@ use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
 use crate::sync::Mutex;
 use crate::sync::MutexGuard;
-use crate::task::global::task_manager;
+use crate::task::global::{main_task_id, task_manager};
 use crate::task::{Task, TaskID};
 use crate::terminal::file_descriptor::{
     PipeDescriptor, TerminalDescriptor, TerminalFileDescriptor,
@@ -122,9 +122,7 @@ pub fn task_terminal(task_id: u64, data: usize) {
                         src_task_id: task_id,
                     }));
                     unsafe { asm!("cli") };
-                    task_manager()
-                        .send_message(task_manager().main_task().id(), msg)
-                        .unwrap();
+                    task_manager().send_message(main_task_id(), msg).unwrap();
                     unsafe { asm!("sti") };
                 }
             }
@@ -140,9 +138,7 @@ pub fn task_terminal(task_id: u64, data: usize) {
                         src_task_id: task_id,
                     }));
                     unsafe { asm!("cli") };
-                    task_manager()
-                        .send_message(task_manager().main_task().id(), msg)
-                        .unwrap();
+                    task_manager().send_message(main_task_id(), msg).unwrap();
                     unsafe { asm!("sti") };
                 }
             }

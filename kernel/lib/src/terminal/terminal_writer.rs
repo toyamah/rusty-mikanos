@@ -3,7 +3,7 @@ use crate::graphics::{fill_rectangle, Rectangle, Vector2D, COLOR_BLACK, COLOR_WH
 use crate::layer::LayerID;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
 use crate::sync::Mutex;
-use crate::task::global::task_manager;
+use crate::task::global::{main_task_id, task_manager};
 use crate::task::TaskID;
 use crate::terminal::lib::{COLUMNS, ROWS};
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
@@ -91,9 +91,7 @@ impl TerminalWriter {
         }));
 
         unsafe { asm!("cli") };
-        task_manager()
-            .send_message(task_manager().main_task().id(), msg)
-            .unwrap();
+        task_manager().send_message(main_task_id(), msg).unwrap();
         unsafe { asm!("sti") };
     }
 
@@ -204,7 +202,7 @@ impl TerminalWriter {
         }));
 
         unsafe { asm!("cli") };
-        let _ = task_manager().send_message(task_manager().main_task().id(), msg);
+        let _ = task_manager().send_message(main_task_id(), msg);
         unsafe { asm!("sti") };
     }
 

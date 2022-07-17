@@ -14,12 +14,18 @@ use core::ops::{Add, AddAssign, Not};
 
 pub mod global {
     use crate::asm::global::{get_cr3, restore_context, switch_context};
-    use crate::task::TaskManager;
+    use crate::task::{TaskID, TaskManager};
     use crate::timer::global::do_with_timer_manager;
+    use spin::Once;
 
     static mut TASK_MANAGER: Option<TaskManager> = None;
     pub fn task_manager() -> &'static mut TaskManager {
         unsafe { TASK_MANAGER.as_mut().unwrap() }
+    }
+
+    static MAIN_TASK_ID: Once<TaskID> = Once::new();
+    pub fn main_task_id() -> TaskID {
+        *MAIN_TASK_ID.call_once(|| task_manager().main_task_id)
     }
 
     pub fn initialize() {
@@ -295,12 +301,6 @@ impl TaskManager {
             .front()
             .expect("no such task id");
         self.tasks.get_mut(&task_id).expect("no such task")
-    }
-
-    pub fn main_task(&self) -> &Task {
-        self.tasks
-            .get(&self.main_task_id)
-            .expect("tasks do not contain main task")
     }
 
     pub fn main_task_mut(&mut self) -> &mut Task {

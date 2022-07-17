@@ -24,7 +24,7 @@ use lib::layer::LayerID;
 use lib::message::{Message, MessageType};
 use lib::mouse::global::MOUSE;
 use lib::sync::Mutex;
-use lib::task::global::task_manager;
+use lib::task::global::{main_task_id, task_manager};
 use lib::task::TaskID;
 use lib::terminal::lib::task_terminal;
 use lib::timer::global::{current_tick, do_with_timer_manager};
@@ -114,7 +114,7 @@ pub extern "C" fn KernelMainNewStack(
     syscall::initialize_syscall();
 
     task::global::initialize();
-    let main_task_id = task_manager().main_task_mut().id();
+    let main_task_id = main_task_id();
     assert_eq!(main_task_id, expected_main_task_id);
 
     usb::global::initialize();

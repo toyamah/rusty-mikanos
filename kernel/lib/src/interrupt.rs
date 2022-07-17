@@ -14,7 +14,7 @@ pub mod global {
     use crate::message::{Message, MessageType};
     use crate::paging::global::handle_page_fault;
     use crate::segment::KERNEL_CS;
-    use crate::task::global::task_manager;
+    use crate::task::global::{main_task_id, task_manager};
     use crate::x86_descriptor::SystemDescriptorType;
     use core::arch::asm;
     use log::error;
@@ -81,10 +81,7 @@ pub mod global {
 
     extern "x86-interrupt" fn int_handler_xhci(_: InterruptStackFrame) {
         task_manager()
-            .send_message(
-                task_manager().main_task().id(),
-                Message::new(MessageType::InterruptXhci),
-            )
+            .send_message(main_task_id(), Message::new(MessageType::InterruptXhci))
             .unwrap();
         notify_end_of_interrupt();
     }

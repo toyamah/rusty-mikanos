@@ -1,6 +1,6 @@
 use crate::interrupt::global::notify_end_of_interrupt;
 use crate::message::{Message, MessageType};
-use crate::task::global::task_manager;
+use crate::task::global::{main_task_id, task_manager};
 use crate::task::{TaskContext, TaskID, TaskManager};
 use crate::timer::global::timer_manager;
 use alloc::collections::BinaryHeap;
@@ -195,7 +195,7 @@ impl TimerManager {
             if t.value == TASK_TIMER_VALUE {
                 task_timer_timeout = true;
                 self.timers.pop();
-                self.add_timer_for_switching_task(task_manager.main_task().id());
+                self.add_timer_for_switching_task(main_task_id());
                 continue;
             }
 
@@ -248,7 +248,7 @@ mod tests {
     fn timer_manager_tick() {
         let mut task_manager = TaskManager::new(dummy_context, |_| {});
         task_manager.initialize(|| 0);
-        let main_task_id = task_manager.main_task().id();
+        let main_task_id = task_manager.main_task_mut().id();
 
         let mut manager = TimerManager::new();
         manager.add_timer(Timer::new(3, 3, main_task_id));
