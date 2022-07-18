@@ -15,8 +15,7 @@ use core::ops::{Add, AddAssign, Not};
 pub mod global {
     use crate::asm::global::{get_cr3, restore_context, switch_context};
     use crate::task::TaskManager;
-    use crate::timer::global::timer_manager;
-    use core::arch::asm;
+    use crate::timer::global::do_with_timer_manager;
 
     static mut TASK_MANAGER: Option<TaskManager> = None;
     pub fn task_manager() -> &'static mut TaskManager {
@@ -27,12 +26,7 @@ pub mod global {
         unsafe { TASK_MANAGER = Some(TaskManager::new(switch_context, restore_context)) };
         task_manager().initialize(get_cr3);
 
-        unsafe { asm!("cli") };
-        timer_manager()
-            .as_mut()
-            .unwrap()
-            .add_timer_for_switching_task(task_manager().main_task_id);
-        unsafe { asm!("sti") };
+        do_with_timer_manager(|fm| fm.add_timer_for_switching_task(task_manager().main_task_id));
     }
 
     #[no_mangle]
