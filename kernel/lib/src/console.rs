@@ -4,9 +4,12 @@ use crate::graphics::global::pixel_writer;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
 use crate::layer::global::layer_manager_op;
 use crate::layer::LayerID;
+use crate::message::{LayerMessage, LayerOperation, Message, MessageType};
 use crate::sync::Mutex;
+use crate::task::global::{main_task_id, task_manager};
 use crate::Window;
 use alloc::sync::Arc;
+use core::arch::asm;
 use core::fmt;
 use shared::PixelFormat;
 
@@ -110,11 +113,6 @@ impl Console {
         if let Some(m) = layer_manager_op() {
             if let Some(id) = self.layer_id {
                 m.lock().draw_layer_of(id);
-                // if let Some(mut g) = m.try_lock() {
-                //     g.draw_layer_of(id, screen_frame_buffer());
-                // } else {
-                //     // TODO
-                // }
             }
         }
     }
