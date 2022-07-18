@@ -7,13 +7,13 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 build_and_run() {
   cd "$script_dir"
 
-  # this allows rustc find -lc and -lc++ libraries which are defined in x86~~-elf.json file
+  # this allows rustc to find -lc and -lc++ libraries which are defined in x86~~-elf.json file
   # see https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags
   export RUSTFLAGS="-C link-arg=$LDFLAGS"
 
-  # run clippy instead of run on Github Actions because setting up the environment is bothersome.
+  # run clippy instead of CI because setting up the environment is bothersome.
   if [ $clippy -eq 1 ]; then
-    cd kernel # run in only kernel because borrowed stdlib code in apps/shared_lib needs to be fixed.
+    cd kernel
     cargo clippy -- -Dwarnings
     cd -
   fi
