@@ -29,7 +29,7 @@ use crate::terminal::file_descriptor::{
 };
 use crate::terminal::history::{CommandHistory, Direction};
 use crate::terminal::terminal_writer::{TerminalWriter, TERMINAL_WRITERS};
-use crate::timer::global::{current_tick, timer_manager};
+use crate::timer::global::{current_tick, do_with_timer_manager};
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{make_error, str_trimming_nul_unchecked, Window};
@@ -46,12 +46,15 @@ use core::ffi::c_void;
 use core::fmt::Write;
 use core::mem;
 use core::ops::DerefMut;
-use core::sync::atomic::{AtomicPtr, Ordering};
 use shared::PixelFormat;
 
 static APP_LOADS: Mutex<BTreeMap<usize, AppLoadInfo>> = Mutex::new(BTreeMap::new());
-fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {
-    APP_LOADS.lock().insert(e as *const _ as usize, app_load);
+fn insert_app_load(
+    app_loads: &mut BTreeMap<usize, AppLoadInfo>,
+    e: &DirectoryEntry,
+    app_load: AppLoadInfo,
+) {
+    app_loads.insert(e as *const _ as usize, app_load);
 }
 
 pub fn task_terminal(task_id: u64, data: usize) {
@@ -87,10 +90,7 @@ pub fn task_terminal(task_id: u64, data: usize) {
     }
 
     let add_blink_timer = |t: u64| {
-        timer_manager()
-            .as_mut()
-            .unwrap()
-            .add_timer(Timer::new(t + TIMER_FREQ / 2, 1, task_id))
+        do_with_timer_manager(|fm| fm.add_timer(Timer::new(t + TIMER_FREQ / 2, 1, task_id)))
     };
     add_blink_timer(current_tick());
     let mut active_mode = WindowActiveMode::Deactivate;
@@ -174,27 +174,21 @@ fn create_terminal(
     terminal
 }
 
+#[derive(Clone)]
 pub(crate) struct AppLoadInfo {
     vaddr_end: u64,
     entry: u64,
-    pml4: AtomicPtr<PageMapEntry>,
+    pml4: *const PageMapEntry,
 }
+
+unsafe impl Send for AppLoadInfo {}
 
 impl AppLoadInfo {
     fn new(vaddr_end: u64, entry: u64, pml4: *mut PageMapEntry) -> Self {
         Self {
             vaddr_end,
             entry,
-            pml4: AtomicPtr::new(pml4),
-        }
-    }
-
-    fn clone(&mut self) -> Self {
-        let ptr = self.pml4.load(Ordering::SeqCst);
-        Self {
-            vaddr_end: self.vaddr_end,
-            entry: self.entry,
-            pml4: AtomicPtr::new(ptr),
+            pml4,
         }
     }
 }
@@ -526,9 +520,12 @@ impl Terminal {
         file_entry: &DirectoryEntry,
         task: &mut Task,
     ) -> Result<AppLoadInfo, Error> {
-        if let Some(original) = APP_LOADS.lock().get_mut(&(file_entry as *const _ as usize)) {
+        // hold the lock until copy is completed
+        let mut loads = APP_LOADS.lock();
+
+        if let Some(original) = loads.get_mut(&(file_entry as *const _ as usize)) {
             let temp_pml4 = setup_pml4(task)?;
-            copy_page_maps(temp_pml4, original.pml4.load(Ordering::SeqCst), 4, 256)?;
+            copy_page_maps(temp_pml4, original.pml4, 4, 256)?;
             let cloned = AppLoadInfo::new(original.vaddr_end, original.entry, temp_pml4);
             return Ok(cloned);
         }
@@ -545,10 +542,10 @@ impl Terminal {
 
         let elf_last_addr = elf_header.load_elf(get_cr3())?;
         let mut app_load = AppLoadInfo::new(elf_last_addr, elf_header.e_entry as u64, temp_pml4);
-        insert_app_load(file_entry, app_load.clone());
+        insert_app_load(&mut *loads, file_entry, app_load.clone());
 
-        app_load.pml4 = AtomicPtr::new(setup_pml4(task)?);
-        copy_page_maps(app_load.pml4.load(Ordering::SeqCst), temp_pml4, 4, 256)?;
+        app_load.pml4 = setup_pml4(task)?;
+        copy_page_maps(app_load.pml4 as *mut _, temp_pml4, 4, 256)?;
         Ok(app_load)
     }
 

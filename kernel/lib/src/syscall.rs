@@ -17,7 +17,7 @@ use crate::rust_official::cchar::c_char;
 use crate::sync::{Mutex, MutexGuard};
 use crate::task::global::task_manager;
 use crate::task::FileMapping;
-use crate::timer::global::{current_tick, timer_manager};
+use crate::timer::global::{current_tick, do_with_timer_manager};
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::Window;
 use alloc::sync::Arc;
@@ -383,12 +383,7 @@ fn create_timer(
         timeout_ms * TIMER_FREQ / 1000
     };
 
-    unsafe { asm!("cli") };
-    timer_manager()
-        .as_mut()
-        .unwrap()
-        .add_timer(Timer::new(timeout, -timer_value, task_id));
-    unsafe { asm!("sti") };
+    do_with_timer_manager(|fm| fm.add_timer(Timer::new(timeout, -timer_value, task_id)));
     SyscallResult::new(timeout * 1000 / TIMER_FREQ, 0)
 }
 

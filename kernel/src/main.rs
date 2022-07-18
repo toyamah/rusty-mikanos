@@ -27,7 +27,7 @@ use lib::sync::Mutex;
 use lib::task::global::task_manager;
 use lib::task::TaskID;
 use lib::terminal::lib::task_terminal;
-use lib::timer::global::{current_tick_with_lock, timer_manager};
+use lib::timer::global::{current_tick, do_with_timer_manager};
 use lib::timer::{Timer, TIMER_FREQ};
 use lib::window::Window;
 use lib::{
@@ -102,13 +102,13 @@ pub extern "C" fn KernelMainNewStack(
     let text_box_cursor_timer = 1;
     let timer_05_sec = TIMER_FREQ / 2;
     let expected_main_task_id = TaskID::new(0); // prepare because the main task id is created after it
-    unsafe { asm!("cli") };
-    timer_manager().as_mut().unwrap().add_timer(Timer::new(
-        timer_05_sec,
-        text_box_cursor_timer,
-        expected_main_task_id,
-    ));
-    unsafe { asm!("sti") };
+    do_with_timer_manager(|fm| {
+        fm.add_timer(Timer::new(
+            timer_05_sec,
+            text_box_cursor_timer,
+            expected_main_task_id,
+        ))
+    });
     let mut text_box_cursor_visible = false;
 
     syscall::initialize_syscall();
@@ -137,7 +137,7 @@ pub extern "C" fn KernelMainNewStack(
             &Vector2D::new(8 * 10, 16),
             &PixelColor::new(0xc6, 0xc6, 0xc6),
         );
-        let tick = current_tick_with_lock();
+        let tick = current_tick();
         write_string(
             MAIN_WINDOW.wait().lock().writer(),
             20,
@@ -162,13 +162,13 @@ pub extern "C" fn KernelMainNewStack(
             MessageType::InterruptXhci => xhci_controller().process_events(),
             MessageType::TimerTimeout { timeout, value } => {
                 if value == text_box_cursor_timer {
-                    unsafe { asm!("cli") };
-                    timer_manager().as_mut().unwrap().add_timer(Timer::new(
-                        timeout + timer_05_sec,
-                        text_box_cursor_timer,
-                        main_task_id,
-                    ));
-                    unsafe { asm!("sti") };
+                    do_with_timer_manager(|fm| {
+                        fm.add_timer(Timer::new(
+                            timeout + timer_05_sec,
+                            text_box_cursor_timer,
+                            main_task_id,
+                        ))
+                    });
                     text_box_cursor_visible = !text_box_cursor_visible;
                     draw_text_cursor(text_box_cursor_visible);
                     layer_manager()
