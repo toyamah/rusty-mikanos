@@ -362,15 +362,17 @@ pub mod global {
     use crate::memory_manager::global::MEMORY_MANAGER;
     use crate::memory_manager::{FrameID, BYTES_PER_FRAME};
     use crate::paging::{set_page_content, LinearAddress4Level, PageMapEntry};
+    use crate::sync::Mutex;
     use crate::task::global::task_manager;
     use crate::task::FileMapping;
     use core::ffi::c_void;
     use core::ops::DerefMut;
     use core::slice;
 
-    static mut PML4_TABLE: PM4Table = PM4Table([0; 512]);
-    static mut PDP_TABLE: PDPTable = PDPTable([0; 512]);
-    static mut PAGE_DIRECTORY: PageDirectory = PageDirectory([[0; 512]; PAGE_DIRECTORY_COUNT]);
+    static PML4_TABLE: Mutex<PM4Table> = Mutex::new(PM4Table([0; 512]));
+    static PDP_TABLE: Mutex<PDPTable> = Mutex::new(PDPTable([0; 512]));
+    static PAGE_DIRECTORY: Mutex<PageDirectory> =
+        Mutex::new(PageDirectory([[0; 512]; PAGE_DIRECTORY_COUNT]));
 
     pub fn initialize() {
         setup_identity_page_table();
@@ -378,25 +380,28 @@ pub mod global {
 
     /// Set up as virtual addresses = physical addresses
     fn setup_identity_page_table() {
-        unsafe {
-            PML4_TABLE.0[0] = &PDP_TABLE.0[0] as *const _ as u64 | 0x003;
+        let mut pm4_table = PML4_TABLE.try_lock().unwrap();
+        let mut pdp_table = PDP_TABLE.try_lock().unwrap();
+        let mut page_directory = PAGE_DIRECTORY.try_lock().unwrap();
 
-            for i_pdpt in 0..PAGE_DIRECTORY.0.len() {
-                PDP_TABLE.0[i_pdpt] = &PAGE_DIRECTORY.0[i_pdpt] as *const _ as u64 | 0x003;
-                for i_pd in 0..512 {
-                    PAGE_DIRECTORY.0[i_pdpt][i_pd] =
-                        (i_pdpt as u64 * PAGE_SIZE_1G + i_pd as u64 * PAGE_SIZE_2M) | 0x083;
-                }
+        pm4_table.0[0] = &pdp_table.0[0] as *const _ as u64 | 0x003;
+
+        for i_pdpt in 0..page_directory.0.len() {
+            pdp_table.0[i_pdpt] = &page_directory.0[i_pdpt] as *const _ as u64 | 0x003;
+            for i_pd in 0..512 {
+                page_directory.0[i_pdpt][i_pd] =
+                    (i_pdpt as u64 * PAGE_SIZE_1G + i_pd as u64 * PAGE_SIZE_2M) | 0x083;
             }
-
-            // set the address of PM4_TABLE to the cr3 register
-            set_cr3(&PML4_TABLE.0[0] as *const _ as u64);
-            set_cr0(get_cr0() & 0xfffeffff);
         }
+
+        // set the address of PM4_TABLE to the cr3 register
+        set_cr3(&pm4_table.0[0] as *const _ as u64);
+        set_cr0(get_cr0() & 0xfffeffff);
     }
 
     pub(crate) fn reset_cr3() {
-        unsafe { set_cr3(&PML4_TABLE.0[0] as *const _ as u64) }
+        let pm4_table = PML4_TABLE.lock();
+        set_cr3(&pm4_table.0[0] as *const _ as u64)
     }
 
     pub(crate) fn handle_page_fault(error_code: u64, causal_addr: u64) -> Result<(), Error> {

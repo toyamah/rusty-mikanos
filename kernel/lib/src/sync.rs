@@ -23,6 +23,13 @@ impl<T> Mutex<T> {
         }
     }
 
+    pub fn try_lock(&self) -> Option<MutexGuard<T>> {
+        self.inner.try_lock().map(|inner| MutexGuard {
+            inner,
+            queue: &self.queue,
+        })
+    }
+
     pub fn lock(&self) -> MutexGuard<T> {
         let inner_guard = loop {
             if let Some(guard) = self.inner.try_lock() {
