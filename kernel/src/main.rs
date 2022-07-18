@@ -42,14 +42,10 @@ mod logger;
 mod memory_allocator;
 mod usb;
 
-static mut MAIN_WINDOW_LAYER_ID: Option<LayerID> = None;
-fn main_window_layer_id() -> LayerID {
-    unsafe { MAIN_WINDOW_LAYER_ID.unwrap() }
-}
-
+static MAIN_WINDOW_LAYER_ID: Once<LayerID> = Once::new();
 static MAIN_WINDOW: Once<Arc<Mutex<Window>>> = Once::new();
-static TEXT_WINDOW: Once<Arc<Mutex<Window>>> = Once::new();
 
+static TEXT_WINDOW: Once<Arc<Mutex<Window>>> = Once::new();
 static TEXT_WINDOW_LAYER_ID: Once<LayerID> = Once::new();
 
 static TEXT_WINDOW_INDEX: AtomicI32 = AtomicI32::new(0);
@@ -145,7 +141,9 @@ pub extern "C" fn KernelMainNewStack(
             &format!("{:010}", tick),
             &COLOR_BLACK,
         );
-        layer_manager().lock().draw_layer_of(main_window_layer_id());
+        layer_manager()
+            .lock()
+            .draw_layer_of(*MAIN_WINDOW_LAYER_ID.get().unwrap());
 
         // prevent int_handler_xhci method from taking an interrupt to avoid part of data racing of main queue.
         unsafe { asm!("cli") }; // set Interrupt Flag of CPU 0
@@ -263,7 +261,7 @@ fn initialize_main_window() {
         .id();
     layer_manager().lock().up_down(main_window_layer_id, 2);
 
-    unsafe { MAIN_WINDOW_LAYER_ID = Some(main_window_layer_id) };
+    MAIN_WINDOW_LAYER_ID.call_once(|| main_window_layer_id);
 }
 
 fn initialize_text_window() {
