@@ -5,8 +5,8 @@ use core::ffi::c_void;
 pub mod global {
     use super::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
     use crate::memory_map::UEFI_PAGE_SIZE;
+    use crate::sync::Mutex;
     use shared::{MemoryDescriptor, MemoryMap};
-    use spin::Mutex;
 
     pub static MEMORY_MANAGER: Mutex<BitmapMemoryManager> = Mutex::new(BitmapMemoryManager::new());
 

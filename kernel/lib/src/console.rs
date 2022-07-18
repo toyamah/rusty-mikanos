@@ -2,9 +2,11 @@ use crate::console::Mode::{ConsoleWindow, Frame};
 use crate::font::{write_ascii, write_chars};
 use crate::graphics::global::pixel_writer;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D};
-use crate::layer::global::{console_window, layer_manager_op, screen_frame_buffer};
+use crate::layer::global::layer_manager_op;
 use crate::layer::LayerID;
+use crate::sync::Mutex;
 use crate::Window;
+use alloc::sync::Arc;
 use core::fmt;
 use shared::PixelFormat;
 
@@ -42,10 +44,9 @@ pub struct Console {
     buffer: [[char; COLUMNS + 1]; ROWS],
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Mode {
     Frame,
-    ConsoleWindow,
+    ConsoleWindow(Arc<Mutex<Window>>),
 }
 
 impl Console {
@@ -61,9 +62,15 @@ impl Console {
         }
     }
 
-    pub fn reset_mode<W: PixelWriter>(&mut self, mode: Mode, writer: &mut W) {
+    pub fn reset_mode(&mut self, mode: Mode) {
         self.mode = mode;
-        self.refresh(writer);
+        match &self.mode {
+            Frame => {}
+            ConsoleWindow(w) => {
+                let w = Arc::clone(w);
+                self.refresh(w.lock().writer());
+            }
+        }
     }
 
     pub fn layer_id(&self) -> Option<LayerID> {
@@ -74,18 +81,27 @@ impl Console {
         self.layer_id = Some(layer_id);
     }
 
-    fn put_string<W: PixelWriter>(&mut self, str: &str, writer: &mut W) {
+    fn put_string(&mut self, str: &str) {
         for char in str.chars() {
             if char == '\n' {
-                self.new_line(writer);
+                self.new_line();
             } else if self.cursor_column < COLUMNS - 1 {
-                write_ascii(
-                    writer,
-                    (8 * self.cursor_column) as i32,
-                    (16 * self.cursor_row) as i32,
-                    char,
-                    &self.fg_color,
-                );
+                match &self.mode {
+                    Frame => write_ascii(
+                        pixel_writer(),
+                        (8 * self.cursor_column) as i32,
+                        (16 * self.cursor_row) as i32,
+                        char,
+                        &self.fg_color,
+                    ),
+                    ConsoleWindow(w) => write_ascii(
+                        w.lock().writer(),
+                        (8 * self.cursor_column) as i32,
+                        (16 * self.cursor_row) as i32,
+                        char,
+                        &self.fg_color,
+                    ),
+                };
                 self.buffer[self.cursor_row][self.cursor_column] = char;
                 self.cursor_column += 1;
             }
@@ -93,30 +109,35 @@ impl Console {
 
         if let Some(m) = layer_manager_op() {
             if let Some(id) = self.layer_id {
-                m.draw_layer_of(id, screen_frame_buffer());
+                m.lock().draw_layer_of(id);
+                // if let Some(mut g) = m.try_lock() {
+                //     g.draw_layer_of(id, screen_frame_buffer());
+                // } else {
+                //     // TODO
+                // }
             }
         }
     }
 
-    fn new_line<W: PixelWriter>(&mut self, writer: &mut W) {
+    fn new_line(&mut self) {
         self.cursor_column = 0;
         if self.cursor_row < ROWS - 1 {
             self.cursor_row += 1;
             return;
         }
 
-        match self.mode {
-            ConsoleWindow => {
+        match &self.mode {
+            ConsoleWindow(window) => {
                 let rows = ROWS as i32;
                 let columns = COLUMNS as i32;
                 let move_src = Rectangle::new(
                     Vector2D::new(0, 16),
                     Vector2D::new(8 * columns, 16 * (rows - 1)),
                 );
-                // TODO: take off referencing a global var if possible
-                console_window().move_(Vector2D::new(0, 0), &move_src);
+                let mut w = window.lock();
+                w.move_(Vector2D::new(0, 0), &move_src);
                 fill_rectangle(
-                    writer,
+                    w.writer(),
                     &Vector2D::new(0, 16 * (rows - 1)),
                     &Vector2D::new(8 * columns, 16),
                     &self.bg_color,
@@ -124,7 +145,7 @@ impl Console {
             }
             Frame => {
                 fill_rectangle(
-                    writer,
+                    pixel_writer(),
                     &Vector2D::new(0, 0),
                     &Vector2D::new((8 * COLUMNS) as i32, (16 * ROWS) as i32),
                     &self.bg_color,
@@ -133,7 +154,7 @@ impl Console {
                     let next = row + 1;
                     self.buffer.copy_within(next..=next, row);
                     write_chars(
-                        writer,
+                        pixel_writer(),
                         0,
                         (16 * row) as i32,
                         &self.buffer[row],
@@ -160,10 +181,7 @@ impl Console {
 
 impl fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        match self.mode {
-            Frame => self.put_string(s, pixel_writer()),
-            ConsoleWindow => self.put_string(s, console_window()),
-        }
+        self.put_string(s);
         Ok(())
     }
 }

@@ -8,17 +8,19 @@ use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{fill_rectangle, PixelColor, PixelWriter, Vector2D};
 use crate::io::FileDescriptor;
 use crate::keyboard::{is_control_key_inputted, KEY_Q};
-use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
+use crate::layer::global::layer_manager;
 use crate::layer::LayerID;
 use crate::message::MessageType;
 use crate::msr::{IA32_EFFR, IA32_FMASK, IA32_LSTAR, IA32_STAR};
 use crate::rust_official::c_str::CStr;
 use crate::rust_official::cchar::c_char;
+use crate::sync::{Mutex, MutexGuard};
 use crate::task::global::task_manager;
 use crate::task::FileMapping;
 use crate::timer::global::{current_tick, do_with_timer_manager};
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::Window;
+use alloc::sync::Arc;
 use core::arch::asm;
 use core::{mem, slice};
 use log::{debug, log, Level};
@@ -123,22 +125,17 @@ fn open_window(w: u64, h: u64, x: u64, y: u64, title: u64, _a6: u64) -> SyscallR
     );
 
     unsafe { asm!("cli") };
-    let layer_id = layer_manager()
-        .new_layer(window)
+    let task_id = task_manager().current_task().id();
+    unsafe { asm!("sti") };
+
+    let mut lm = layer_manager().lock();
+    let layer_id = lm
+        .new_layer(Arc::new(Mutex::new(window)))
         .set_draggable(true)
         .move_(Vector2D::new(x as i32, y as i32))
         .id();
-    active_layer().activate(
-        Some(layer_id),
-        layer_manager(),
-        screen_frame_buffer(),
-        task_manager(),
-        layer_task_map(),
-    );
-
-    let task_id = task_manager().current_task().id();
-    layer_task_map().insert(layer_id, task_id);
-    unsafe { asm!("sti") };
+    lm.activate_layer(Some(layer_id));
+    lm.register_layer_task_relation(layer_id, task_id);
 
     SyscallResult::ok(layer_id.value() as u64)
 }
@@ -155,7 +152,7 @@ fn win_write_string(
     let c_str = unsafe { c_str_from(text) };
     let str = str_from(c_str.to_bytes());
 
-    do_win_func(layer_id_flags, |window| {
+    do_win_func(layer_id_flags, |mut window| {
         write_string(
             &mut window.normal_window_writer(),
             x as i32,
@@ -178,7 +175,7 @@ fn win_fill_rectangle(
     let color = PixelColor::from(color as u32);
     let pos = Vector2D::new(x as i32, y as i32);
     let size = Vector2D::new(w as i32, h as i32);
-    do_win_func(layer_id_flags, |window| {
+    do_win_func(layer_id_flags, |mut window| {
         fill_rectangle(&mut window.normal_window_writer(), &pos, &size, &color);
         SyscallResult::ok(0)
     })
@@ -213,7 +210,7 @@ fn win_draw_line(
     let mut y1 = y1 as i32;
     let color = PixelColor::from(color as u32);
 
-    do_win_func(layer_id_flags, |window| {
+    do_win_func(layer_id_flags, |mut window| {
         let dx = x1 - x0 + (x1 - x0).signum();
         let dy = y1 - y0 + (y1 - y0).signum();
 
@@ -265,13 +262,7 @@ fn close_window(
     _a6: u64,
 ) -> SyscallResult {
     let layer_id = LayerID::new((layer_id_flags & 0xffffffff) as u32);
-    match layer_manager().close_layer(
-        layer_id,
-        active_layer(),
-        screen_frame_buffer(),
-        task_manager(),
-        layer_task_map(),
-    ) {
+    match layer_manager().lock().close_layer(layer_id) {
         Ok(_) => SyscallResult::ok(0),
         Err(_e) => SyscallResult::err(0, EBADF),
     }
@@ -524,27 +515,24 @@ fn str_from(bytes: &[u8]) -> &str {
 
 fn do_win_func<F>(layer_id_flags: u64, f: F) -> SyscallResult
 where
-    F: FnOnce(&mut Window) -> SyscallResult,
+    F: FnOnce(MutexGuard<Window>) -> SyscallResult,
 {
     let layer_flags = layer_id_flags >> 32;
     let layer_id = LayerID::new((layer_id_flags & 0xffffffff) as u32);
 
-    unsafe { asm!("cli") };
-    let layer = layer_manager().get_layer_mut(layer_id);
-    unsafe { asm!("sti") };
+    let mut layout_manager = layer_manager().lock();
+    let layer = layout_manager.get_layer_mut(layer_id);
 
     let res = match layer {
         None => SyscallResult::err(0, EBADF),
-        Some(l) => f(l.get_window_mut()),
+        Some(l) => f(l.get_window_ref()),
     };
     if res.is_err() {
         return res;
     }
 
     if (layer_flags & 1) == 0 {
-        unsafe { asm!("cli") };
-        layer_manager().draw_layer_of(layer_id, screen_frame_buffer());
-        unsafe { asm!("sti") };
+        layout_manager.draw_layer_of(layer_id);
     }
 
     res

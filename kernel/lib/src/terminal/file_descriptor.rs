@@ -3,6 +3,7 @@ use crate::keyboard::{is_control_key_inputted, KEY_D};
 use crate::libc::{memcpy, memmove};
 use crate::message::{Message, MessageType, PipeMessage};
 use crate::str_trimming_nul;
+use crate::sync::MutexGuard;
 use crate::task::global::task_manager;
 use crate::task::TaskID;
 use crate::terminal::terminal_writer::{TerminalWriter, TERMINAL_WRITERS};
@@ -13,7 +14,6 @@ use core::cell::RefCell;
 use core::ffi::c_void;
 use core::fmt::Write;
 use core::{cmp, mem};
-use spin::MutexGuard;
 
 pub(super) struct TerminalDescriptor {
     pub(super) command_line: String,
