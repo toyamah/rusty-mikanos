@@ -16,7 +16,7 @@ use core::fmt::Write;
 // pub(super) static TERMINAL_WRITERS: RwLock<TerminalWriters> = RwLock::new(TerminalWriters::new());
 pub(super) static mut TERMINAL_WRITERS: TerminalWriters = TerminalWriters::new();
 
-pub(super) struct TerminalWriters(pub BTreeMap<TaskID, Mutex<TerminalWriter>>);
+pub(super) struct TerminalWriters(BTreeMap<TaskID, Mutex<TerminalWriter>>);
 
 impl TerminalWriters {
     pub const fn new() -> Self {
@@ -33,7 +33,10 @@ impl TerminalWriters {
     }
 
     pub fn get(&self, task_id: TaskID) -> &Mutex<TerminalWriter> {
-        self.0.get(&task_id).unwrap()
+        unsafe { asm!("cli") };
+        let m = self.0.get(&task_id).unwrap();
+        unsafe { asm!("sti") };
+        m
     }
 
     pub fn remove(&mut self, task_id: TaskID) {

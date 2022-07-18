@@ -489,6 +489,7 @@ impl ActiveLayer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::layer::global::SCREEN_FRAME_BUFFER;
     use shared::{FrameBufferConfig, PixelFormat};
 
     #[test]

@@ -14,6 +14,7 @@ pub mod global {
     use crate::memory_manager::BYTES_PER_FRAME;
     use crate::segment::K_TSS;
     use crate::x86_descriptor::SegmentDescriptorType;
+    use core::arch::asm;
     use core::mem;
 
     static mut GDT: [SegmentDescriptor; 7] = [SegmentDescriptor::new(); 7];
@@ -27,6 +28,7 @@ pub mod global {
 
     fn set_up_segment() {
         unsafe {
+            asm!("cli");
             GDT[1].set_code_segment(SegmentDescriptorType::ExecuteRead, 0, 0, 0xfffff);
             GDT[2].set_data_segment(SegmentDescriptorType::ReadWrite, 0, 0, 0xfffff);
             GDT[3].set_data_segment(SegmentDescriptorType::ReadWrite, 3, 0, 0xfffff);
@@ -35,10 +37,12 @@ pub mod global {
                 core::mem::size_of_val(&GDT) as u16 - 1,
                 &GDT[0] as *const _ as u64,
             );
+            asm!("sti");
         }
     }
 
     pub fn initialize_tss() {
+        unsafe { asm!("cli") };
         set_tss(1, allocate_stack_area(8));
         set_tss(7 + 2 * IST_FOR_TIMER as usize, allocate_stack_area(8));
 
@@ -54,6 +58,7 @@ pub mod global {
             GDT[i + 1] = SegmentDescriptor((tss_addr >> 32) as u64);
         }
         load_tr(K_TSS);
+        unsafe { asm!("sti") };
     }
 
     fn set_tss(index: usize, value: u64) {
