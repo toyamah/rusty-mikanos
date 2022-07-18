@@ -44,17 +44,16 @@ use core::fmt::Write;
 use core::mem;
 use core::ops::DerefMut;
 use shared::PixelFormat;
+use spin::mutex::Mutex;
 use spin::MutexGuard;
 
-static mut APP_LOADS: BTreeMap<usize, AppLoadInfo> = BTreeMap::new();
-pub(super) fn get_app_load_ref(e: &DirectoryEntry) -> Option<&'static AppLoadInfo> {
-    unsafe { APP_LOADS.get(&(e as *const _ as usize)) }
-}
-pub(super) fn get_app_load_mut(e: &DirectoryEntry) -> Option<&'static mut AppLoadInfo> {
-    unsafe { APP_LOADS.get_mut(&(e as *const _ as usize)) }
-}
-pub(super) fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {
-    unsafe { APP_LOADS.insert(e as *const _ as usize, app_load) };
+static APP_LOADS: Mutex<BTreeMap<usize, AppLoadInfo>> = Mutex::new(BTreeMap::new());
+fn insert_app_load(
+    app_loads: &mut BTreeMap<usize, AppLoadInfo>,
+    e: &DirectoryEntry,
+    app_load: AppLoadInfo,
+) {
+    app_loads.insert(e as *const _ as usize, app_load);
 }
 
 pub fn task_terminal(task_id: u64, data: usize) {
@@ -196,8 +195,10 @@ pub(crate) struct AppLoadInfo {
     pml4: *const PageMapEntry,
 }
 
+unsafe impl Send for AppLoadInfo {}
+
 impl AppLoadInfo {
-    fn new(vaddr_end: u64, entry: u64, pml4: *const PageMapEntry) -> Self {
+    fn new(vaddr_end: u64, entry: u64, pml4: *mut PageMapEntry) -> Self {
         Self {
             vaddr_end,
             entry,
@@ -534,12 +535,17 @@ impl Terminal {
         file_entry: &DirectoryEntry,
         task: &mut Task,
     ) -> Result<AppLoadInfo, Error> {
-        let temp_pml4 = setup_pml4(task)?;
-        if let Some(mut app_load) = get_app_load_mut(file_entry).cloned() {
-            copy_page_maps(temp_pml4, app_load.pml4, 4, 256)?;
-            app_load.pml4 = temp_pml4;
-            return Ok(app_load);
+        // hold the lock until copy is completed
+        let mut loads = APP_LOADS.lock();
+
+        if let Some(original) = loads.get_mut(&(file_entry as *const _ as usize)) {
+            let temp_pml4 = setup_pml4(task)?;
+            copy_page_maps(temp_pml4, original.pml4, 4, 256)?;
+            let cloned = AppLoadInfo::new(original.vaddr_end, original.entry, temp_pml4);
+            return Ok(cloned);
         }
+
+        let temp_pml4 = setup_pml4(task)?;
 
         let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
         file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image());
@@ -551,7 +557,7 @@ impl Terminal {
 
         let elf_last_addr = elf_header.load_elf(get_cr3())?;
         let mut app_load = AppLoadInfo::new(elf_last_addr, elf_header.e_entry as u64, temp_pml4);
-        insert_app_load(file_entry, app_load.clone());
+        insert_app_load(&mut *loads, file_entry, app_load.clone());
 
         app_load.pml4 = setup_pml4(task)?;
         copy_page_maps(app_load.pml4 as *mut _, temp_pml4, 4, 256)?;
