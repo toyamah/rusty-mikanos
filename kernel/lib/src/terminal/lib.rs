@@ -3,17 +3,15 @@ use crate::elf::Elf64Ehdr;
 use crate::error::{Code, Error};
 use crate::fat::global::{boot_volume_image, create_file, find_file};
 use crate::fat::{Attribute, DirectoryEntry, FatFileDescriptor, END_OF_CLUSTER_CHAIN};
-use crate::font::{write_ascii, write_string, write_unicode};
 use crate::graphics::global::frame_buffer_config;
 use crate::graphics::{
-    draw_text_box_with_colors, fill_rectangle, PixelColor, PixelWriter, Rectangle, Vector2D,
-    COLOR_BLACK, COLOR_WHITE,
+    draw_text_box_with_colors, PixelColor, PixelWriter, Rectangle, Vector2D, COLOR_BLACK,
 };
 use crate::io::{FileDescriptor, STD_ERR, STD_IN, STD_OUT};
-use crate::layer::global::{active_layer, layer_manager, layer_task_map, screen_frame_buffer};
-use crate::layer::{LayerID, LayerManager};
+use crate::layer::global::layer_manager;
+use crate::layer::LayerID;
 use crate::libc::{memcpy, strcpy};
-use crate::memory_manager::global::memory_manager;
+use crate::memory_manager::global::MEMORY_MANAGER;
 use crate::message::MessageType::Layer;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
 use crate::paging::global::{copy_page_maps, free_page_map, reset_cr3};
@@ -22,13 +20,16 @@ use crate::pci::devices;
 use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
 use crate::rust_official::strlen;
-use crate::task::global::task_manager;
+use crate::sync::Mutex;
+use crate::sync::MutexGuard;
+use crate::task::global::{main_task_id, task_manager};
 use crate::task::{Task, TaskID};
 use crate::terminal::file_descriptor::{
     PipeDescriptor, TerminalDescriptor, TerminalFileDescriptor,
 };
 use crate::terminal::history::{CommandHistory, Direction};
-use crate::timer::global::timer_manager;
+use crate::terminal::terminal_writer::{TerminalWriter, TERMINAL_WRITERS};
+use crate::timer::global::{current_tick, do_with_timer_manager};
 use crate::timer::{Timer, TIMER_FREQ};
 use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MARGIN};
 use crate::{make_error, str_trimming_nul_unchecked, Window};
@@ -36,30 +37,24 @@ use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::arch::asm;
 use core::cell::{RefCell, RefMut};
 use core::ffi::c_void;
 use core::fmt::Write;
+use core::mem;
 use core::ops::DerefMut;
-use core::{fmt, mem};
 use shared::PixelFormat;
 
-static mut TERMINALS: BTreeMap<TaskID, Terminal> = BTreeMap::new();
-pub(crate) fn get_terminal_mut_by(task_id: TaskID) -> Option<&'static mut Terminal> {
-    unsafe { TERMINALS.get_mut(&task_id) }
-}
-
-static mut APP_LOADS: BTreeMap<usize, AppLoadInfo> = BTreeMap::new();
-pub(super) fn get_app_load_ref(e: &DirectoryEntry) -> Option<&'static AppLoadInfo> {
-    unsafe { APP_LOADS.get(&(e as *const _ as usize)) }
-}
-pub(super) fn get_app_load_mut(e: &DirectoryEntry) -> Option<&'static mut AppLoadInfo> {
-    unsafe { APP_LOADS.get_mut(&(e as *const _ as usize)) }
-}
-pub(super) fn insert_app_load(e: &DirectoryEntry, app_load: AppLoadInfo) {
-    unsafe { APP_LOADS.insert(e as *const _ as usize, app_load) };
+static APP_LOADS: Mutex<BTreeMap<usize, AppLoadInfo>> = Mutex::new(BTreeMap::new());
+fn insert_app_load(
+    app_loads: &mut BTreeMap<usize, AppLoadInfo>,
+    e: &DirectoryEntry,
+    app_load: AppLoadInfo,
+) {
+    app_loads.insert(e as *const _ as usize, app_load);
 }
 
 pub fn task_terminal(task_id: u64, data: usize) {
@@ -76,60 +71,33 @@ pub fn task_terminal(task_id: u64, data: usize) {
     let command = term_desc.map(|td| td.command_line.as_str()).unwrap_or("");
     let show_window = term_desc.is_none();
 
-    unsafe { asm!("cli") };
     let task_id = TaskID::new(task_id);
-    let current_task_id = task_manager().current_task().id();
-    {
-        // Initialize Terminal
-        let mut terminal = Terminal::new(task_id, term_desc);
-        terminal.initialize(
-            show_window,
-            layer_manager(),
-            frame_buffer_config().pixel_format,
-        );
-        if show_window {
-            layer_manager().move_(
-                terminal.layer_id,
-                Vector2D::new(100, 200),
-                screen_frame_buffer(),
-            );
-            layer_task_map().insert(terminal.layer_id, task_id);
-            active_layer().activate(
-                Some(terminal.layer_id),
-                layer_manager(),
-                screen_frame_buffer(),
-                task_manager(),
-                layer_task_map(),
-            );
-        }
-        unsafe { TERMINALS.insert(task_id, terminal) };
-    }
-    unsafe { asm!("sti") };
-
-    let terminal = || unsafe { TERMINALS.get_mut(&task_id).expect("no such terminal") };
+    let mut terminal = create_terminal(task_id, term_desc, show_window);
 
     if !show_window {
         for c in command.chars() {
-            terminal().input_key(0, 0, c);
+            terminal.input_key(0, 0, c);
         }
-        terminal().input_key(0, 0, '\n');
+        terminal.input_key(0, 0, '\n');
     }
 
     if let Some(fd) = term_desc {
         if fd.exit_after_command {
             unsafe { asm!("cli") };
-            task_manager().finish(terminal().last_exit_code);
+            task_manager().finish(terminal.last_exit_code);
             unsafe { asm!("sti") };
         }
     }
 
-    let add_blink_timer =
-        |t: u64| timer_manager().add_timer(Timer::new(t + TIMER_FREQ / 2, 1, task_id));
-    add_blink_timer(timer_manager().current_tick());
+    let add_blink_timer = |t: u64| {
+        do_with_timer_manager(|fm| fm.add_timer(Timer::new(t + TIMER_FREQ / 2, 1, task_id)))
+    };
+    add_blink_timer(current_tick());
     let mut active_mode = WindowActiveMode::Deactivate;
 
     loop {
         unsafe { asm!("cli") };
+        let current_task_id = task_manager().current_task().id();
         let msg = task_manager()
             .get_task_mut(current_task_id)
             .unwrap()
@@ -146,17 +114,15 @@ pub fn task_terminal(task_id: u64, data: usize) {
             MessageType::TimerTimeout { timeout, value: _ } => {
                 add_blink_timer(timeout);
                 if show_window && active_mode == WindowActiveMode::Activate {
-                    let area = terminal().blink_cursor();
+                    let area = terminal.blink_cursor();
 
-                    let msg = Message::new(MessageType::Layer(LayerMessage {
-                        layer_id: terminal().layer_id,
+                    let msg = Message::new(Layer(LayerMessage {
+                        layer_id: terminal.layer_id,
                         op: LayerOperation::DrawArea(area),
                         src_task_id: task_id,
                     }));
                     unsafe { asm!("cli") };
-                    task_manager()
-                        .send_message(task_manager().main_task().id(), msg)
-                        .unwrap();
+                    task_manager().send_message(main_task_id(), msg).unwrap();
                     unsafe { asm!("sti") };
                 }
             }
@@ -164,42 +130,44 @@ pub fn task_terminal(task_id: u64, data: usize) {
                 if !arg.press {
                     continue;
                 }
-                let area = terminal().input_key(arg.modifier, arg.keycode, arg.ascii);
+                let area = terminal.input_key(arg.modifier, arg.keycode, arg.ascii);
                 if show_window {
-                    let msg = Message::new(MessageType::Layer(LayerMessage {
-                        layer_id: terminal().layer_id,
+                    let msg = Message::new(Layer(LayerMessage {
+                        layer_id: terminal.layer_id,
                         op: LayerOperation::DrawArea(area),
                         src_task_id: task_id,
                     }));
                     unsafe { asm!("cli") };
-                    task_manager()
-                        .send_message(task_manager().main_task().id(), msg)
-                        .unwrap();
+                    task_manager().send_message(main_task_id(), msg).unwrap();
                     unsafe { asm!("sti") };
                 }
             }
             MessageType::WindowActive(mode) => active_mode = mode,
             MessageType::WindowClose(message) => {
-                let _ = layer_manager().close_layer(
-                    message.layer_id,
-                    active_layer(),
-                    screen_frame_buffer(),
-                    task_manager(),
-                    layer_task_map(),
-                );
+                let _ = layer_manager().lock().close_layer(message.layer_id);
                 unsafe { asm!("cli") };
-                task_manager().finish(terminal().last_exit_code);
+                task_manager().finish(terminal.last_exit_code);
             }
             _ => {}
         }
     }
 }
 
-pub(crate) fn terminal_window(terminal_layer_id: LayerID) -> &'static mut Window {
-    layer_manager()
-        .get_layer_mut(terminal_layer_id)
-        .expect("couldn't find terminal window")
-        .get_window_mut()
+fn create_terminal(
+    task_id: TaskID,
+    term_desc: Option<&TerminalDescriptor>,
+    show_window: bool,
+) -> Terminal {
+    let mut terminal = Terminal::new(task_id, term_desc);
+    terminal.initialize(show_window, frame_buffer_config().pixel_format);
+
+    if show_window {
+        let mut lm = layer_manager().lock();
+        lm.move_(terminal.layer_id, Vector2D::new(100, 200));
+        lm.register_layer_task_relation(terminal.layer_id, task_id);
+        lm.activate_layer(Some(terminal.layer_id));
+    }
+    terminal
 }
 
 #[derive(Clone)]
@@ -209,8 +177,10 @@ pub(crate) struct AppLoadInfo {
     pml4: *const PageMapEntry,
 }
 
+unsafe impl Send for AppLoadInfo {}
+
 impl AppLoadInfo {
-    fn new(vaddr_end: u64, entry: u64, pml4: *const PageMapEntry) -> Self {
+    fn new(vaddr_end: u64, entry: u64, pml4: *mut PageMapEntry) -> Self {
         Self {
             vaddr_end,
             entry,
@@ -219,15 +189,13 @@ impl AppLoadInfo {
     }
 }
 
-const ROWS: usize = 15;
-const COLUMNS: usize = 60;
-const LINE_MAX: usize = 128;
+pub(super) const ROWS: usize = 15;
+pub(super) const COLUMNS: usize = 60;
+pub(super) const LINE_MAX: usize = 128;
 
 pub(crate) struct Terminal {
     task_id: TaskID,
     layer_id: LayerID,
-    cursor: Vector2D<i32>,
-    is_cursor_visible: bool,
     line_buf: String,
     command_history: CommandHistory,
     files: [Rc<RefCell<FileDescriptor>>; STD_ERR + 1],
@@ -255,8 +223,6 @@ impl Terminal {
         Self {
             task_id,
             layer_id: LayerID::MAX,
-            cursor: Vector2D::new(0, 0),
-            is_cursor_visible: false,
             line_buf: String::with_capacity(LINE_MAX),
             command_history: CommandHistory::new(),
             files,
@@ -272,43 +238,46 @@ impl Terminal {
         self.task_id
     }
 
-    fn initialize(
-        &mut self,
-        show_window: bool,
-        layout_manager: &mut LayerManager,
-        pixel_format: PixelFormat,
-    ) {
-        if show_window {
+    fn initialize(&mut self, show_window: bool, pixel_format: PixelFormat) {
+        let window = if show_window {
             let mut window = Window::new_with_title(
                 COLUMNS * 8 + 8 + Window::TITLED_WINDOW_MARGIN.x as usize,
                 ROWS * 16 + 8 + Window::TITLED_WINDOW_MARGIN.y as usize,
                 pixel_format,
                 "MikanTerm",
             );
-
             let inner_size = window.inner_size();
             draw_terminal(&mut window, Vector2D::new(0, 0), inner_size);
-            self.layer_id = layout_manager.new_layer(window).set_draggable(true).id();
-            self.print(">");
+
+            let window = Arc::new(Mutex::new(window));
+            self.layer_id = layer_manager()
+                .lock()
+                .new_layer(Arc::clone(&window))
+                .set_draggable(true)
+                .id();
+            Some(window)
+        } else {
+            None
+        };
+
+        unsafe {
+            TERMINAL_WRITERS.register(
+                self.task_id,
+                TerminalWriter::new(self.layer_id, self.task_id, window),
+            );
+        }
+
+        if show_window {
+            self.print(">")
         }
     }
 
     fn blink_cursor(&mut self) -> Rectangle<i32> {
-        self.is_cursor_visible = !self.is_cursor_visible;
-        self.draw_cursor(self.is_cursor_visible);
-        Rectangle::new(self.calc_cursor_pos(), Vector2D::new(7, 15))
+        self.writer().blink_cursor()
     }
 
     fn draw_cursor(&mut self, visible: bool) {
-        if let Some(window) = self.window_mut() {
-            let color = if visible { &COLOR_WHITE } else { &COLOR_BLACK };
-            fill_rectangle(
-                &mut window.normal_window_writer(),
-                &self.calc_cursor_pos(),
-                &Vector2D::new(7, 15),
-                color,
-            );
-        }
+        self.writer().draw_cursor(visible)
     }
 
     fn input_key(&mut self, _modifier: u8, keycode: u8, ascii: char) -> Rectangle<i32> {
@@ -320,17 +289,11 @@ impl Terminal {
             '\n' => {
                 self.command_history.push(self.line_buf.to_string());
 
-                self.cursor.x = 0;
-                if self.cursor.y < ROWS as i32 - 1 {
-                    self.cursor.y += 1;
-                } else {
-                    self.scroll1();
-                }
-
+                self.writer().new_line();
                 self.execute_line();
                 self.print(">");
                 draw_area.pos = TITLED_WINDOW_TOP_LEFT_MARGIN;
-                draw_area.size = self.window_mut().map(|w| w.inner_size()).unwrap_or(
+                draw_area.size = self.writer().window_inner_size().unwrap_or(
                     Vector2D::new(0, 0)
                         - TITLED_WINDOW_TOP_LEFT_MARGIN
                         - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN,
@@ -338,15 +301,7 @@ impl Terminal {
             }
             '\x08' => {
                 if self.line_buf.pop().is_some() {
-                    self.cursor.x -= 1;
-                    if let Some(window) = self.window_mut() {
-                        fill_rectangle(
-                            &mut window.normal_window_writer(),
-                            &self.calc_cursor_pos(),
-                            &Vector2D::new(8, 16),
-                            &COLOR_BLACK,
-                        );
-                    }
+                    self.writer().back_space();
                     draw_area.pos = self.calc_cursor_pos();
                 }
             }
@@ -358,19 +313,9 @@ impl Terminal {
                 }
             }
             _ => {
-                if self.cursor.x < COLUMNS as i32 - 1 && self.line_buf.len() < LINE_MAX {
+                if self.writer().can_write_on_this_line() && self.line_buf.len() < LINE_MAX {
                     self.line_buf.push(ascii);
-                    let pos = self.calc_cursor_pos();
-                    if let Some(window) = self.window_mut() {
-                        write_ascii(
-                            &mut window.normal_window_writer(),
-                            pos.x,
-                            pos.y,
-                            ascii,
-                            &COLOR_WHITE,
-                        );
-                    }
-                    self.cursor.x += 1;
+                    self.writer().input_ascii(ascii);
                 }
             }
         }
@@ -380,26 +325,7 @@ impl Terminal {
     }
 
     fn calc_cursor_pos(&self) -> Vector2D<i32> {
-        TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4 + 8 * self.cursor.x, 4 + 16 * self.cursor.y)
-    }
-
-    fn scroll1(&mut self) {
-        if let Some(window) = self.window_mut() {
-            let move_src = Rectangle::new(
-                TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4 + 16),
-                Vector2D::new(8 * COLUMNS as i32, 16 * (ROWS as i32 - 1)),
-            );
-            window.move_(
-                TITLED_WINDOW_TOP_LEFT_MARGIN + Vector2D::new(4, 4),
-                &move_src,
-            );
-            fill_rectangle(
-                window,
-                &Vector2D::new(4, 4 + 16 * self.cursor.y),
-                &Vector2D::new(8 * COLUMNS as i32, 16),
-                &COLOR_BLACK,
-            );
-        }
+        self.writer().calc_cursor_pos()
     }
 
     fn execute_line(&mut self) {
@@ -448,9 +374,9 @@ impl Terminal {
             let b = Box::new(term_desc);
             sub_task.init_context(task_terminal, Box::into_raw(b) as u64, get_cr3);
             task_manager().wake_up(sub_task.id()).unwrap();
-            layer_task_map()
-                .insert(self.layer_id, sub_task.id())
-                .unwrap();
+            layer_manager()
+                .lock()
+                .register_layer_task_relation(self.layer_id, sub_task.id());
 
             self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Pipe(
                 pipe_fd_for_write.copy_for_write(),
@@ -478,15 +404,7 @@ impl Terminal {
                 0
             }
             "clear" => {
-                if let Some(window) = self.window_mut() {
-                    fill_rectangle(
-                        window,
-                        &Vector2D::new(4, 4),
-                        &Vector2D::new(8 * COLUMNS as i32, 16 * ROWS as i32),
-                        &COLOR_BLACK,
-                    );
-                }
-                self.cursor = Vector2D::new(0, 0);
+                self.writer().clear();
                 0
             }
             "lspci" => {
@@ -520,10 +438,10 @@ impl Terminal {
             fd.finish_write();
             unsafe { asm!("cli") };
             let ec = task_manager().wait_finish(fd.task_id);
-            layer_task_map()
-                .insert(self.layer_id, self.task_id)
-                .unwrap();
             unsafe { asm!("sti") };
+            layer_manager()
+                .lock()
+                .register_layer_task_relation(self.layer_id, self.task_id);
             self.last_exit_code = ec;
         } else {
             self.last_exit_code = exit_code;
@@ -544,8 +462,7 @@ impl Terminal {
         let app_load = self.load_app(file_entry, task).map_err(|e| (0, e))?;
 
         let args_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000);
-        PageMapEntry::setup_page_maps(args_frame_addr, 1, true, get_cr3(), memory_manager())
-            .map_err(|e| (0, e))?;
+        PageMapEntry::setup_page_maps(args_frame_addr, 1, true, get_cr3()).map_err(|e| (0, e))?;
         let argv = args_frame_addr.value() as *mut u64 as *mut *mut c_char;
         let argv_len = 32; // argv = 8x32 = 256 bytes
         let p_p_cchar_size = mem::size_of::<*const *const c_char>();
@@ -559,14 +476,8 @@ impl Terminal {
 
         let stack_size = Task::DEFAULT_STACK_BYTES;
         let stack_frame_addr = LinearAddress4Level::new(0xffff_ffff_ffff_f000 - stack_size as u64);
-        PageMapEntry::setup_page_maps(
-            stack_frame_addr,
-            stack_size / 4096,
-            true,
-            get_cr3(),
-            memory_manager(),
-        )
-        .map_err(|e| (0, e))?;
+        PageMapEntry::setup_page_maps(stack_frame_addr, stack_size / 4096, true, get_cr3())
+            .map_err(|e| (0, e))?;
 
         // register standard in/out and error file descriptors
         for file_rc in &self.files {
@@ -594,12 +505,8 @@ impl Terminal {
             let _ = unsafe { CString::from_raw(c_arg as *mut c_char) };
         }
 
-        PageMapEntry::clean_page_maps(
-            LinearAddress4Level::new(0xffff_8000_0000_0000),
-            get_cr3(),
-            memory_manager(),
-        )
-        .map_err(|e| (ret, e))?;
+        PageMapEntry::clean_page_maps(LinearAddress4Level::new(0xffff_8000_0000_0000), get_cr3())
+            .map_err(|e| (ret, e))?;
 
         free_pml4(task).map(|_| ret).map_err(|e| (ret, e))
     }
@@ -609,12 +516,17 @@ impl Terminal {
         file_entry: &DirectoryEntry,
         task: &mut Task,
     ) -> Result<AppLoadInfo, Error> {
-        let temp_pml4 = setup_pml4(task)?;
-        if let Some(mut app_load) = get_app_load_mut(file_entry).cloned() {
-            copy_page_maps(temp_pml4, app_load.pml4, 4, 256)?;
-            app_load.pml4 = temp_pml4;
-            return Ok(app_load);
+        // hold the lock until copy is completed
+        let mut loads = APP_LOADS.lock();
+
+        if let Some(original) = loads.get_mut(&(file_entry as *const _ as usize)) {
+            let temp_pml4 = setup_pml4(task)?;
+            copy_page_maps(temp_pml4, original.pml4, 4, 256)?;
+            let cloned = AppLoadInfo::new(original.vaddr_end, original.entry, temp_pml4);
+            return Ok(cloned);
         }
+
+        let temp_pml4 = setup_pml4(task)?;
 
         let mut file_buf: Vec<u8> = vec![0; file_entry.file_size() as usize];
         file_entry.load_file(file_buf.as_mut_slice(), boot_volume_image());
@@ -624,9 +536,9 @@ impl Terminal {
             return Err(make_error!(Code::InvalidFile));
         }
 
-        let elf_last_addr = elf_header.load_elf(get_cr3(), memory_manager())?;
+        let elf_last_addr = elf_header.load_elf(get_cr3())?;
         let mut app_load = AppLoadInfo::new(elf_last_addr, elf_header.e_entry as u64, temp_pml4);
-        insert_app_load(file_entry, app_load.clone());
+        insert_app_load(&mut *loads, file_entry, app_load.clone());
 
         app_load.pml4 = setup_pml4(task)?;
         copy_page_maps(app_load.pml4 as *mut _, temp_pml4, 4, 256)?;
@@ -634,142 +546,24 @@ impl Terminal {
     }
 
     pub(crate) fn print(&mut self, s: &str) {
-        let prev_cursor = self.calc_cursor_pos();
-        self.draw_cursor(false);
-
-        for char in s.chars() {
-            self.print_char(char);
-        }
-
-        self.draw_cursor(true);
-        let current_cursor = self.calc_cursor_pos();
-
-        let draw_pos = Vector2D::new(TITLED_WINDOW_TOP_LEFT_MARGIN.x, prev_cursor.y);
-        let draw_size = Vector2D::new(
-            self.window_mut()
-                .map(|w| w.inner_size().x)
-                .unwrap_or(-TITLED_WINDOW_TOP_LEFT_MARGIN.x - TITLED_WINDOW_BOTTOM_RIGHT_MARGIN.x),
-            current_cursor.y - prev_cursor.y + 16,
-        );
-        let msg = Message::new(MessageType::Layer(LayerMessage {
-            layer_id: self.layer_id,
-            op: LayerOperation::DrawArea(Rectangle::new(draw_pos, draw_size)),
-            src_task_id: self.task_id,
-        }));
-
-        unsafe { asm!("cli") };
-        task_manager()
-            .send_message(task_manager().main_task().id(), msg)
-            .unwrap();
-        unsafe { asm!("sti") };
+        self.writer().print(s)
     }
 
     fn print_char(&mut self, c: char) {
-        let window = match self.window_mut() {
-            None => return,
-            Some(w) => w,
-        };
-
-        if c == '\n' {
-            self.new_line();
-            return;
-        }
-
-        let columns = COLUMNS as i32;
-        if c.is_ascii() {
-            if self.cursor.x == columns {
-                self.new_line();
-            }
-            let pos = self.calc_cursor_pos();
-            write_unicode(
-                &mut window.normal_window_writer(),
-                pos.x,
-                pos.y,
-                c,
-                &COLOR_WHITE,
-            )
-            .unwrap_or_default();
-            self.cursor.x += 1;
-        } else {
-            if self.cursor.x == columns - 1 {
-                self.new_line();
-            }
-            let pos = self.calc_cursor_pos();
-            write_unicode(
-                &mut window.normal_window_writer(),
-                pos.x,
-                pos.y,
-                c,
-                &COLOR_WHITE,
-            )
-            .unwrap_or_default();
-            self.cursor.x += 2;
-        }
-    }
-
-    fn new_line(&mut self) {
-        self.cursor.x = 0;
-        if self.cursor.y < ROWS as i32 - 1 {
-            self.cursor.y += 1;
-        } else {
-            self.scroll1()
-        }
+        self.writer().print_char(c)
     }
 
     pub(super) fn redraw(&mut self) {
-        let size = match self.window_mut() {
-            None => return,
-            Some(w) => w.inner_size(),
-        };
-        let draw_area = Rectangle::new(TITLED_WINDOW_TOP_LEFT_MARGIN, size);
-
-        let msg = Message::new(Layer(LayerMessage {
-            layer_id: self.layer_id,
-            op: LayerOperation::DrawArea(draw_area),
-            src_task_id: self.task_id,
-        }));
-
-        unsafe { asm!("cli") };
-        let _ = task_manager().send_message(task_manager().main_task().id(), msg);
-        unsafe { asm!("sti") };
+        self.writer().redraw()
     }
 
     fn history_up_down(&mut self, direction: Direction) -> Rectangle<i32> {
-        self.cursor.x = 1;
-        let first_pos = self.calc_cursor_pos();
-        let draw_area = Rectangle::new(first_pos, Vector2D::new(8 * (COLUMNS as i32 - 1), 16));
-        if let Some(window) = self.window_mut() {
-            fill_rectangle(
-                &mut window.normal_window_writer(),
-                &draw_area.pos,
-                &draw_area.size,
-                &COLOR_BLACK,
-            );
-        }
-
         self.line_buf = match direction {
             Direction::Up => self.command_history.up().to_string(),
             Direction::Down => self.command_history.down().to_string(),
         };
 
-        if let Some(window) = self.window_mut() {
-            write_string(
-                &mut window.normal_window_writer(),
-                first_pos.x,
-                first_pos.y,
-                self.line_buf.as_str(),
-                &COLOR_WHITE,
-            );
-        }
-        self.cursor.x = self.line_buf.len() as i32 + 1;
-
-        draw_area
-    }
-
-    fn window_mut(&self) -> Option<&'static mut Window> {
-        layer_manager()
-            .get_layer_mut(self.layer_id)
-            .map(|l| l.get_window_mut())
+        self.writer().history_up_down(self.line_buf.as_str())
     }
 
     fn execute_ls(&mut self, argv: &[&str]) -> i32 {
@@ -844,7 +638,7 @@ impl Terminal {
     }
 
     fn execute_memstat(&mut self) -> i32 {
-        let p_stat = memory_manager().stat();
+        let p_stat = MEMORY_MANAGER.lock().stat();
         writeln!(
             self.stdout(),
             "Phys used : {} frames ({} MiB)\nPhys total: {} frames ({} MiB)",
@@ -885,6 +679,10 @@ impl Terminal {
     fn stderr(&mut self) -> RefMut<'_, FileDescriptor> {
         self.files[STD_ERR].borrow_mut()
     }
+
+    fn writer(&self) -> MutexGuard<TerminalWriter> {
+        unsafe { TERMINAL_WRITERS.get(self.task_id).lock() }
+    }
 }
 
 fn list_all_entries<T: DerefMut<Target = FileDescriptor>>(mut fd: T, dir_cluster: u32) {
@@ -907,10 +705,9 @@ fn list_all_entries<T: DerefMut<Target = FileDescriptor>>(mut fd: T, dir_cluster
     }
 }
 
-impl Write for Terminal {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.print(s);
-        Ok(())
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        unsafe { TERMINAL_WRITERS.remove(self.task_id) };
     }
 }
 
@@ -1012,7 +809,7 @@ fn new_c_chars_vec(strs: &[&str]) -> Vec<*const c_char> {
 }
 
 pub fn setup_pml4(current_task: &mut Task) -> Result<*mut PageMapEntry, Error> {
-    let pml4 = PageMapEntry::new_page_map(memory_manager())?;
+    let pml4 = PageMapEntry::new_page_map()?;
 
     let current_pml4 = get_cr3() as *const u64 as *const PageMapEntry;
     unsafe {

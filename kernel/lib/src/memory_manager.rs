@@ -5,12 +5,10 @@ use core::ffi::c_void;
 pub mod global {
     use super::{BitmapMemoryManager, FrameID, BYTES_PER_FRAME};
     use crate::memory_map::UEFI_PAGE_SIZE;
+    use crate::sync::Mutex;
     use shared::{MemoryDescriptor, MemoryMap};
 
-    static mut MEMORY_MANAGER: BitmapMemoryManager = BitmapMemoryManager::new();
-    pub fn memory_manager() -> &'static mut BitmapMemoryManager {
-        unsafe { &mut MEMORY_MANAGER }
-    }
+    pub static MEMORY_MANAGER: Mutex<BitmapMemoryManager> = Mutex::new(BitmapMemoryManager::new());
 
     pub fn initialize(memory_map: &MemoryMap) {
         let buffer = memory_map.buffer as usize;
@@ -21,7 +19,7 @@ pub mod global {
             let physical_start = unsafe { (*desc).physical_start };
             let number_of_pages = unsafe { (*desc).number_of_pages };
             if available_end < physical_start {
-                memory_manager().mark_allocated(
+                MEMORY_MANAGER.lock().mark_allocated(
                     FrameID::new(available_end / BYTES_PER_FRAME),
                     (physical_start - available_end) / BYTES_PER_FRAME,
                 );
@@ -33,14 +31,14 @@ pub mod global {
             if type_.is_available() {
                 available_end = physical_end;
             } else {
-                memory_manager().mark_allocated(
+                MEMORY_MANAGER.lock().mark_allocated(
                     FrameID::new(physical_start / BYTES_PER_FRAME),
                     byte_count / BYTES_PER_FRAME as usize,
                 )
             }
             iter += memory_map.descriptor_size as usize;
         }
-        memory_manager().set_memory_range(
+        MEMORY_MANAGER.lock().set_memory_range(
             FrameID::new(1),
             FrameID::new(available_end / BYTES_PER_FRAME),
         );

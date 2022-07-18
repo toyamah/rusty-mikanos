@@ -12,3 +12,5 @@ bit_field = "0.10.1"
 libm = "0.2.2"
 # disable default-features to avoid a llvm error https://github.com/mooman219/fontdue/issues/98
 fontdue = { version = "0.7.2", default-features = false }
+spin = "0.9.3"
+heapless = "0.7.15"

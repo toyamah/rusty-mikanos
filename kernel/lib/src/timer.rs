@@ -1,6 +1,6 @@
 use crate::interrupt::global::notify_end_of_interrupt;
 use crate::message::{Message, MessageType};
-use crate::task::global::task_manager;
+use crate::task::global::{main_task_id, task_manager};
 use crate::task::{TaskContext, TaskID, TaskManager};
 use crate::timer::global::timer_manager;
 use alloc::collections::BinaryHeap;
@@ -19,13 +19,37 @@ pub mod global {
     use super::{divide_config, initial_count, lvt_timer, measure_time, TimerManager, TIMER_FREQ};
     use crate::acpi;
     use crate::interrupt::InterruptVectorNumber;
+    use core::arch::asm;
+    use spin::Once;
 
     static mut TIMER_MANAGER: Option<TimerManager> = None;
-    pub fn timer_manager() -> &'static mut TimerManager {
+
+    pub(super) fn timer_manager() -> &'static mut TimerManager {
         unsafe { TIMER_MANAGER.as_mut().unwrap() }
     }
 
-    static mut LAPIC_TIMER_FREQ: Option<u64> = None;
+    pub fn do_with_timer_manager<F, T>(f: F) -> T
+    where
+        F: FnOnce(&mut TimerManager) -> T,
+    {
+        unsafe {
+            asm!("cli");
+            let r = f(timer_manager());
+            asm!("sti");
+            r
+        }
+    }
+
+    pub fn current_tick() -> u64 {
+        unsafe {
+            asm!("cli");
+            let t = timer_manager().current_tick();
+            asm!("sti");
+            t
+        }
+    }
+
+    static LAPIC_TIMER_FREQ: Once<u64> = Once::new();
 
     pub fn initialize_lapic_timer() {
         unsafe {
@@ -34,9 +58,10 @@ pub mod global {
             lvt_timer().write_volatile(0b001 << 16); // masked, one-shot
         };
 
-        let elapsed = measure_time(|| acpi::global::wait_milliseconds(100));
-        let lapic_timer_freq = (elapsed as u64) * 10;
-        unsafe { LAPIC_TIMER_FREQ = Some(lapic_timer_freq) };
+        let lapic_timer_freq = LAPIC_TIMER_FREQ.call_once(|| {
+            let elapsed = measure_time(|| acpi::global::wait_milliseconds(100));
+            (elapsed as u64) * 10
+        });
 
         unsafe {
             divide_config().write_volatile(0b1011);
@@ -170,7 +195,7 @@ impl TimerManager {
             if t.value == TASK_TIMER_VALUE {
                 task_timer_timeout = true;
                 self.timers.pop();
-                self.add_timer_for_switching_task(task_manager.main_task().id());
+                self.add_timer_for_switching_task(main_task_id());
                 continue;
             }
 
@@ -223,7 +248,7 @@ mod tests {
     fn timer_manager_tick() {
         let mut task_manager = TaskManager::new(dummy_context, |_| {});
         task_manager.initialize(|| 0);
-        let main_task_id = task_manager.main_task().id();
+        let main_task_id = task_manager.main_task_mut().id();
 
         let mut manager = TimerManager::new();
         manager.add_timer(Timer::new(3, 3, main_task_id));

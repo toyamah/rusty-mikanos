@@ -9,4 +9,5 @@ edition = "2018"
 lib = { path = "lib", version = "0.1.0" }
 shared = { path = "../shared", version = "0.1.0" }
 log = { version = "0.4.17", features = ["max_level_trace", "release_max_level_info"] }
+spin = "0.9.3"
 bit_field = "0.10.1"

@@ -25,13 +25,9 @@ pub mod global {
     use lib::error::Error;
     use lib::pci::Device;
     use lib::{interrupt, pci};
+    use spin::{Lazy, Mutex};
 
-    static mut XHCI_CONTROLLER: Option<XhciController> = None;
-    pub fn xhci_controller() -> &'static mut XhciController {
-        unsafe { XHCI_CONTROLLER.as_mut().unwrap() }
-    }
-
-    pub fn initialize() {
+    static XHCI_CONTROLLER: Lazy<Mutex<XhciController>> = Lazy::new(|| {
         let xhc_device = pci::find_xhc_device().expect("no xHC has been found");
         enable_to_interrupt_for_xhc(xhc_device).unwrap();
 
@@ -46,10 +42,17 @@ pub mod global {
 
         controller.initialize().unwrap();
         controller.run().unwrap();
+        controller.configure_port();
+        Mutex::new(controller)
+    });
 
-        unsafe { XHCI_CONTROLLER = Some(controller) };
+    pub fn xhci_controller() -> &'static Mutex<XhciController> {
+        // execute lazy initialization
+        &*XHCI_CONTROLLER
+    }
 
-        xhci_controller().configure_port();
+    pub fn initialize() {
+        let _ = XHCI_CONTROLLER.lock();
     }
 
     fn enable_to_interrupt_for_xhc(xhc_device: &Device) -> Result<(), Error> {
@@ -83,6 +86,8 @@ enum XhciControllerImpl {}
 pub struct XhciController {
     c_impl: *mut XhciControllerImpl,
 }
+
+unsafe impl Send for XhciController {}
 
 impl XhciController {
     pub fn new(xhc_mmio_base: u64) -> Self {

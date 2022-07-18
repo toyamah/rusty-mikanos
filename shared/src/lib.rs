@@ -34,6 +34,8 @@ pub struct FrameBufferConfig {
     pub pixel_format: PixelFormat,
 }
 
+unsafe impl Send for FrameBufferConfig {}
+
 impl FrameBufferConfig {
     pub fn new(
         horizontal_resolution: u32,
