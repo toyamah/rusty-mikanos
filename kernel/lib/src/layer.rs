@@ -26,13 +26,10 @@ pub mod global {
     use crate::frame_buffer::FrameBuffer;
     use crate::graphics::global::{frame_buffer_config, screen_size};
     use crate::graphics::{draw_desktop, Vector2D};
-    use crate::layer::LayerID;
     use crate::sync::Mutex;
     use crate::Window;
     use alloc::sync::Arc;
     use spin::Once;
-
-    static mut BG_LAYER_ID: LayerID = LayerID::MAX;
 
     pub(super) static SCREEN_FRAME_BUFFER: Once<Mutex<FrameBuffer>> = Once::new();
     pub(super) fn screen_frame_buffer() -> &'static Mutex<FrameBuffer> {
@@ -68,7 +65,6 @@ pub mod global {
             .new_layer(Arc::new(Mutex::new(bg_window)))
             .move_(Vector2D::new(0, 0))
             .id();
-        unsafe { BG_LAYER_ID = bg_layer_id };
         console().set_layer_id(
             layout_manager
                 .new_layer(console_window)
