@@ -10,7 +10,7 @@ use crate::graphics::{
 use crate::io::{FileDescriptor, STD_ERR, STD_IN, STD_OUT};
 use crate::layer::global::layer_manager;
 use crate::layer::LayerID;
-use crate::libc::{memcpy, strcpy};
+use crate::libc::{memcpy, strcpy, strlen};
 use crate::memory_manager::global::MEMORY_MANAGER;
 use crate::message::MessageType::Layer;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
@@ -19,7 +19,6 @@ use crate::paging::{LinearAddress4Level, PageMapEntry};
 use crate::pci::devices;
 use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
-use crate::rust_official::strlen;
 use crate::sync::Mutex;
 use crate::sync::MutexGuard;
 use crate::task::global::{main_task_id, task_manager};
