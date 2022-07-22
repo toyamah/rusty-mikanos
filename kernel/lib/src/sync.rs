@@ -5,8 +5,18 @@ use core::ops::{Deref, DerefMut};
 use heapless::mpmc::Q32;
 
 /// A Mutex wrapper to protect from deadlocks caused by the design of TaskManager.
+///
+/// When a timer interrupt occurs, [crate::task::TaskManager]
+/// 1. finds the next task from a queue that is not empty in descending order of priority level
+/// 2. makes the current task sleep
+/// 3. wakes the next task up
+///
+/// Due to this design,
+/// if a low priority task holds Mutex's lock and a higher priority task needs to wait until the lock is released,
+/// TaskManager never wakes the lower-priority task up and this leads to deadlock.
 pub struct Mutex<T> {
     inner: spin::Mutex<T>,
+    // use a fixed size queue to use the Mutex wrapper to MemoryManager
     queue: Q32<TaskID>,
 }
 
