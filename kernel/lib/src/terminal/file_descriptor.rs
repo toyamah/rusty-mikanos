@@ -3,14 +3,13 @@ use crate::keyboard::{is_control_key_inputted, KEY_D};
 use crate::libc::{memcpy, memmove};
 use crate::message::{Message, MessageType, PipeMessage};
 use crate::str_trimming_nul;
-use crate::sync::MutexGuard;
+use crate::sync::{Mutex, MutexGuard};
 use crate::task::global::task_manager;
 use crate::task::TaskID;
 use crate::terminal::terminal_writer::{TerminalWriter, TERMINAL_WRITERS};
-use alloc::rc::Rc;
 use alloc::string::String;
+use alloc::sync::Arc;
 use core::arch::asm;
-use core::cell::RefCell;
 use core::ffi::c_void;
 use core::fmt::Write;
 use core::{cmp, mem};
@@ -19,7 +18,7 @@ pub(super) struct TerminalDescriptor {
     pub(super) command_line: String,
     pub(super) exit_after_command: bool,
     pub(super) show_window: bool,
-    pub(super) files: [Rc<RefCell<FileDescriptor>>; 3],
+    pub(super) files: [Arc<Mutex<FileDescriptor>>; 3],
 }
 
 pub(crate) struct TerminalFileDescriptor {
