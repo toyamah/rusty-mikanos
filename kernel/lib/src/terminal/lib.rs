@@ -648,14 +648,15 @@ impl Terminal {
         1
     }
 
-    fn exec_noterm(&mut self, first_arg: &[&str]) -> i32 {
-        let first_arg = match first_arg.get(1) {
-            None => return 0,
-            Some(&f) => f,
-        };
+    fn exec_noterm(&mut self, argv: &[&str]) -> i32 {
+        assert_eq!(argv[0], "noterm");
+        let argv_without_noterm = join_to_string(' ', &argv[1..]);
+        if argv_without_noterm.is_empty() {
+            return 0;
+        }
 
         let term_dec = TerminalDescriptor {
-            command_line: first_arg.to_string(),
+            command_line: argv_without_noterm,
             exit_after_command: true,
             show_window: false,
             files: self.files.clone(),
