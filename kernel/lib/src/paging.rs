@@ -356,7 +356,6 @@ pub mod global {
     };
     use crate::asm::global::{get_cr0, get_cr3, set_cr0, set_cr3};
     use crate::error::{Code, Error};
-    use crate::io::FileDescriptor;
     use crate::libc::memcpy;
     use crate::make_error;
     use crate::memory_manager::global::MEMORY_MANAGER;
@@ -364,9 +363,8 @@ pub mod global {
     use crate::paging::{set_page_content, LinearAddress4Level, PageMapEntry};
     use crate::sync::Mutex;
     use crate::task::global::task_manager;
-    use crate::task::FileMapping;
+    use crate::task::{FileMapping, Task};
     use core::ffi::c_void;
-    use core::ops::DerefMut;
     use core::slice;
 
     static PML4_TABLE: Mutex<PM4Table> = Mutex::new(PM4Table([0; 512]));
@@ -405,7 +403,7 @@ pub mod global {
     }
 
     pub(crate) fn handle_page_fault(error_code: u64, causal_addr: u64) -> Result<(), Error> {
-        let task = task_manager().current_task_mut();
+        let task = task_manager().current_task();
         let present = (error_code & 1) == 1;
         let rw = ((error_code >> 1) & 1) == 1;
         let user = ((error_code >> 2) & 1) == 1;
@@ -420,11 +418,7 @@ pub mod global {
             PageMapEntry::setup_page_maps(LinearAddress4Level::new(causal_addr), 1, true, get_cr3())
         } else if let Some(fm) = task.find_file_mapping(causal_addr) {
             let fm = fm.clone();
-            prepare_page_cache(
-                task.get_file_mut(fm.fd).unwrap().deref_mut(),
-                fm,
-                causal_addr,
-            )
+            prepare_page_cache(task, fm, causal_addr)
         } else {
             Err(make_error!(Code::IndexOutOfRange))
         }
@@ -437,7 +431,7 @@ pub mod global {
     }
 
     pub(crate) fn prepare_page_cache(
-        fd: &mut FileDescriptor,
+        task: &Task,
         fm: FileMapping,
         causal_vaddr: u64,
     ) -> Result<(), Error> {
@@ -448,7 +442,10 @@ pub mod global {
         let file_offset = page_vaddr.value() - fm.vaddr_begin;
         let page_cache =
             unsafe { slice::from_raw_parts_mut(page_vaddr.value() as *mut u64 as *mut u8, 4096) };
-        fd.load(page_cache, file_offset as usize);
+        task.get_file(fm.fd)
+            .unwrap()
+            .lock()
+            .load(page_cache, file_offset as usize);
         Ok(())
     }
 

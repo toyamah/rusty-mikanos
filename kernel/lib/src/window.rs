@@ -240,12 +240,7 @@ fn draw_window<W: PixelWriter>(writer: &mut W, title: &str) {
 }
 
 fn fill_rect<W: PixelWriter>(writer: &mut W, pos: (i32, i32), size: (i32, i32), c: u32) {
-    fill_rectangle(
-        writer,
-        &Vector2D::new(pos.0, pos.1),
-        &Vector2D::new(size.0, size.1),
-        &PixelColor::from(c),
-    )
+    fill_rectangle(writer, &pos.into(), &size.into(), &PixelColor::from(c))
 }
 
 const COLOR_848484: PixelColor = PixelColor::new(0x84, 0x84, 0x84);

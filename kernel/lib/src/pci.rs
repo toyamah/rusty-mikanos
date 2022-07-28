@@ -18,7 +18,6 @@ const NON_EXISTENT_DEVICE: u16 = 0xffff;
 
 static DEVICES: Once<([Device; 32], usize)> = Once::new();
 
-/// it isn't put in a global module because this module itself works globally and to fix makes a lot of diffs.
 pub fn initialize() {
     DEVICES.call_once(scan_all_bus);
 }

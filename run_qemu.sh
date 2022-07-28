@@ -16,6 +16,7 @@ build_and_run() {
     cd kernel
     cargo clippy -- -Dwarnings
     cd -
+    exit
   fi
 
   if [ $kernel -eq 1 ]; then
