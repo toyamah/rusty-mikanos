@@ -17,7 +17,6 @@ pub mod global {
     use crate::task::global::{main_task_id, task_manager};
     use crate::x86_descriptor::SystemDescriptorType;
     use core::arch::asm;
-    use log::error;
     use spin::Once;
 
     const SIGSEGV: i32 = 11;
@@ -123,12 +122,9 @@ pub mod global {
         _fault_handler_with_error("#GP", &frame.value, error_code);
     }
     extern "x86-interrupt" fn int_handler_pf(frame: InterruptStackFrame, error_code: u64) {
-        let cr2 = get_cr2();
-        match handle_page_fault(error_code, cr2) {
-            Ok(_) => return,
-            Err(e) => error!("failed to handle_page_fault. {}", e),
+        if handle_page_fault(error_code, get_cr2()).is_ok() {
+            return;
         }
-
         _fault_handler_with_error("#PF", &frame.value, error_code);
     }
     extern "x86-interrupt" fn int_handler_mf(frame: InterruptStackFrame) {
