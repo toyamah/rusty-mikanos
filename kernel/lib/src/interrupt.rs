@@ -126,7 +126,7 @@ pub mod global {
         let cr2 = get_cr2();
         match handle_page_fault(error_code, cr2) {
             Ok(_) => return,
-            Err(e) => error!("failed to handle_page_fault. {}", e),
+            Err(_) => (),
         }
 
         _fault_handler_with_error("#PF", &frame.value, error_code);
