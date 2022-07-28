@@ -182,7 +182,7 @@ impl LayerManager {
     pub fn new_layer(&mut self, window: Arc<Mutex<Window>>) -> &mut Layer {
         let id = self.latest_id;
         self.layers.insert(id, Layer::new(id, window));
-        self.latest_id += LayerID(1); // increment after layer.push to make layer_id and index of layers equal
+        self.latest_id += LayerID(1);
         self.layers.get_mut(&id).unwrap()
     }
 
