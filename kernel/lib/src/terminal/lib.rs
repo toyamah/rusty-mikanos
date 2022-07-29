@@ -10,7 +10,7 @@ use crate::graphics::{
 use crate::io::{FileDescriptor, STD_ERR, STD_IN, STD_OUT};
 use crate::layer::global::layer_manager;
 use crate::layer::LayerID;
-use crate::libc::{memcpy, strcpy};
+use crate::libc::{memcpy, strcpy, strlen};
 use crate::memory_manager::global::MEMORY_MANAGER;
 use crate::message::MessageType::Layer;
 use crate::message::{LayerMessage, LayerOperation, Message, MessageType, WindowActiveMode};
@@ -19,7 +19,6 @@ use crate::paging::{LinearAddress4Level, PageMapEntry};
 use crate::pci::devices;
 use crate::rust_official::c_str::CString;
 use crate::rust_official::cchar::c_char;
-use crate::rust_official::strlen;
 use crate::sync::Mutex;
 use crate::sync::MutexGuard;
 use crate::task::global::{main_task_id, task_manager};
@@ -35,13 +34,11 @@ use crate::window::{TITLED_WINDOW_BOTTOM_RIGHT_MARGIN, TITLED_WINDOW_TOP_LEFT_MA
 use crate::{make_error, str_trimming_nul_unchecked, Window};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
-use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::arch::asm;
-use core::cell::{RefCell, RefMut};
 use core::ffi::c_void;
 use core::fmt::Write;
 use core::mem;
@@ -198,7 +195,7 @@ pub(crate) struct Terminal {
     layer_id: LayerID,
     line_buf: String,
     command_history: CommandHistory,
-    files: [Rc<RefCell<FileDescriptor>>; STD_ERR + 1],
+    files: [Arc<Mutex<FileDescriptor>>; STD_ERR + 1],
     last_exit_code: i32,
 }
 
@@ -208,13 +205,13 @@ impl Terminal {
             td.files.clone()
         } else {
             [
-                Rc::new(RefCell::new(FileDescriptor::Terminal(
+                Arc::new(Mutex::new(FileDescriptor::Terminal(
                     TerminalFileDescriptor::new(task_id),
                 ))),
-                Rc::new(RefCell::new(FileDescriptor::Terminal(
+                Arc::new(Mutex::new(FileDescriptor::Terminal(
                     TerminalFileDescriptor::new(task_id),
                 ))),
-                Rc::new(RefCell::new(FileDescriptor::Terminal(
+                Arc::new(Mutex::new(FileDescriptor::Terminal(
                     TerminalFileDescriptor::new(task_id),
                 ))),
             ]
@@ -335,13 +332,13 @@ impl Terminal {
         } else {
             return;
         };
-        let original_stdout = Rc::clone(&self.files[STD_OUT]);
+        let original_stdout = Arc::clone(&self.files[STD_OUT]);
 
         // handles redirect
         if let Some(redirect_dest_index) = find_redirect_dest(&argv) {
             match extract_redirect(&argv, redirect_dest_index) {
                 Ok(redirect_dest_file) => {
-                    self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Fat(
+                    self.files[STD_OUT] = Arc::new(Mutex::new(FileDescriptor::Fat(
                         FatFileDescriptor::new(redirect_dest_file),
                     )))
                 }
@@ -366,7 +363,7 @@ impl Terminal {
                 exit_after_command: true,
                 show_window: false,
                 files: [
-                    Rc::new(RefCell::new(FileDescriptor::Pipe(pipe_fd))),
+                    Arc::new(Mutex::new(FileDescriptor::Pipe(pipe_fd))),
                     self.files[STD_OUT].clone(),
                     self.files[STD_ERR].clone(),
                 ],
@@ -378,7 +375,7 @@ impl Terminal {
                 .lock()
                 .register_layer_task_relation(self.layer_id, sub_task.id());
 
-            self.files[STD_OUT] = Rc::new(RefCell::new(FileDescriptor::Pipe(
+            self.files[STD_OUT] = Arc::new(Mutex::new(FileDescriptor::Pipe(
                 pipe_fd_for_write.copy_for_write(),
             )));
             Some(pipe_fd_for_write)
@@ -481,7 +478,7 @@ impl Terminal {
 
         // register standard in/out and error file descriptors
         for file_rc in &self.files {
-            task.register_file_descriptor_rc(Rc::clone(file_rc));
+            task.register_file_descriptor_arc(Arc::clone(file_rc));
         }
 
         let elf_next_page = (app_load.vaddr_end + 4095) & 0xffff_ffff_ffff_f000;
@@ -617,17 +614,17 @@ impl Terminal {
                 return 1;
             }
 
-            Rc::new(RefCell::new(FileDescriptor::Fat(FatFileDescriptor::new(
+            Arc::new(Mutex::new(FileDescriptor::Fat(FatFileDescriptor::new(
                 file_entry,
             ))))
         } else {
-            Rc::clone(&self.files[STD_IN])
+            Arc::clone(&self.files[STD_IN])
         };
 
         let mut u8buf = [0; 1024];
         self.draw_cursor(false);
         loop {
-            if fd.borrow_mut().read_delim(b'\n', &mut u8buf) == 0 {
+            if fd.lock().read_delim(b'\n', &mut u8buf) == 0 {
                 break;
             }
             let str = str_trimming_nul_unchecked(&u8buf);
@@ -651,14 +648,15 @@ impl Terminal {
         1
     }
 
-    fn exec_noterm(&mut self, first_arg: &[&str]) -> i32 {
-        let first_arg = match first_arg.get(1) {
-            None => return 0,
-            Some(&f) => f,
-        };
+    fn exec_noterm(&mut self, argv: &[&str]) -> i32 {
+        assert_eq!(argv[0], "noterm");
+        let argv_without_noterm = join_to_string(' ', &argv[1..]);
+        if argv_without_noterm.is_empty() {
+            return 0;
+        }
 
         let term_dec = TerminalDescriptor {
-            command_line: first_arg.to_string(),
+            command_line: argv_without_noterm,
             exit_after_command: true,
             show_window: false,
             files: self.files.clone(),
@@ -672,12 +670,12 @@ impl Terminal {
         0
     }
 
-    fn stdout(&mut self) -> RefMut<'_, FileDescriptor> {
-        self.files[STD_OUT].borrow_mut()
+    fn stdout(&mut self) -> MutexGuard<FileDescriptor> {
+        self.files[STD_OUT].lock()
     }
 
-    fn stderr(&mut self) -> RefMut<'_, FileDescriptor> {
-        self.files[STD_ERR].borrow_mut()
+    fn stderr(&mut self) -> MutexGuard<FileDescriptor> {
+        self.files[STD_ERR].lock()
     }
 
     fn writer(&self) -> MutexGuard<TerminalWriter> {

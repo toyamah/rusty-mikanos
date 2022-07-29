@@ -73,6 +73,25 @@ impl<T> Vector2D<T> {
     pub const fn new(x: T, y: T) -> Vector2D<T> {
         Self { x, y }
     }
+
+    pub fn into<U>(self) -> Vector2D<U>
+    where
+        U: From<T>,
+    {
+        Vector2D {
+            x: self.x.into(),
+            y: self.y.into(),
+        }
+    }
+}
+
+impl<T> From<(T, T)> for Vector2D<T> {
+    fn from(pair: (T, T)) -> Self {
+        Self {
+            x: pair.0,
+            y: pair.1,
+        }
+    }
 }
 
 impl Vector2D<usize> {
@@ -355,12 +374,7 @@ fn fill_rect<W: PixelWriter>(
     size: (i32, i32),
     color: &PixelColor,
 ) {
-    fill_rectangle(
-        writer,
-        &Vector2D::new(pos.0, pos.1),
-        &Vector2D::new(size.0, size.1),
-        color,
-    )
+    fill_rectangle(writer, &pos.into(), &size.into(), color)
 }
 
 #[cfg(test)]
